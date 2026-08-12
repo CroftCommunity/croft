@@ -219,3 +219,73 @@ satisfied.
 `/opt/homebrew/share/android-commandlinetools`, not the Android Studio default.
 `verify.sh` searches both, so nothing breaks without `ANDROID_SDK_ROOT`, but
 exporting it (as bootstrap now prints) keeps every tool agreeing.
+
+---
+
+### 2026-08-12 — the croftcall crash, reproduced and rooted
+**Why:** E100 (discovery) recorded the crash with two candidate causes and
+asserted neither, because the crash log had never been read. The emulator now
+exists, so read it.
+
+**First, a correction to E100's ranking.** The leading suspicion — unresolved
+`VERIFY` markers on inferred iroh Kotlin API names — is **refuted**. `connect`
+resolved them in `5fa0258` (against n0's reference app) with a follow-up fix in
+`7433238` (`readExact` takes `UInt`, not `ULong`, CI-confirmed). The single
+remaining grep hit reads `VERIFIED 2026-08-02 (was TO-VERIFY)` — a record of
+resolution, not an open marker. The *second* candidate, the packaging class, is
+the real one.
+
+**Ran:**
+```
+./gradlew assembleDebug --no-daemon        # BUILD SUCCESSFUL in 1m 6s
+adb install -r app-debug.apk               # Success
+adb shell am start -n ing.croft.call/.MainActivity
+adb logcat -d
+```
+
+**Outcome — reproduced immediately:**
+```
+java.lang.RuntimeException: Unable to start activity … MainActivity
+Caused by: java.lang.RuntimeException: Cannot create an instance of class MainViewModel
+Caused by: java.lang.UnsatisfiedLinkError: dlopen failed: library "libiroh_ffi.so" not found
+    at ing.croft.call.MainViewModel.<init>(MainViewModel.kt:22)
+```
+
+**Root cause — `computer.iroh:iroh:1.0.0` is a desktop JVM artifact, not an
+Android one.** Contents of the jar:
+
+```
+darwin-aarch64/libiroh_ffi.dylib     14.9 MB
+linux-aarch64/libiroh_ffi.so         18.9 MB
+linux-x86-64/libiroh_ffi.so          19.7 MB
+win32-x86-64/iroh_ffi.dll            16.4 MB
+```
+
+**No Android ABI directories at all.** Android's loader looks in
+`lib/<abi>/`; every `.so` that reached the APK belongs to JNA or AndroidX:
+
+```
+arm64-v8a/libjnidispatch.so, arm64-v8a/libandroidx.graphics.path.so, … (and x86, mips, …)
+```
+
+The only `libiroh_ffi` in the APK is `darwin-aarch64/libiroh_ffi.dylib` — a
+**macOS** library, swept in verbatim at a path Android will never search.
+
+The assumption is stated in `android/app/build.gradle.kts` itself:
+
+> `// Per n0's reference Android app, this artifact bundles libiroh_ffi.so for
+> every Android ABI (no NDK).`
+
+That is **false**, and the same comment already wrote the fallback: *"fall back
+to building iroh-ffi from source."* The scaffold predicted its own failure mode
+and the prediction was not checked before shipping.
+
+**Honest note on the arm64 argument.** I insisted on an `arm64-v8a` image partly
+to avoid masking native-packaging bugs. For *this* bug that was not the deciding
+factor — **no** Android ABI is present, so any image would have reproduced it.
+The reasoning stands for the general class; it did not earn the credit here.
+
+**Consequence:** E100's cause is established. The fix is to obtain real Android
+`.so` files — build `iroh-ffi` per ABI with `cargo-ndk` and package as `jniLibs`,
+or use a genuine Android AAR if one is published. Not attempted in this entry;
+the finding is the deliverable.

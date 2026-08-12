@@ -27,7 +27,10 @@ echo
 # ---- checksums must not be UNSET -------------------------------------------
 # Checked first: an unset checksum means the pin is decorative, and every check
 # below it is being read as stronger than it is.
-if grep -q 'UNSET' "$manifest"; then
+# Strip comments first: the manifest EXPLAINS the UNSET convention in prose, and
+# a naive grep matches its own documentation. Caught when the last real checksum
+# was recorded and the gate stayed red against a comment.
+if sed 's/#.*//' "$manifest" | grep -q 'UNSET'; then
   red "toolchain.yml still contains UNSET checksums"
   note "run: make record-checksums   (then review and commit the values)"
   note "a guessed checksum looks like verification and performs none"
