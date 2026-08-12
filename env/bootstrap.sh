@@ -104,7 +104,7 @@ done < <(sed -n '/^  sdk_packages:/,/^  [a-z#]/p' "$manifest" | sed -n 's/^[[:sp
 want_rust="$(val channel)"
 echo "==> rust $want_rust + targets"
 command -v rustup >/dev/null 2>&1 || { echo "rustup not installed: brew install rustup-init && rustup-init"; exit 1; }
-rustup toolchain install "$want_rust" --component clippy rustfmt
+rustup toolchain install "$want_rust" --component clippy --component rustfmt
 for t in $(sed -n '/^  targets:/,/^[a-z]/p' "$manifest" | sed -n 's/^[[:space:]]*-[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}/\1/p'); do
   rustup target add --toolchain "$want_rust" "$t"
 done

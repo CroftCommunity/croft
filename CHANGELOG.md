@@ -57,8 +57,21 @@ to the environment and why*.
 - `env/verify.sh` — now searches Homebrew's SDK root, where the cask actually
   installs, not only the Android Studio default.
 
+### Verified working
+- `make bootstrap` completes and is idempotent (a second run no-ops every SDK
+  package). It installs Temurin 17 when absent, and stops with an exact command
+  when a JDK cask is left half-installed by an unanswered sudo prompt.
+- `make verify` — 9 failures before bootstrap, 1 after. The remaining failure (no
+  Gradle wrapper) is correct: it arrives with the `android/` shell.
+- `make record-checksums` — Gradle 8.13 checksum taken from the publisher's
+  `.sha256`, so a corrupted download cannot launder itself into the pin.
+- `make emulator` — AVD `croft-dev` boots headless on **arm64-v8a**, API 35,
+  `sys.boot_completed=1`, `adb` attached. Confirmed through `adb` rather than
+  trusting the script's own "ready" message.
+- `make screenshot` — real 1080x2400 capture from a *headless* emulator, so UI is
+  inspectable with no window and no human.
+
 ### Not yet true
-- Nothing in this repo runs. No core, no shell, no app.
-- `env/{bootstrap,emulator,record-checksums}.sh` are **untested** — no Android
-  SDK on the authoring machine.
-- Checksums in `env/toolchain.yml` are `UNSET`; `verify.sh` fails while they are.
+- Nothing in this repo runs. No core, no shell, no app — the environment works,
+  the product does not exist.
+- No Gradle wrapper yet; `verify` correctly fails until the `android/` shell lands.

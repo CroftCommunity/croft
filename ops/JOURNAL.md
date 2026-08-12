@@ -159,3 +159,63 @@ no-ops). `env/verify.sh` also now searches Homebrew's SDK root
 **Reflection:** every one of these was invisible to inspection and obvious on
 first run. The scripts were marked UNTESTED for exactly this reason, and the
 marking was worth more than a guess at correctness would have been.
+
+---
+
+### 2026-08-12 — bootstrap completes; the emulator is up and inspectable
+**Why:** finish the first bootstrap after the JDK 17 blocker was cleared by hand,
+and test the last two untested scripts (`record-checksums`, `emulator`).
+
+**Ran:**
+```
+brew reinstall --cask temurin@17     # by the owner — sudo prompt, cannot be automated
+./env/bootstrap.sh
+./env/verify.sh
+./env/record-checksums.sh
+./env/emulator.sh start --headless
+adb exec-out screencap -p > /tmp/croft-screen.png
+```
+
+**Outcome — one more bootstrap bug.** `rustup toolchain install X --component
+clippy rustfmt` fails: `--component` takes **one value per flag**, so `rustfmt`
+was parsed as a second toolchain name. Fixed to `--component clippy --component
+rustfmt`. Everything before it (SDK, build-tools, emulator, the arm64 system
+image) had already installed, so the re-run was a no-op through that whole
+section — **the idempotence claim got tested for free by the failure**.
+
+**Outcome — verify went from 9 failures to 1.** Remaining: no Gradle wrapper,
+which is correct and expected — it arrives with the `android/` shell, and until
+then a build really would use whatever gradle is on PATH.
+
+**Outcome — checksum recorded from the publisher**, not from a local hash:
+`gradle 8.13 → 20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78`.
+Taking Gradle's published `.sha256` rather than hashing a download means a
+corrupted fetch cannot launder itself into the pin.
+
+**Outcome — the emulator works, with one benign warning.** `avdmanager` printed
+`Error: Could not load devices from .../system-images/.../devices.xml` while
+creating the AVD, which looks fatal and is not — the profile applied anyway:
+
+```
+hw.device.name  = pixel_6
+hw.lcd.density  = 420
+ro.product.cpu.abi = arm64-v8a      ← the requirement that actually matters
+ro.build.version.sdk = 35
+sys.boot_completed = 1
+adb devices → emulator-5554  device
+```
+
+**Verified rather than trusted:** the script prints "ready", so the state was
+confirmed independently through `adb` rather than believing the message. Then
+`adb exec-out screencap` from the **headless** emulator produced a real 1080x2400
+home screen — so UI can be inspected with no window and no human present.
+
+**Consequence:** the agent-driven loop is live. Human eyes are now needed only for
+judgment (feel, layout, whether a thing is *right*), not for confirming that
+something drew. `env/toolchain.yml` carries a real checksum; the `UNSET` gate is
+satisfied.
+
+**Note for a fresh machine:** the SDK lands at
+`/opt/homebrew/share/android-commandlinetools`, not the Android Studio default.
+`verify.sh` searches both, so nothing breaks without `ANDROID_SDK_ROOT`, but
+exporting it (as bootstrap now prints) keeps every tool agreeing.
