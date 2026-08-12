@@ -48,6 +48,15 @@ to the environment and why*.
   project) — a values question, deliberately not optimised away.
 - Whether contract ownership eventually moves here from `connect`.
 
+### Fixed
+- `env/bootstrap.sh` — three defects found by its first real run: it assumed a
+  usable JDK (the machine has only 8, and `sdkmanager` requires 17+); it gated on
+  `/usr/libexec/java_home -v 17`, which **returns the wrong JDK and exits 0** when
+  17 is absent; and it could not converge when a JDK cask is left half-installed
+  (brew records it, the disk does not have it, `brew install` then no-ops).
+- `env/verify.sh` — now searches Homebrew's SDK root, where the cask actually
+  installs, not only the Android Studio default.
+
 ### Not yet true
 - Nothing in this repo runs. No core, no shell, no app.
 - `env/{bootstrap,emulator,record-checksums}.sh` are **untested** — no Android

@@ -95,3 +95,67 @@ targets. Rewrote the check to ask the toolchain rustup resolves *in this repo* �
 which is what a build will actually use — and to check targets **per toolchain**,
 since a target installed for `stable` is not installed for the pinned channel.
 Re-ran: `ok rust 1.97.1`. Watched it fail, watched it pass.
+
+---
+
+### 2026-08-11 — first `make bootstrap`: three failures, each a real finding
+**Why:** the env scripts were written but untested (no Android SDK on this
+machine). Running them was the test.
+
+**Ran:**
+```
+./env/bootstrap.sh
+```
+
+**Outcome — failure 1: sdkmanager needs JDK 17+.**
+```
+==> installing declared SDK packages
+    platform-tools
+This tool requires JDK 17 or later. Your version was detected as 1.8.0_482.
+```
+The script assumed a usable JDK existed. The machine's only JVM is Temurin 8.
+Gradle provisions its own JDK via toolchains, but **the SDK tooling does not** —
+so a real 17 must be on disk before anything else works.
+
+**Outcome — failure 2: `/usr/libexec/java_home -v 17` lies.**
+Added a JDK check, and it passed while still using JDK 8. Verified directly:
+
+```
+$ /usr/libexec/java_home -v 17
+/Library/Java/JavaVirtualMachines/temurin-8.jdk/Contents/Home
+$ echo $?
+0
+```
+
+**`java_home -v <N>` does not fail when N is absent — it returns whatever JVM it
+has and exits 0.** Any version gate built on its exit status silently accepts the
+wrong JDK. Replaced with a check that reads the actual major version out of the
+JVM (`java -version`, normalising `1.8.0_482` → 8 and `17.0.9` → 17).
+
+**Outcome — failure 3: the JDK cask needs sudo, and abandoning it leaves a split
+state.** `brew install --cask temurin@17` runs a `.pkg` under `sudo` and prompts
+for a password. Non-interactively it hangs and is killed. The damaging part is
+what it leaves behind:
+
+```
+$ brew list --cask | grep temurin     →  temurin@17   (brew: installed)
+$ ls /Library/Java/JavaVirtualMachines →  temurin-8.jdk only   (disk: absent)
+```
+
+**Homebrew records the cask as installed while the JDK is not on disk**, so a
+subsequent `brew install` no-ops and bootstrap can never converge — an idempotent
+script looping forever on a state it cannot fix.
+
+**Consequence:** three fixes in `env/bootstrap.sh` — install Temurin 17 when
+absent; detect JDK major version properly rather than trusting `java_home`; and
+detect the half-installed split state explicitly, then **stop with the exact
+command a human must run** (`brew reinstall --cask temurin@17`, since `install`
+no-ops). `env/verify.sh` also now searches Homebrew's SDK root
+(`/opt/homebrew/share/android-commandlinetools`), which is where the cask puts it
+— not the Android Studio default it assumed.
+
+**Blocked on a human:** the sudo prompt. Bootstrap cannot proceed past it.
+
+**Reflection:** every one of these was invisible to inspection and obvious on
+first run. The scripts were marked UNTESTED for exactly this reason, and the
+marking was worth more than a guess at correctness would have been.

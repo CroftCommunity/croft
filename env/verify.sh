@@ -57,7 +57,16 @@ else
 fi
 
 # ---- android sdk ------------------------------------------------------------
-sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
+# Search the places the SDK actually lands, not just the Android Studio default:
+# Homebrew's cask installs to /opt/homebrew/share/android-commandlinetools, which
+# bootstrap discovered the hard way.
+sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+if [ -z "$sdk" ]; then
+  for cand in "$HOME/Library/Android/sdk" "/opt/homebrew/share/android-commandlinetools"; do
+    [ -d "$cand/cmdline-tools" ] && { sdk="$cand"; break; }
+  done
+  sdk="${sdk:-$HOME/Library/Android/sdk}"
+fi
 if [ ! -d "$sdk" ]; then
   red "Android SDK not found at $sdk (set ANDROID_SDK_ROOT)"
 else
