@@ -289,3 +289,72 @@ The reasoning stands for the general class; it did not earn the credit here.
 `.so` files — build `iroh-ffi` per ABI with `cargo-ndk` and package as `jniLibs`,
 or use a genuine Android AAR if one is published. Not attempted in this entry;
 the finding is the deliverable.
+
+---
+
+### 2026-08-12 — the crash is FIXED; five toolchain traps on the way
+**Why:** E100's cause was known (no Android `libiroh_ffi.so`). Build one.
+
+**No AAR exists.** `iroh-ffi`'s `README.kotlin.md` lists Maven Central under
+**"Kotlin / JVM"** and documents Android as a *separate build-it-yourself* path.
+So the scaffold's claim — "this artifact bundles libiroh_ffi.so for every Android
+ABI (no NDK)" — was contradicted by the library's own README all along. Delta
+Chat (owner's pointer) confirms the shape: `scripts/ndk-make.sh` sets the NDK
+clang linkers per target, builds per ABI, drops each `.so` into `jni/<abi>/`.
+
+**Five traps, each found only by running, each exposing the next:**
+
+1. **Linker configured, C compiler not.** `.cargo/config.toml`'s `linker` covers
+   Rust only. `ring` (transitive, via TLS) has a C build script, and `cc` looks
+   for an unversioned `aarch64-linux-android-clang` that does not exist in the
+   NDK. Needs `CC_`/`AR_`.
+2. **API level from a README example.** iroh-ffi's sample uses 29; the app's
+   `minSdk` is 26. A lib built against 29 fails on API 26–28 — and an API-35
+   emulator would never show it. Caught before it bit.
+3. **Toolchain resolved per-directory.** The iroh-ffi checkout has no
+   `rust-toolchain.toml`, so it fell back to the rustup default (`stable`), which
+   has no Android target → `error[E0463]: can't find crate for 'core'`.
+4. **`cargo` resolved from PATH.** Homebrew's cargo precedes the rustup shims and
+   ignores `RUSTUP_TOOLCHAIN`. The error *helpfully* says
+   `consider downloading the target with rustup target add` — i.e. install
+   something already installed, on a different toolchain.
+5. **The one that beat my own gate.** Even via `rustup run`, `rustc` resolved to
+   `/opt/homebrew/bin/rustc` — **which is the SAME version, 1.97.1**, with a
+   different sysroot carrying **zero** Android targets:
+
+   ```
+   ~/.rustup/toolchains/1.97.1-aarch64-apple-darwin  android stds: 2
+   /opt/homebrew/Cellar/rust/1.97.1                  android stds: 0
+   ```
+
+   The workspace already documents "Homebrew shadows rustup". What it had not hit
+   is the case where **the version numbers match**, so every version assertion —
+   including the one I wrote in `verify.sh` this morning — passes on a machine
+   where every cross-compile fails.
+
+**Consequence — the gate was wrong and is fixed.** `verify.sh` now asserts the
+**sysroot** is rustup's, notes when bare `rustc` on PATH differs, and replaces
+"is the target installed?" (rustup's bookkeeping) with **"can this compiler emit
+for the target?"** via `--print target-libdir` + a directory check. Proven to
+discriminate: an uninstalled target and Homebrew's same-version rustc both fail
+it; the real toolchain passes.
+
+**Result:**
+```
+libiroh_ffi.so  18,505,096 bytes  ELF 64-bit LSB shared object, ARM aarch64
+APK now contains lib/arm64-v8a/libiroh_ffi.so   (was: only darwin-aarch64/*.dylib)
+```
+App launches, **no fatals**, and the UI shows a real EndpointId
+`b729d675…a3a5033` with status **"ready, camped on relay"** — so iroh initialised
+and reached a relay, not merely "did not crash".
+
+**Deep link verified**, and a trap worth recording: `adb shell am start -d` with an
+unquoted URL lets the shell eat everything after the first `&`, so the intent
+arrives truncated and the app renders "(unnamed peer)" — indistinguishable from a
+parser bug. Quote the URL; `@alice.bsky.social` then renders correctly. The app
+was right and my invocation was wrong.
+
+**Made reproducible:** `env/build-iroh-android.sh` clones iroh-ffi at a pinned tag
+(`iroh_ffi_tag` in toolchain.yml), resolves rustc absolutely, refuses a non-rustup
+rustc, and installs into `jniLibs/`. The five traps are documented in its header
+so the next person does not rediscover them one failure at a time.

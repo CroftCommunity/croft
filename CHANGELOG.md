@@ -57,6 +57,18 @@ to the environment and why*.
 - `env/verify.sh` — now searches Homebrew's SDK root, where the cask actually
   installs, not only the Android Studio default.
 
+### Fixed (app)
+- **The launch crash is fixed.** `computer.iroh:iroh` is a Kotlin/JVM artifact
+  with no Android ABI directory, so `libiroh_ffi.so` was absent and
+  `MainViewModel` died on `UnsatisfiedLinkError`. `env/build-iroh-android.sh` now
+  cross-compiles it from pinned iroh-ffi source into `jniLibs/arm64-v8a/`. The app
+  launches, publishes a real EndpointId, and reports "ready, camped on relay".
+- **`env/verify.sh` had a hole and no longer does.** It asserted the rustc
+  *version*, which Homebrew's rust matches exactly while shipping a different
+  sysroot with zero cross-compile targets — so it passed on a machine where every
+  Android build failed. It now asserts the sysroot and, per target, that the
+  compiler can actually emit for it (`--print target-libdir`).
+
 ### Verified working
 - `make bootstrap` completes and is idempotent (a second run no-ops every SDK
   package). It installs Temurin 17 when absent, and stops with an exact command

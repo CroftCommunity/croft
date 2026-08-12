@@ -44,15 +44,39 @@ if command -v rustup >/dev/null 2>&1; then
   # trap, and it cost three CI round trips during that repo's gate bring-up.
   # Ask the toolchain rustup resolves IN THIS REPO -- that is what a build will
   # actually use, and it is what rust-toolchain.toml exists to control.
-  got_rust="$("$(rustup which rustc 2>/dev/null)" --version 2>/dev/null | awk '{print $2}')"
+  rustc_bin="$(rustup which rustc 2>/dev/null || true)"
+  got_rust="$("$rustc_bin" --version 2>/dev/null | awk '{print $2}')"
   if [ "$got_rust" = "$want_rust" ]; then ok "rust $got_rust"; else
     red "rust: want $want_rust, got ${got_rust:-none}"
+  fi
+
+  # A VERSION MATCH IS NOT ENOUGH, and this check exists because the earlier one
+  # was not. Homebrew ships rustc at the SAME version as the pinned rustup
+  # toolchain, with a different sysroot that has zero cross-compile targets:
+  #
+  #   ~/.rustup/toolchains/1.97.1-aarch64-apple-darwin  -> android stds present
+  #   /opt/homebrew/Cellar/rust/1.97.1                  -> none
+  #
+  # So every version assertion passed on a machine where every Android build
+  # failed with "can't find crate for std". Assert the SYSROOT, and then assert
+  # the capability we actually care about rather than a proxy for it.
+  sysroot="$("$rustc_bin" --print sysroot 2>/dev/null || true)"
+  case "$sysroot" in
+    *"/.rustup/toolchains/"*) ok "rustc sysroot is rustup's" ;;
+    *) red "rustc resolves outside rustup ($sysroot) — version matches, targets will not" ;;
+  esac
+  if [ "$(command -v rustc 2>/dev/null)" != "$rustc_bin" ]; then
+    note "bare 'rustc' on PATH is $(command -v rustc) — always resolve via 'rustup which'"
   fi
   for t in $(sed -n '/^  targets:/,/^[a-z]/p' "$manifest" | sed -n 's/^[[:space:]]*-[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}/\1/p'); do
     # Per-toolchain, not global: a target installed for `stable` is not installed
     # for the pinned channel, and only the pinned one will build.
-    if rustup target list --toolchain "$want_rust" --installed 2>/dev/null | grep -qx "$t"; then ok "rust target $t"; else
-      red "rust target missing: $t"
+    # Ask the compiler whether it can actually emit for the target, rather than
+    # asking rustup's bookkeeping. `--print target-libdir` names the std it would
+    # use; if that directory is absent the build fails no matter what rustup says.
+    libdir="$("$rustc_bin" --print target-libdir --target "$t" 2>/dev/null || true)"
+    if [ -n "$libdir" ] && [ -d "$libdir" ]; then ok "rust target $t (std present)"; else
+      red "rust target $t: no std at ${libdir:-<unknown>} — cross-compiles will fail"
     fi
   done
 else

@@ -54,6 +54,21 @@ android:
     - "build-tools;35.0.0"
     - "emulator"
     - "system-images;android-35;google_apis;arm64-v8a"
+    # NDK: required to build libiroh_ffi.so for Android. NOT optional and NOT a
+    # convenience -- iroh-ffi's own README.kotlin.md states the Maven Central
+    # artifact (computer.iroh:iroh) is "Kotlin / JVM" and documents Android as a
+    # separate build-it-yourself path. There is no published Android AAR. The
+    # app crashed on launch for exactly this reason; see ops/JOURNAL.md.
+    #
+    # Pinned to a release, not an rc: 29.x has rc3/rc4/final and 30.x is rc only.
+    - "ndk;29.0.14206865"
+  ndk_version: "29.0.14206865"
+
+  # iroh-ffi source tag, built per-ABI by env/build-iroh-android.sh.
+  # Pinned because the Maven artifact is Kotlin/JVM only -- there is no Android
+  # AAR, so this source build IS the dependency. Must track the iroh version the
+  # app's Kotlin bindings expect (computer.iroh:iroh:1.0.0).
+  iroh_ffi_tag: "v1.0.0"
 
   # ABI IS NOT A PERFORMANCE PREFERENCE HERE.
   # Real phones are arm64-v8a. An x86_64 emulator image can MASK a native-library
@@ -61,6 +76,12 @@ android:
   # exactly the bug class we are currently chasing in the croftcall client. A
   # wrong ABI here makes the emulator lie to us.
   abi: "arm64-v8a"
+
+  # The ABIs we actually build native libraries for. arm64-v8a covers every
+  # current phone and the emulator image; armeabi-v7a is legacy 32-bit and is
+  # deliberately deferred rather than assumed -- each ABI is a full iroh compile.
+  native_abis:
+    - "arm64-v8a"
 
 rust:
   # The shared core. Pinned for the same reason the workspace pins everywhere
