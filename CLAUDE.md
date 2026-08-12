@@ -34,6 +34,44 @@ Do not describe anything here as working until it has been run.
   principal* seam. If you find yourself integrating calling into a specific
   pond's core, stop — that is the wrong seam and it will multiply.
 
+## Commit gates — a ratchet, not a wall
+
+Gates here **tighten as the repo gains the capability to enforce them**. Writing a
+gate you cannot yet run is theatre; skipping the ratchet is how a repo arrives at
+1.0 with no gates at all. So each is recorded with the trigger that turns it on.
+
+**Enforced now:**
+
+- **G1 — the commit says why.** Descriptive prose in the house voice, naming the
+  reasoning and anything that turned out false. Not Conventional Commits; the
+  estate's history reads as prose and consistency beats convention here.
+- **G2 — no claim that something runs until it has been run.** The README, the
+  changelog and this file all currently say the repo does not run. When that
+  changes, the change is part of the same commit as the thing that made it true.
+- **G3 — checksums never regress.** Once a value replaces `UNSET`, a commit that
+  reintroduces `UNSET` is a defect, not a rollback.
+- **G4 — environment changes are journalled.** `ops/JOURNAL.md`, with the reason
+  and the outcome including failures.
+
+**Turns on when there is code to run it against:**
+
+- **G5 — `make verify` green.** Trigger: `make bootstrap` has been run
+  successfully once, by anyone. Until then a fresh clone cannot pass it and it
+  would only train people to skip gates.
+- **G6 — `make gate` green** (verify + `cargo test` + unit tests). Trigger: the
+  first core lands.
+- **G7 — CI runs the same `make gate`.** Trigger: G6. The workspace rule from
+  `.claude/CI-PATTERN.md` applies — a workflow without a `pull_request` trigger is
+  a notification, not a gate, and a gate nobody has watched fail is
+  indistinguishable from one that is not wired. **Watch it fail before trusting
+  it.**
+- **G8 — contract compatibility.** Trigger: the first shipped app that speaks the
+  deep link. A contract change then requires a stated version and a visible
+  degrade path (`docs/VERSIONING.md` clock 2).
+
+If you find yourself wanting to skip a gate, the honest move is to move it back
+down the ratchet with a recorded reason — not to bypass it quietly.
+
 ## The environment refuses, it does not warn
 
 `env/` declares the toolchain; `env/verify.sh` **exits non-zero** on drift. That

@@ -70,6 +70,26 @@ make emulator-nuke # destroy it — restoring is meant to be a non-event
 The point of pinning is not rigidity. It is that a wrecked environment is one
 command from restored, so experiments stop being scary.
 
+## How this repo keeps its own records
+
+The infrastructure is treated as a product in its own right, because scaffolding
+that grows without a record becomes archaeology.
+
+| File | Answers |
+|---|---|
+| `CHANGELOG.md` | what changed for a consumer |
+| `ops/JOURNAL.md` | what we did to the environment, and **why** — failures included |
+| `docs/VERSIONING.md` | three clocks: the product, the contract, the toolchain |
+| `CLAUDE.md` → Commit gates | what must be true to commit, and when each gate turns on |
+
+The journal's rule is the one that carries the weight: **record the reason, not
+just the command.** A command without its why is archaeology; a reason without its
+command is a story.
+
+Gates **ratchet** — each is recorded alongside the trigger that turns it on, so
+the repo neither pretends to enforce what it cannot yet run, nor drifts to 1.0
+with no gates at all.
+
 ## Licence
 
 AGPL-3.0, matching the rest of the Croft estate.
