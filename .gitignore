@@ -1,0 +1,21 @@
+# build outputs
+target/
+build/
+dist/
+*.apk
+*.aab
+
+# android / gradle
+.gradle/
+local.properties
+.cxx/
+
+# apple
+*.xcuserdatad
+DerivedData/
+
+# node (web shell tooling)
+node_modules/
+
+# env scratch
+/tmp/

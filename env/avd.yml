@@ -1,0 +1,43 @@
+# The emulator as a definition, not a pet.
+#
+# `make emulator-nuke && make emulator` must be a non-event. If recreating the
+# AVD is ever scary, this file has failed at its job and the fear will show up as
+# reluctance to test anything destructive.
+
+avd:
+  name: "croft-dev"
+  # Must match env/toolchain.yml android.sdk_packages -- verify.sh checks the ABI
+  # separately because an x86_64 image can mask native-packaging bugs.
+  package: "system-images;android-35;google_apis;arm64-v8a"
+  device: "pixel_6"
+
+  # Headless is the default because the loop that matters most (build → install →
+  # launch → read logcat) needs no display, and a windowless emulator is faster
+  # and scriptable. The window is opt-in, for when a human is judging UI.
+  #
+  #   make emulator            headless   (agent-driven)
+  #   make emulator-ui         windowed   (human-driven)
+  #
+  # A third mode sits between them: `adb exec-out screencap -p` captures the
+  # screen from a HEADLESS emulator, so UI can be inspected without a window and
+  # without a person. Reserve human eyes for judgment -- feel, layout, whether it
+  # is right -- not for confirming that something drew.
+  headless_default: true
+
+  # Cold boot for reproducibility in CI; snapshots locally for speed. A snapshot
+  # is convenience, never a source of truth -- if behaviour differs between a
+  # snapshot boot and a cold boot, trust the cold boot.
+  snapshot: true
+
+  # What the emulator can and cannot tell us about this project specifically.
+  #
+  # CAN: startup and linkage failures (the croftcall crash class), UI, deep-link
+  # intent handling, anything relay-mediated through relay.croft.ing.
+  #
+  # CANNOT: real P2P. Emulator networking is NAT'd through the host, so direct
+  # holepunching from an emulator is unrepresentative, and emulator-to-emulator on
+  # one host is a topology that exists nowhere in the wild. Two real devices are
+  # the acceptance surface for a call actually connecting. The emulator is the
+  # iteration surface; the phone is the proof.
+  known_limits:
+    p2p: "unrepresentative — relay-mediated only; real calls need two devices"

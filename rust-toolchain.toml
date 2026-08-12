@@ -1,0 +1,19 @@
+# The Rust pin, and the reason it is a file rather than a note.
+#
+# Without this, `rustup which rustc` in this repo resolves to whatever `rustup
+# default` happens to be -- on the authoring machine that was `stable`, not the
+# 1.97.1 this project declares. env/verify.sh caught exactly that on its first
+# run, which is the whole argument for the file existing.
+#
+# Must stay in step with env/toolchain.yml `rust:`. verify.sh reads the manifest,
+# rustup reads this; two sources of truth is one too many, so change both in the
+# same commit.
+[toolchain]
+channel = "1.97.1"
+components = ["clippy", "rustfmt"]
+targets = [
+  "aarch64-linux-android",
+  "armv7-linux-androideabi",
+  "wasm32-unknown-unknown",
+]
+profile = "minimal"

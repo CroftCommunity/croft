@@ -1,0 +1,74 @@
+# The toolchain, declared. Pinned version + checksum per artifact, following the
+# croft-stack idiom (ansible/group_vars/all.yml: version + sha256 for every
+# fetched binary).
+#
+# THE POINT IS NOT RIGIDITY. It is that a wrecked environment is one command from
+# restored, so experiments stop being scary. Pinning without a fast rebuild is
+# just rigidity; pinning with `make bootstrap` is freedom.
+#
+# CHECKSUMS ARE DELIBERATELY UNSET BELOW.
+# They are marked UNSET rather than invented, and `verify.sh` FAILS while any is
+# unset. Populate them from the real artifacts once, with the recorded command,
+# and commit the result:
+#
+#   make record-checksums
+#
+# A guessed checksum is worse than no checksum: it looks like verification and
+# performs none.
+
+meta:
+  # Bump deliberately: change the version, run `make record-checksums`, run
+  # `make verify`, and commit both in one change.
+  reviewed: "2026-08-11"
+
+jdk:
+  # Gradle provisions this itself via toolchains + the foojay resolver, so it does
+  # NOT depend on whatever JAVA_HOME points at. This machine's default is
+  # Temurin 8, which would silently be wrong.
+  version: "17"
+  vendor: "temurin"
+  provisioned_by: "gradle-toolchains"
+
+gradle:
+  # Committed wrapper is the pin. distributionSha256Sum in
+  # gradle/wrapper/gradle-wrapper.properties verifies the bytes, not just the name.
+  version: "8.13"
+  distribution_sha256: "UNSET"
+
+android:
+  agp: "8.7.3"
+  kotlin: "2.2.0"
+  compile_sdk: 35
+  min_sdk: 26
+  target_sdk: 35
+
+  # sdkmanager package IDs, exact. verify.sh diffs this list against
+  # `sdkmanager --list_installed` and exits non-zero on any difference in either
+  # direction -- a missing package OR an unexpected extra one.
+  sdk_packages:
+    - "platform-tools"
+    - "platforms;android-35"
+    - "build-tools;35.0.0"
+    - "emulator"
+    - "system-images;android-35;google_apis;arm64-v8a"
+
+  # ABI IS NOT A PERFORMANCE PREFERENCE HERE.
+  # Real phones are arm64-v8a. An x86_64 emulator image can MASK a native-library
+  # packaging bug (the JNA @aar / ABI class) that arm64 reproduces -- which is
+  # exactly the bug class we are currently chasing in the croftcall client. A
+  # wrong ABI here makes the emulator lie to us.
+  abi: "arm64-v8a"
+
+rust:
+  # The shared core. Pinned for the same reason the workspace pins everywhere
+  # else: two compilers validate two different claims.
+  channel: "1.97.1"
+  components: ["clippy", "rustfmt"]
+  targets:
+    - "aarch64-linux-android"
+    - "armv7-linux-androideabi"
+    - "wasm32-unknown-unknown"
+
+node:
+  # For the web shell's tooling only.
+  version: "22"
