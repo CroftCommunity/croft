@@ -55,13 +55,25 @@ Read this before drawing conclusions from a green run.
 
 ## 3. The package
 
+**Under test: candidate `v0.1.0-rc.1`** — a prerelease (see `ops/RELEASING.md`).
+**This run is its validation gate:** on pass it is promoted to `v0.1.0` (Latest).
+
+Download the published candidate, or rebuild locally — same artifact:
+
 ```
+# published candidate (versioned asset):
+https://github.com/CroftCommunity/croft/releases/download/v0.1.0-rc.1/croft-call-0.1.0-rc.1-debug.apk
+
+# or local build:
 croft/android/app/build/outputs/apk/debug/app-debug.apk
-  40.1 MB · package ing.croft.call · minSdk 26 (Android 8.0+)
+  ~42 MB · package ing.croft.call · minSdk 26 (Android 8.0+)
   native: lib/arm64-v8a/libiroh_ffi.so   (arm64 ONLY)
 ```
 
-Rebuild with `cd android && ./gradlew assembleDebug`.
+Rebuild with `cd android && ./gradlew assembleDebug`. This is `croft/android`, the
+**one** Croft Call app — `connect/android` is retired at connect v0.2.0. It
+captures the connect contract-v2 deep link (`device`/`grant`) and dials by
+`endpointId`.
 
 **ABI note:** the APK carries **arm64-v8a only**. Any recent Pixel or Samsung is
 arm64, so this is fine. A 32-bit-only device would install and then die with
@@ -187,6 +199,17 @@ visible.
 
 **Direct or relayed?** ______ *(only if the log actually says; otherwise
 "unknown" — do not infer)*
+
+**Candidate under test:** `v0.1.0-rc.1`.
+**On a green rung 1 + rung 2 — promote and prune** (per `ops/RELEASING.md`):
+
+```
+gh release create v0.1.0 -R CroftCommunity/croft --target <commit> \
+  --title "croft v0.1.0" \
+  --notes "Validated by the two-device call test on <date>, <devices>." \
+  croft-call-0.1.0-debug.apk
+gh release delete v0.1.0-rc.1 -R CroftCommunity/croft --yes --cleanup-tag
+```
 
 **Follow-ups raised:**
 
