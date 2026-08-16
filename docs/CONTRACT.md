@@ -43,6 +43,16 @@ croft-relay plan update in the same change). **Handoff + the vocabulary bridge:*
 > hold), per the handoff's bridge table. The three callability states below still
 > hold; their *definitions* now route through `evaluateGrant`.
 
+## One android app (2026-08-16)
+
+`croft/android` is **the** Croft Call app — the inheritance from
+`CroftCommunity/connect` is complete. `connect/android` is retired as a stopgap;
+its last release is connect **v0.2.0** (no further development there). `DeepLink`
+here captures the contract-v2 deep-link params (`device`, `grant`) so a later
+call-time re-check can re-validate the grant; the call path itself dials by
+`endpointId` and does not need them. The two-device call test
+(`ops/RUNBOOK-two-device-call-test.md`) runs against this app.
+
 ## What this repo does own
 
 ### The rendered-principal seam

@@ -38,6 +38,19 @@ class DeepLinkTest {
         assertNull(callee.relayUrl)
         assertNull(callee.handle)
         assertNull(callee.did)
+        assertNull(callee.device)
+        assertNull(callee.grant)
+    }
+
+    @Test
+    fun `captures device and grant when present (contract v2)`() {
+        val callee = DeepLink.parse(
+            intentFor("croftcall://call?endpoint=ep-abc&device=phone&grant=g1"),
+        )
+        requireNotNull(callee)
+        assertEquals("ep-abc", callee.endpointId)
+        assertEquals("phone", callee.device)
+        assertEquals("g1", callee.grant)
     }
 
     @Test

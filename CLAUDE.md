@@ -107,10 +107,17 @@ unrepresentative and emulator-to-emulator is a topology that exists nowhere.
 inspected without a window and without a human. Reserve human eyes for judgment —
 feel, layout, whether it is right — not for confirming something drew.
 
-## Known inheritance
+## The android app (inheritance complete)
 
-`android/` will take the croftcall client from `CroftCommunity/connect`. It
-**crashes immediately on launch** (owner-reported 2026-08-09) and the cause is
-**not** established — see `discovery` ROADMAP_TODO **E100**, which ranks two
-candidates and asserts neither. Do not record a cause that has not been observed;
-read the crash buffer first (`make crash`).
+`croft/android` is **the** Croft Call app. The croftcall client inherited from
+`CroftCommunity/connect` now lives here and launches (the E100 launch crash was
+rooted — see `discovery` ROADMAP_TODO **E100**; `make crash` reads the buffer if
+it recurs). `connect/android` is **retired** as a stopgap — its last release is
+connect **v0.2.0**, no further development there. The two apps are now one.
+
+Contract **v2** (per-device `listRecords` + the capability model) is landed and
+canonical on connect `main`; `DeepLink` here captures its `device`/`grant` params.
+The client's Phase 11 work — callability resolver, OAuth identity proof,
+call-time `evaluateGrant` as an effect — is specified in
+`CroftCommunity/connect` `docs/PHASE11-HANDOFF.md`. Build against v2, never the
+single-record shape.
