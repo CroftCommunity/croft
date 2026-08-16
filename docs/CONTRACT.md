@@ -17,21 +17,31 @@ that remains true.
 
 Two artefacts live there:
 
-| Artefact | Shape (as of 2026-08-11) |
+| Artefact | Shape (contract v2 — connect v0.2.0, 2026-08-16) |
 |---|---|
-| Lexicon | `ing.croft.iroh.endpoint`, `endpointId` required, plus `homeRelay` / `createdAt` |
-| Deep link | `croftcall://call?endpoint=&relay=&handle=&did=` — `endpoint` required |
+| Endpoint | `ing.croft.iroh.endpoint`, **per-device rkeys** (`self` = primary), enumerated via `listRecords`; `endpointId` required, plus `homeRelay` / `label` / `createdAt` |
+| Grant | `ing.croft.call.grant` — a `matcher` (`ticket` \| `mutuals` \| `registeredCallers`), `devices`, `policyRef` |
+| Policy | `ing.croft.call.policy` — composable rules (`expires` \| `maxUses` \| `burnOnSuccess`) |
+| Deep link | `croftcall://call?endpoint=&relay=&handle=&did=&device=&grant=` — `endpoint` required |
 
-**Both are in flux.** The croft-relay tiered-admission plan's **Phase 10** moves
-the lexicon from a single record at rkey `self` read via `getRecord` to
-**per-device records via `listRecords`**, and adds a request-policy record. That
-phase is green-lit (`listRecords` verified from lexicon source). **Do not
-implement against the single-record shape.**
+**v2 LANDED (2026-08-16).** The Phase 10 change is no longer in flux — it shipped
+on connect `main` as **v0.2.0**: per-device `listRecords`, the capability model
+(grants / matchers / policies), the invite → redeem path, and the call-time
+evaluation engine. **Implement against v2**, not the single-record shape.
 
-**Open:** whether `connect` remains the canonical home once this client is the
-primary consumer. Do not resolve it by drift — either it stays there and this file
-keeps pointing, or it moves deliberately and `connect` plus the croft-relay plan
-are updated in the same change.
+**Resolved (was Open): `connect` remains canonical.** It moved deliberately — the
+owner made the break and released it; this file keeps pointing. A future contract
+change stays coordinated (connect bumps `Contract version`, and this file + the
+croft-relay plan update in the same change). **Handoff + the vocabulary bridge:**
+`CroftCommunity/connect` `docs/PHASE11-HANDOFF.md`.
+
+> **Vocabulary note.** v2 is richer than the `anyone | mutuals | nobody` request
+> policy below. Request policy is **derived from the set of grant records** — which
+> also cover `registeredCallers` (explicit DID lists), `ticket` (handed-out
+> invites), and revocation rules — not a single enum on the endpoint. Model
+> callability as `evaluateGrant` (does any grant admit me, and do its rules still
+> hold), per the handoff's bridge table. The three callability states below still
+> hold; their *definitions* now route through `evaluateGrant`.
 
 ## What this repo does own
 
