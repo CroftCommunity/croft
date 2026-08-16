@@ -83,7 +83,18 @@ to the environment and why*.
 - `make screenshot` — real 1080x2400 capture from a *headless* emulator, so UI is
   inspectable with no window and no human.
 
+### Runs now
+- The **android app** (the inherited croftcall client, `ing.croft.call`) builds
+  and launches; single-node behaviour — EndpointId, relay-camp, deep-link — is
+  emulator-verified per `ops/RUNBOOK-two-device-call-test.md`. Published as
+  two-device-test candidate **`v0.1.0-rc.1`**. The Gradle wrapper and `android/`
+  shell have landed; the E100 launch crash is rooted.
+- **One-app consolidation** (2026-08-16): `connect/android` retired at connect
+  v0.2.0; `croft/android` is the sole Croft Call app. `DeepLink` captures the
+  connect contract-v2 params (`device`/`grant`). Release process:
+  `ops/RELEASING.md`.
+
 ### Not yet true
-- Nothing in this repo runs. No core, no shell, no app — the environment works,
-  the product does not exist.
-- No Gradle wrapper yet; `verify` correctly fails until the `android/` shell lands.
+- The **shared core** does not run yet — `core/`, `shell/`, `ports/` are still
+  skeleton, and the android app is not rebuilt on them. `verify` still fails on
+  the parts that have not landed.

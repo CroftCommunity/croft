@@ -229,3 +229,22 @@ Likely causes, roughly in order:
 
 Capture logcat from **both** sides before changing anything. The failure is more
 informative than the fix.
+
+## 10. After a green run — where this leads
+
+Proving a call connects is the foundation, not the finish. On pass (and after the
+promote-and-prune in §8), the staged follow-up is already thought through:
+
+1. **Rung 3 — our own relay.** Repoint from `presetN0()` to `relay.croft.ing` and
+   repeat rung 2 (needs the custom relay map enabled in `CallPeer.kt`). This is
+   what proves the Membership/relay side end to end. Cut as its own candidate.
+2. **Phase 11 — the cap/admission layer.** The contract for *who may call* is
+   built and canonical on `connect` (contract v2). The client-side work is
+   specified in **`CroftCommunity/connect` `docs/PHASE11-HANDOFF.md`**: a
+   **callability resolver** (the rendered-principal seam), **OAuth identity proof**
+   to obtain `provenDid`, and **`evaluateGrant`** as an effect at call time. Each
+   is a milestone of its own, published and validated the same way (candidate →
+   two-device/behaviour test → promote).
+
+So the ladder does not stop at "a call connected": it climbs to our relay, then to
+admission. This runbook validates the bottom rung; the handoff carries the rest.

@@ -5,8 +5,11 @@ top of** the global coding-agents practices (`~/.claude/coding-agents/`) — TDD
 type safety, fail-loud — and add only what is specific here. Git identity:
 chasemp (`chase@owasp.org`, `github-personal`).
 
-**Status: skeleton.** Structure and toolchain contract exist; no implementation.
-Do not describe anything here as working until it has been run.
+**Status: shared core is skeleton; the android app runs.** The core (`core/`,
+`shell/`, `ports/`) has no implementation yet; the **android app** — the inherited
+croftcall client — builds, launches, and is published as candidate `v0.1.0-rc.1`
+(the two-device call test is its next gate). Do not describe anything else here as
+working until it has been run.
 
 ## Read before writing code
 
@@ -46,8 +49,9 @@ gate you cannot yet run is theatre; skipping the ratchet is how a repo arrives a
   reasoning and anything that turned out false. Not Conventional Commits; the
   estate's history reads as prose and consistency beats convention here.
 - **G2 — no claim that something runs until it has been run.** The README, the
-  changelog and this file all currently say the repo does not run. When that
-  changes, the change is part of the same commit as the thing that made it true.
+  changelog and this file track what runs and what does not — the shared core does
+  not yet; the android app does (published as `v0.1.0-rc.1`). When that changes,
+  the change ships in the same commit as the thing that made it true.
 - **G3 — checksums never regress.** Once a value replaces `UNSET`, a commit that
   reintroduces `UNSET` is a defect, not a rollback.
 - **G4 — environment changes are journalled.** `ops/JOURNAL.md`, with the reason

@@ -2,8 +2,11 @@
 
 The Croft client. One shared functional core, thin per-platform shells.
 
-**Status: skeleton.** The structure and the toolchain contract are here; the
-implementation is not. Nothing in this repo runs yet.
+**Status: shared core is skeleton; the android app runs.** The functional core,
+the cross-platform shells, and the toolchain contract are here; the **core** is not
+yet implemented. The **android app** — the inherited croftcall client — builds,
+launches, and is published as two-device-test candidate **`v0.1.0-rc.1`** (see
+`ops/RUNBOOK-two-device-call-test.md`). It is not yet rebuilt on the shared core.
 
 ## The shape
 
