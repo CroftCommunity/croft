@@ -1,7 +1,17 @@
 # Phase 11 — cap/admission on the client (plan)
 
-**Status: DRAFT — decisions below need the owner before code.**
+**Status: ACTIVE — D1/D2 decided by the owner 2026-08-17; M1 underway.**
 Written 2026-08-17, the day rungs 0–3 all went green and v0.2.0 shipped.
+
+**D1 decided:** lazy-on-tap **plus** a TTL cache — resolution happens only on
+explicit user action (nothing resolves on render), and the derived result is
+cached with a TTL so repeated actions against the same principal do not
+re-leak a lookup. The cache holds *derived state*, not raw records.
+**D2 decided:** the engine is Kotlin in `croft/android` now, written pure
+(no Android imports, effects at the edges) so the shared Rust core can absorb
+it later without a rewrite of the semantics.
+**D3 remains open** (relay token semantics — design against the croft-stack
+admission plan, blocks M4 only).
 
 ## Problem statement
 
