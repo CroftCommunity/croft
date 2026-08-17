@@ -251,16 +251,16 @@ corruptor — covered by a verify-roundtrip test, not just shape checks.
 **Validation:** Narrow-moderate: unit tests + the live curl. No device
 needed yet.
 
-### Phase 2: The OAuth flow engine (PAR → authorize → tokens)
+### Phase 2: The OAuth flow engine (PAR → authorize → tokens) — ✅ SHIPPED (`5e0eb15`)
 
 **Goal:** Given a handle, the engine can run the full authorization dance
 up to holding DPoP-bound tokens — with the browser hop abstracted so tests
 cover everything except the human tap.
 **Changes:**
-- [ ] `caps/OAuthFlow.kt` — server discovery (protected-resource →
+- [x] `caps/OAuthFlow.kt` — server discovery (protected-resource →
   auth-server metadata, D2 fixtures), PAR request, authorize-URL builder,
   code+PKCE exchange, refresh.
-- [ ] `caps/HttpForm.kt` — a **separate** POST port (Pass 2 finding: `Http`
+- [x] `caps/HttpForm.kt` — a **separate** POST port (Pass 2 finding: `Http`
   is a single-method `fun interface` and cannot grow a second method; and
   the GET port's body-only return is insufficient here because the DPoP
   server nonce arrives in the **`DPoP-Nonce` response header**, including
@@ -268,7 +268,7 @@ cover everything except the human tap.
   FormResponse(status, headers, body)` — status and headers are part of
   the contract, and a non-2xx must NOT throw (the nonce-retry dance reads
   400s).
-- [ ] `caps/OAuthFlowTest.kt` — RED first, canned-route fakes from D2
+- [x] `caps/OAuthFlowTest.kt` — RED first, canned-route fakes from D2
   fixtures: discovery chain, PAR carries the metadata client_id + PKCE,
   authorize URL shape, token exchange attaches a DPoP proof (the Phase 1
   wiring test), DPoP-nonce retry, refresh path, fail-closed on every
@@ -277,7 +277,7 @@ cover everything except the human tap.
   the error surfaces (a test asserting only "retries on 400+nonce" would
   let a mutated infinite-retry loop pass; assert the second consecutive
   400 is raised, not retried).
-- [ ] `net/UrlHttp.kt` — implement `HttpForm` alongside the existing GET
+- [x] `net/UrlHttp.kt` — implement `HttpForm` alongside the existing GET
   (returns status+headers without throwing on non-2xx, per the port
   contract above).
 **Call chain:** Phase 3's `AuthManager` → `OAuthFlow.*`; browser hop:
