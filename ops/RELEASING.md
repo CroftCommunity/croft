@@ -77,6 +77,10 @@ build, never reuse.
 
 ## Current
 
+- `v0.3.0-rc.1` — Phase 11 M1: ticket redemption (invite link → public-record
+  resolution → verified secret → callable contact). Cut 2026-08-17 from the
+  same-day on-device validation (redeem → dial → connected via our relay,
+  roles reversed). On promote → `v0.3.0`.
 - `v0.2.0` (Latest) — rung 3: the endpoint camps on `relay.croft.ing:8443`
   (custom RelayMap over the preset) and the call screen/logcat report the live
   connection path. Promoted 2026-08-17 from `v0.2.0-rc.1` on the same-day
