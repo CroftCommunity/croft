@@ -1,8 +1,11 @@
 package ing.croft.call.net
 
+import ing.croft.call.caps.FormResponse
 import ing.croft.call.caps.Http
+import ing.croft.call.caps.HttpForm
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 
 /**
  * The real [Http] port: one GET, JSON accepted, and a thrown exception on
@@ -23,6 +26,45 @@ object UrlHttp : Http {
                 throw IllegalStateException("HTTP $status for $url${if (detail.isNotEmpty()) ": ${detail.take(200)}" else ""}")
             }
             return conn.inputStream.bufferedReader().use { it.readText() }
+        } finally {
+            conn.disconnect()
+        }
+    }
+}
+
+/**
+ * The real [HttpForm] port: application/x-www-form-urlencoded POST that
+ * returns status + headers + body *without* throwing on non-2xx — the
+ * OAuth engine reads the DPoP-Nonce header off 400 responses (port
+ * contract in caps/HttpForm.kt). Policy still belongs to callers.
+ */
+object UrlHttpForm : HttpForm {
+    override suspend fun postForm(
+        url: String,
+        fields: Map<String, String>,
+        headers: Map<String, String>,
+    ): FormResponse {
+        val conn = URL(url).openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            conn.setRequestProperty("Accept", "application/json")
+            for ((k, v) in headers) conn.setRequestProperty(k, v)
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 15_000
+            val encoded = fields.entries.joinToString("&") { (k, v) ->
+                URLEncoder.encode(k, "UTF-8") + "=" + URLEncoder.encode(v, "UTF-8")
+            }
+            conn.outputStream.use { it.write(encoded.toByteArray()) }
+            val status = conn.responseCode
+            val body = (if (status in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+            val flat = conn.headerFields
+                .filterKeys { it != null }
+                .mapKeys { it.key!! }
+                .mapValues { it.value.firstOrNull().orEmpty() }
+            return FormResponse(status = status, headers = flat, body = body)
         } finally {
             conn.disconnect()
         }
