@@ -70,6 +70,27 @@ OAuth lift (the biggest unknown) is not load-bearing for the first two:
 - **Milestone = candidate** per `ops/RELEASING.md`, same ladder discipline
   that just worked for rungs 0–3.
 
+## M1 test bed (live since 2026-08-17)
+
+One callee account is enough for M1 — a ticket admits by possession, so the
+caller needs no identity. Published and verified end to end (all reads
+unauthenticated, exactly as the client will do them):
+
+- Callee repo: `ngvalidation2112.bsky.social` = `did:plc:xyfhcaweaeyew3zrgk6jaln7`,
+  PDS `stropharia.us-west.host.bsky.network` (resolved via plc.directory).
+- `ing.croft.iroh.endpoint` rkey `self`: the Samsung test device's EndpointId
+  (`14af214d…c5ab`), `homeRelay https://relay.croft.ing:8443`.
+- `ing.croft.call.grant` rkey `m1ticket`: `ticket` matcher, `devices:["self"]`,
+  no policyRef.
+- The ticket secret and account credentials live in `CroftC/.env`
+  (git-ignored; the meta-repo ignores everything at the root by design). The
+  invite link for on-device testing is
+  `https://connect.croft.ing/redeem?repo=ngvalidation2112.bsky.social&grant=m1ticket#<secret>`.
+- Verified: secret hashes to the stored `secretHash` (MATCH), grant + endpoint
+  readable with no auth, handle→DID→PDS chain resolves.
+- Two-accounts becomes necessary only at M3 (`mutuals` needs a proven caller
+  DID and a bidirectional follow).
+
 ## Decisions needed before code (the owner's, not the plan's)
 
 - **D1 — resolution strategy** (blocks M2): lazy-on-tap vs cached-TTL vs
