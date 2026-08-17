@@ -108,14 +108,29 @@ class CallPeer(
         }
     }
 
+    // Rung 3: the endpoint camps on OUR relay. The preset stays — it installs
+    // the baseline (crucially the crypto provider; iroh-ffi Endpoint::bind
+    // applies the preset first, then explicit fields win) — and relayMode
+    // overrides just the relay map. n0's discovery services (DNS/pkarr)
+    // remain in use; only the relay moves to relay.croft.ing.
+    private fun croftRelayMode(): RelayMode {
+        val map = RelayMap.empty()
+        map.insert(CroftRelay.config())
+        return RelayMode.custom(map)
+    }
+
     private fun endpointOptions(secret: ByteArray?): EndpointOptions =
         if (secret != null) {
-            EndpointOptions(secretKey = secret, preset = presetN0(), alpns = listOf(WireFormat.ALPN))
+            EndpointOptions(
+                secretKey = secret, preset = presetN0(),
+                alpns = listOf(WireFormat.ALPN), relayMode = croftRelayMode(),
+            )
         } else {
-            EndpointOptions(preset = presetN0(), alpns = listOf(WireFormat.ALPN))
+            EndpointOptions(
+                preset = presetN0(),
+                alpns = listOf(WireFormat.ALPN), relayMode = croftRelayMode(),
+            )
         }
-        // relay.croft.ing goes here: replace presetN0() with a custom relay
-        // config carrying the auth token, once verified against the Kotlin API.
 
     /** Bind (or re-bind after background) with the persistent identity. */
     fun start() {

@@ -175,6 +175,16 @@ Repoint at `relay.croft.ing` and repeat rung 2. Requires enabling the custom
 relay map in `CallPeer.kt` first. Out of scope here; listed so the ladder is
 visible.
 
+**RUN 2026-08-17, PASS** (same devices, on the 0.2.0 build with the path
+instrument): rung 0 both camped on our relay; same-WiFi dial connected with
+the callee's first path `relayed https://relay.croft.ing:8443/` before
+upgrading to direct on the LAN; split-network dial (Samsung WiFi caller →
+Pixel LTE callee) connected in ~4.1 s with **both** sides' first path
+`relayed https://relay.croft.ing:8443/`, then **both** upgraded to a
+cross-network direct path (WiFi↔LTE holepunch confirmed). Our relay carried
+the call end to end; direct-vs-relayed is no longer unknowable — the path
+line said all of this itself.
+
 ## 6. During the run
 
 - **Both apps must stay in the foreground.** Do not switch away or let a screen

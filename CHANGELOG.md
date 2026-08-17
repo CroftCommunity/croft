@@ -10,6 +10,21 @@ to the environment and why*.
 
 ## [Unreleased]
 
+### Changed (app) — rung 3
+- **The endpoint camps on our relay.** `endpointOptions` now sets
+  `relayMode = RelayMode.custom(...)` over `CroftRelay.config()` —
+  `https://relay.croft.ing:8443`, QUIC address discovery on udp/7824, both
+  pinned by test against what the relay's own front page advertises
+  (nonstandard ports, so a bare URL would dial the defaults and miss). The
+  preset stays: iroh-ffi applies it first as the baseline (it installs the
+  crypto provider) and explicit fields win, so only the relay moves — n0's
+  discovery services remain in use. `authToken` is the Phase 11 hook and stays
+  null. Validated on-device 2026-08-17, split networks (WiFi caller, LTE
+  callee): ~4 s to connected, both sides' first path
+  `relayed https://relay.croft.ing:8443/`, then both upgraded to a
+  cross-network direct path — our relay carried the call *and* the holepunch
+  upgrade out of it worked. versionCode 2, versionName 0.2.0.
+
 ### Added (app)
 - **The call screen and logcat now say which path a call is using** — `direct
   <addr>` / `relayed <url>` / `path unknown`, from the connection's own
