@@ -10,6 +10,23 @@ to the environment and why*.
 
 ## [Unreleased]
 
+### Added (app) — Phase 11 M1
+- **Ticket redeem: an exchange invite link is now a callable contact.** The
+  app offers itself for `https://connect.croft.ing/redeem` links (chooser-based
+  until assetlinks lands; `croftcall://` unchanged) and runs contract §6
+  redemption: resolve the repo (handle → DID → PDS), fetch the grant, verify
+  the ticket secret against `secretHash`, enforce the redeem-time rule subset
+  (`expires` only — use-based rules are call-time facts), read the chosen
+  device's endpoint record, and populate the callee card carrying
+  `grant`+`device` for the §7 re-check. The engine (`ing.croft.call.caps`) is
+  a Kotlin mirror of connect's `resolver.js` — same test vectors, same
+  fail-closed semantics (unknown matcher/rule types deny, never crash), the
+  network behind one injected `Http` port, the clock an input. Resolution is
+  lazy-on-tap (decision D1): nothing resolves on render. Validated on-device
+  2026-08-17 against a live test repo: invite link → callee card from public
+  records alone → call connected via our relay, upgraded to direct. 57 unit
+  tests green. versionCode 3, versionName 0.3.0.
+
 ### Added
 - Repo skeleton: shared-core/per-platform-shell layout (`core/`, `shell/`,
   `design/`, `ports/`, `ffi/`, `web/`, `android/`, `apple/`).

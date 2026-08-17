@@ -40,5 +40,20 @@ object InviteLink {
         )
     }
 
+    /**
+     * Is this URL an exchange invite link (contract §4)? Recognizes only the
+     * exchange origin's /redeem path with a parseable repo+grant — anything
+     * else (including other hosts' /redeem pages) is not ours to redeem.
+     */
+    fun isInviteLink(url: String): Boolean = try {
+        val uri = URI(url)
+        uri.scheme == "https" &&
+            uri.host == "connect.croft.ing" &&
+            uri.path == "/redeem" &&
+            runCatching { parse(url) }.isSuccess
+    } catch (t: Exception) {
+        false
+    }
+
     private fun decode(s: String): String = URLDecoder.decode(s, "UTF-8")
 }

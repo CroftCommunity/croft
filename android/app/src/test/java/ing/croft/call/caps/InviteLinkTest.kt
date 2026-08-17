@@ -41,6 +41,22 @@ class InviteLinkTest {
     }
 
     @Test
+    fun `recognizes an exchange redeem url as an invite link`() {
+        assertEquals(
+            true,
+            InviteLink.isInviteLink("https://connect.croft.ing/redeem?repo=a.test&grant=g1#s"),
+        )
+    }
+
+    @Test
+    fun `other urls are not invite links`() {
+        assertEquals(false, InviteLink.isInviteLink("https://connect.croft.ing/"))
+        assertEquals(false, InviteLink.isInviteLink("https://example.com/redeem?repo=a&grant=g"))
+        assertEquals(false, InviteLink.isInviteLink("croftcall://call?endpoint=e"))
+        assertEquals(false, InviteLink.isInviteLink("not a url at all"))
+    }
+
+    @Test
     fun `missing repo is refused`() {
         assertThrows(IllegalArgumentException::class.java) {
             InviteLink.parse("https://connect.croft.ing/redeem?grant=g1#s")

@@ -48,6 +48,13 @@ OAuth lift (the biggest unknown) is not load-bearing for the first two:
    `provenDid` (the secret in the invite-link fragment is the proof). Client:
    parse invite link → `verifyTicketSecret` → dial with the grant carried.
    This exercises grants end-to-end with zero OAuth.
+   **DONE 2026-08-17, validated on-device:** the Pixel consumed the live
+   invite link (explicit-component VIEW intent; the manifest offers the app
+   for `connect.croft.ing/redeem`, chooser-based until assetlinks), resolved
+   everything from public records, and the call connected via our relay then
+   upgraded to direct — roles reversed from earlier runs (Pixel caller).
+   Engine: `caps/` (32 tests) + `UrlHttp` + `redeemInvite` (lazy-on-tap per
+   D1; the TTL cache layer arrives with M2, where repeat lookups exist).
 2. **M2 — callability resolver** at the rendered-principal seam:
    `resolveHandle → resolvePds → listEndpoints → grants → derived state`.
    Needs decision D1 (below) first.

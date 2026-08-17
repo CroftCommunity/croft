@@ -25,6 +25,7 @@ import ing.croft.call.net.CallPeer.State
 fun CallScreen(vm: MainViewModel) {
     val state by vm.peer.state.collectAsState()
     val callee by vm.callee.collectAsState()
+    val redeemStatus by vm.redeemStatus.collectAsState()
     val clipboard = LocalClipboardManager.current
 
     Surface(Modifier.fillMaxSize()) {
@@ -60,7 +61,8 @@ fun CallScreen(vm: MainViewModel) {
                     val c = callee
                     if (c == null) {
                         Text(
-                            "No one yet. Look someone up on the Croft Exchange page and tap Connect.",
+                            redeemStatus
+                                ?: "No one yet. Look someone up on the Croft Exchange page and tap Connect.",
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(top = 6.dp),
                         )

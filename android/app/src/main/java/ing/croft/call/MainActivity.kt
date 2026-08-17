@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import ing.croft.call.caps.InviteLink
 import ing.croft.call.ui.CallScreen
 
 class MainActivity : ComponentActivity() {
@@ -13,7 +14,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        vm.onDeepLink(DeepLink.parse(intent))   // cold start via croftcall://
+        route(intent)   // cold start via croftcall:// or an invite link
         setContent { CallScreen(vm) }
     }
 
@@ -21,7 +22,18 @@ class MainActivity : ComponentActivity() {
     // keeping the already-bound endpoint instead of relaunching.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        vm.onDeepLink(DeepLink.parse(intent))
+        route(intent)
+    }
+
+    /** croftcall:// deep links populate the callee directly; an exchange
+     *  invite link (https .../redeem) goes through ticket redemption first. */
+    private fun route(intent: Intent?) {
+        val url = intent?.data?.toString()
+        if (url != null && InviteLink.isInviteLink(url)) {
+            vm.redeemInvite(url)
+        } else {
+            vm.onDeepLink(DeepLink.parse(intent))
+        }
     }
 
     override fun onStart() { super.onStart(); vm.onForeground() }

@@ -1,12 +1,17 @@
 package ing.croft.call
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import ing.croft.call.caps.Redeem
 import ing.croft.call.identity.IdentityStore
 import ing.croft.call.net.CallPeer
+import ing.croft.call.net.UrlHttp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import computer.iroh.IrohAndroid
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -24,6 +29,37 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onDeepLink(c: Callee?) { if (c != null) _callee.value = c }
+
+    // Redeem progress/error for the UI; null when nothing is in flight.
+    private val _redeemStatus = MutableStateFlow<String?>(null)
+    val redeemStatus: StateFlow<String?> = _redeemStatus
+
+    /**
+     * Redeem an exchange invite link (contract §6) into the callee card.
+     * Lazy-on-tap by design (decision D1): resolution runs only because the
+     * user opened the link — nothing resolves on render.
+     */
+    fun redeemInvite(link: String) {
+        _redeemStatus.value = "redeeming invite…"
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val r = Redeem.redeemTicket(UrlHttp, link, now = System.currentTimeMillis())
+                Log.i("CroftCall", "redeemed ${r.grant} for ${r.did}: device=${r.device}")
+                _callee.value = Callee(
+                    endpointId = r.endpointId,
+                    relayUrl = r.homeRelay.ifEmpty { null },
+                    handle = null,
+                    did = r.did,
+                    device = r.device.takeIf { it != "self" },
+                    grant = r.grant,
+                )
+                _redeemStatus.value = null
+            } catch (t: Throwable) {
+                Log.w("CroftCall", "redeem failed: ${t.message}")
+                _redeemStatus.value = "redeem failed: ${t.message}"
+            }
+        }
+    }
 
     fun dialCallee() {
         val c = _callee.value ?: return

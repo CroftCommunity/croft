@@ -32,18 +32,21 @@
                 <data android:scheme="croftcall" android:host="call" />
             </intent-filter>
 
-            <!-- Production upgrade: Android App Links on https://connect.croft.ing
-                 (verified via /.well-known/assetlinks.json) open the app without
-                 the scheme-picker prompt. Uncomment once assetlinks carries the
-                 real release-signing SHA-256 (see docs/adr/0003). -->
-            <!--
-            <intent-filter android:autoVerify="true">
+            <!-- Exchange invite links (contract §4): the app offers itself for
+                 https://connect.croft.ing/redeem and runs ticket redemption.
+                 NOT autoVerify — without assetlinks.json this appears in the
+                 browser/app chooser rather than opening directly. Production
+                 upgrade: add autoVerify once /.well-known/assetlinks.json on
+                 connect.croft.ing carries the real release-signing SHA-256
+                 (see docs/adr/0003); the filter itself stays the same. -->
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="connect.croft.ing" />
+                <data android:scheme="https"
+                      android:host="connect.croft.ing"
+                      android:path="/redeem" />
             </intent-filter>
-            -->
         </activity>
     </application>
 </manifest>
