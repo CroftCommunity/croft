@@ -372,7 +372,7 @@ singleTask — the good case); clock skew on DPoP `iat`.
 **Validation:** Broad: on-device live OAuth against the real PDS with
 `test_user2` (creds in `CroftC/.env`), kill-and-relaunch included.
 
-### Phase 3b: Sign-in surfaced in the UI
+### Phase 3b: Sign-in surfaced in the UI — ✅ SHIPPED (`8ca4c67`), validated live on-device
 
 **Goal:** A user can do it with taps: handle in, browser approve, identity
 visible, sign-out available.
