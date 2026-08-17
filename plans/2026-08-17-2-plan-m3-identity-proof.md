@@ -209,15 +209,15 @@ one. No implementation code.
 Questions OQ2/OQ3 resolved; later phases adjusted if any answer
 contradicts them (recorded in the Review Log).
 
-### Phase 1: DPoP + client metadata (the pure half, and the hosted file)
+### Phase 1: DPoP + client metadata — ✅ SHIPPED (`0e91c1b`; connect `ac9d022`+`5c46fd4`)
 
 **Goal:** The cryptographic core exists and is fully tested; the client
 metadata document is live at its final URL.
 **Changes:**
-- [ ] `croft/android/app/src/main/java/ing/croft/call/caps/Dpop.kt` — P-256
+- [x] `croft/android/app/src/main/java/ing/croft/call/caps/Dpop.kt` — P-256
   keypair handling + DPoP proof JWS builder (pure: key, url, method, nonce,
   clock in → compact JWS out), shaped per D3's decision.
-- [ ] `croft/android/app/src/test/java/ing/croft/call/caps/DpopTest.kt` —
+- [x] `croft/android/app/src/test/java/ing/croft/call/caps/DpopTest.kt` —
   RED first: header/claims shape per RFC 9449, signature verifies with the
   public key, nonce and htu/htm handling, base64url correctness (no
   padding, url-safe alphabet). **Edges (Pass 3):** the DER→raw conversion
@@ -225,7 +225,7 @@ metadata document is live at its final URL.
   left-padding to 32 bytes — a random-key sign/verify roundtrip only
   exercises that branch ~1 run in 256, so a broken pad survives as a
   flaky pass, the worst kind of mutation survivor.
-- [ ] `connect/web/oauth-client-metadata.json` (path per D4) — the client
+- [x] `connect/web/oauth-client-metadata.json` (path per D4) — the client
   metadata document, fields per D1; committed in the connect repo with its
   doc line (cross-repo).
 **Call chain:** Phase 2's token client → `Dpop.proof(...)`. (Within this
