@@ -5,11 +5,12 @@ top of** the global coding-agents practices (`~/.claude/coding-agents/`) — TDD
 type safety, fail-loud — and add only what is specific here. Git identity:
 chasemp (`chase@owasp.org`, `github-personal`).
 
-**Status: shared core is skeleton; the android app runs.** The core (`core/`,
-`shell/`, `ports/`) has no implementation yet; the **android app** — the inherited
-croftcall client — builds, launches, and is published as candidate `v0.1.0-rc.1`
-(the two-device call test is its next gate). Do not describe anything else here as
-working until it has been run.
+**Status: shared core is skeleton; the android app runs and is released.** The
+core (`core/`, `shell/`, `ports/`) has no implementation yet; the **android
+app** — the inherited croftcall client — builds, launches, and is published as
+**`v0.1.0`** (Latest), validated by the two-device call test on 2026-08-17
+(rungs 0–2 green; see `ops/RUNBOOK-two-device-call-test.md` §8). Do not describe
+anything else here as working until it has been run.
 
 ## Read before writing code
 

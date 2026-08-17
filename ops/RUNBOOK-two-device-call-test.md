@@ -1,6 +1,6 @@
 # Runbook — the two-device call test
 
-**Status: not yet run.** Date attempted: ______
+**Status: run, green.** Date attempted: 2026-08-17
 
 The first test of whether two Croft Call endpoints actually connect. Everything
 proven so far is single-node; this is the first time the accept/connect path runs
@@ -55,14 +55,15 @@ Read this before drawing conclusions from a green run.
 
 ## 3. The package
 
-**Under test: candidate `v0.1.0-rc.1`** — a prerelease (see `ops/RELEASING.md`).
-**This run is its validation gate:** on pass it is promoted to `v0.1.0` (Latest).
+**Was under test: candidate `v0.1.0-rc.1`** — validated 2026-08-17 and promoted
+to **`v0.1.0`** (Latest); the candidate is pruned, so the rc.1 download URL is
+gone. The released artifact is byte-identical (sha256 `c3fbc013…843a987`).
 
-Download the published candidate, or rebuild locally — same artifact:
+Download the release, or rebuild locally — same artifact:
 
 ```
-# published candidate (versioned asset):
-https://github.com/CroftCommunity/croft/releases/download/v0.1.0-rc.1/croft-call-0.1.0-rc.1-debug.apk
+# published release (versioned asset):
+https://github.com/CroftCommunity/croft/releases/download/v0.1.0/croft-call-0.1.0-debug.apk
 
 # or local build:
 croft/android/app/build/outputs/apk/debug/app-debug.apk
@@ -193,25 +194,45 @@ visible.
 
 | Rung | Result | Notes |
 |---|---|---|
-| 0 — each alone | | |
-| 1 — same WiFi | | |
-| 2 — split networks | | |
+| 0 — each alone | **PASS** | Pixel 9 Pro (`631277dd…98f044`) and Samsung SM-S947U1 (`14af214d…c9c5ab`) both reached "ready, camped on relay" with distinct 64-char EndpointIds. Pixel also re-reached "ready" on cellular-only before rung 2. |
+| 1 — same WiFi | **PASS** | Both on the same WiFi. Deep link (quoted) populated the callee card with handle `@pixel-9-pro` intact. Samsung `connected (outgoing) {"hello":"callee"}`, Pixel `connected (incoming) {"hello":"croftcall-android"}`. Connected in a few seconds. |
+| 2 — split networks | **PASS** | Samsung on WiFi, Pixel on LTE (Samsung has no SIM, so roles were WiFi-caller → cellular-callee). Clean restart of both apps first. Tap-to-`connected` ≈ **4 s** (`dialing…` at ~2 s poll, `connected` by ~4.2 s) — no long pause suggesting a holepunch timeout into relay fallback, but see below. Same hello exchange both sides; Pixel status bar shows LTE, no WiFi. |
 
-**Direct or relayed?** ______ *(only if the log actually says; otherwise
-"unknown" — do not infer)*
+**Direct or relayed?** **unknown** — nothing in logcat from either side names a
+path, relay, or connection type (the iroh binding logs nothing to logcat).
+Devices/date: Pixel 9 Pro + Samsung SM-S947U1, 2026-08-17.
+
+**Run notes (setup friction, for next time):**
+- Samsung One UI **Auto Blocker** silently blocks USB debugging even with the
+  Developer options toggle on — Settings → Security and privacy → Auto Blocker
+  → off, then the authorize prompt appears. This is upstream of the
+  charging-mode gotcha already listed.
+- First two USB cables were charge-only; phones enumerate on the Mac's USB bus
+  only for MTP, and adb sees nothing (not even `unauthorized`) until debugging
+  is truly on.
+- EndpointIds persisted across force-stop + relaunch (same keys in rung 2 as
+  rung 1).
 
 **Candidate under test:** `v0.1.0-rc.1`.
-**On a green rung 1 + rung 2 — promote and prune** (per `ops/RELEASING.md`):
+**Promote and prune: DONE 2026-08-17** (per `ops/RELEASING.md`) — `v0.1.0`
+(Latest) cut from the rc.1 commit `aa89fa4`, rc.1 deleted with its tag:
 
 ```
-gh release create v0.1.0 -R CroftCommunity/croft --target <commit> \
+gh release create v0.1.0 -R CroftCommunity/croft --target aa89fa4 \
   --title "croft v0.1.0" \
-  --notes "Validated by the two-device call test on <date>, <devices>." \
+  --notes "Validated by the two-device call test on 2026-08-17, Pixel 9 Pro + Samsung SM-S947U1." \
   croft-call-0.1.0-debug.apk
 gh release delete v0.1.0-rc.1 -R CroftCommunity/croft --yes --cleanup-tag
 ```
 
 **Follow-ups raised:**
+- The app logs nothing that names the chosen path (direct vs relayed) — rung 3
+  will want that observable before we claim anything about our relay.
+- Test-device standing arrangement: the **Samsung SM-S947U1 is the dedicated
+  test device** (developer mode on, stays ready; it has no SIM, so it is always
+  the WiFi side). The Pixel 9 Pro is a personal phone borrowed for two-device
+  runs — plan future tests around asking for it, and prefer the Samsung for
+  anything single-device.
 
 ## 9. If it fails
 

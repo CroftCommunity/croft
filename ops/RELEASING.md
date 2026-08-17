@@ -77,5 +77,7 @@ build, never reuse.
 
 ## Current
 
-- `v0.1.0-rc.1` — the first candidate: the one-app consolidation + the connect
-  contract-v2 deep link. Awaiting the two-device call test. On pass → `v0.1.0`.
+- `v0.1.0` (Latest) — the one-app consolidation + the connect contract-v2 deep
+  link. Promoted 2026-08-17 from `v0.1.0-rc.1` after the two-device call test
+  passed (rungs 0–2; `ops/RUNBOOK-two-device-call-test.md` §8); the candidate is
+  pruned. Next candidate: rung 3 (repoint at `relay.croft.ing`).

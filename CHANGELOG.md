@@ -87,8 +87,9 @@ to the environment and why*.
 - The **android app** (the inherited croftcall client, `ing.croft.call`) builds
   and launches; single-node behaviour — EndpointId, relay-camp, deep-link — is
   emulator-verified per `ops/RUNBOOK-two-device-call-test.md`. Published as
-  two-device-test candidate **`v0.1.0-rc.1`**. The Gradle wrapper and `android/`
-  shell have landed; the E100 launch crash is rooted.
+  two-device-test candidate **`v0.1.0-rc.1`**, since validated and promoted to
+  `v0.1.0` (see below). The Gradle wrapper and `android/` shell have landed; the
+  E100 launch crash is rooted.
 - **One-app consolidation** (2026-08-16): `connect/android` retired at connect
   v0.2.0; `croft/android` is the sole Croft Call app. `DeepLink` captures the
   connect contract-v2 params (`device`/`grant`). Release process:
@@ -98,3 +99,23 @@ to the environment and why*.
 - The **shared core** does not run yet — `core/`, `shell/`, `ports/` are still
   skeleton, and the android app is not rebuilt on them. `verify` still fails on
   the parts that have not landed.
+
+## [0.1.0] — 2026-08-17
+
+The first full release of Croft Call. The artifact is byte-identical to
+candidate `v0.1.0-rc.1` (sha256 `c3fbc013…843a987`), promoted after the
+two-device call test went green.
+
+### Validated
+- **The two-device call test passed all three rungs** (Pixel 9 Pro + Samsung
+  SM-S947U1, 2026-08-17): each device alone reached "ready, camped on relay"
+  with its own EndpointId; same-WiFi dial connected with the `croft-call/0`
+  hello exchange in both directions; split-network dial (WiFi caller → LTE
+  callee) connected in ~4 s. Direct-vs-relayed path: **unknown** — the binding
+  logs nothing that names it. Full results: `ops/RUNBOOK-two-device-call-test.md` §8.
+- The inferred iroh Kotlin `accept`/`connect`/stream surface has now run against
+  a real peer — the risk called out in the runbook's §1 is retired.
+
+### Released
+- `v0.1.0` (Latest) cut from the rc.1 commit; the `v0.1.0-rc.1` prerelease
+  pruned per `ops/RELEASING.md`.
