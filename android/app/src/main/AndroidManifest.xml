@@ -47,6 +47,18 @@
                       android:host="connect.croft.ing"
                       android:path="/redeem" />
             </intent-filter>
+
+            <!-- atproto OAuth redirect (Phase 11 M3). The spec fixes the
+                 custom scheme to the client_id hostname reversed:
+                 ing.croft.connect:/oauth. The URI has no authority, so
+                 Android can only match on scheme here; route() checks the
+                 rest. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="ing.croft.connect" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>

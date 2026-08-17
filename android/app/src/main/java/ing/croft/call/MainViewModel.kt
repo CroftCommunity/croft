@@ -4,10 +4,14 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.content.Intent
+import android.net.Uri
 import ing.croft.call.caps.Redeem
+import ing.croft.call.identity.AuthManager
 import ing.croft.call.identity.IdentityStore
 import ing.croft.call.net.CallPeer
 import ing.croft.call.net.UrlHttp
+import ing.croft.call.net.UrlHttpForm
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +33,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onDeepLink(c: Callee?) { if (c != null) _callee.value = c }
+
+    // OAuth identity (Phase 11 M3): the browser hop is an ACTION_VIEW to the
+    // default browser (no Custom Tabs dependency); tokens live in encrypted
+    // prefs inside AuthManager and never reach logs.
+    val auth = AuthManager(
+        prefs = AuthManager.encryptedPrefs(app.applicationContext),
+        http = UrlHttp,
+        form = UrlHttpForm,
+        openUrl = { url ->
+            app.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        },
+    )
+
+    /** The OAuth redirect landed (routed by MainActivity). */
+    fun onOAuthRedirect(url: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                auth.onRedirect(url)
+            } catch (t: Throwable) {
+                Log.w("CroftCall", "oauth redirect failed: ${t.message}")
+            }
+        }
+    }
 
     // Redeem progress/error for the UI; null when nothing is in flight.
     private val _redeemStatus = MutableStateFlow<String?>(null)

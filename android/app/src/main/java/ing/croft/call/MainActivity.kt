@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import ing.croft.call.caps.InviteLink
+import ing.croft.call.identity.AuthManager
 import ing.croft.call.ui.CallScreen
 
 class MainActivity : ComponentActivity() {
@@ -26,13 +27,14 @@ class MainActivity : ComponentActivity() {
     }
 
     /** croftcall:// deep links populate the callee directly; an exchange
-     *  invite link (https .../redeem) goes through ticket redemption first. */
+     *  invite link (https .../redeem) goes through ticket redemption first;
+     *  an OAuth redirect (ing.croft.connect:/oauth) resumes the sign-in. */
     private fun route(intent: Intent?) {
         val url = intent?.data?.toString()
-        if (url != null && InviteLink.isInviteLink(url)) {
-            vm.redeemInvite(url)
-        } else {
-            vm.onDeepLink(DeepLink.parse(intent))
+        when {
+            AuthManager.isOAuthRedirect(url) -> vm.onOAuthRedirect(url!!)
+            url != null && InviteLink.isInviteLink(url) -> vm.redeemInvite(url)
+            else -> vm.onDeepLink(DeepLink.parse(intent))
         }
     }
 
