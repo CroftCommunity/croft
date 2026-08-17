@@ -48,13 +48,42 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         },
     )
 
+    /** The OAuth-proven identity for the UI; null when signed out. */
+    val provenDid: StateFlow<String?> = auth.provenDid
+
+    // Sign-in progress/error for the UI; null when nothing is wrong.
+    private val _authStatus = MutableStateFlow<String?>(null)
+    val authStatus: StateFlow<String?> = _authStatus
+
+    /** Start the browser sign-in for a typed handle (Phase 11 M3). */
+    fun signIn(handle: String) {
+        if (handle.isBlank()) return
+        _authStatus.value = "starting sign-in…"
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                auth.signIn(handle.trim())
+                _authStatus.value = "approve in the browser, then return here"
+            } catch (t: Throwable) {
+                Log.w("CroftCall", "sign-in failed: ${t.message}")
+                _authStatus.value = "sign-in failed: ${t.message}"
+            }
+        }
+    }
+
+    fun signOut() {
+        auth.signOut()
+        _authStatus.value = null
+    }
+
     /** The OAuth redirect landed (routed by MainActivity). */
     fun onOAuthRedirect(url: String) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 auth.onRedirect(url)
+                _authStatus.value = null
             } catch (t: Throwable) {
                 Log.w("CroftCall", "oauth redirect failed: ${t.message}")
+                _authStatus.value = "sign-in failed: ${t.message}"
             }
         }
     }

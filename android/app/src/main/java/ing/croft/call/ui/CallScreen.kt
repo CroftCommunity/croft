@@ -5,6 +5,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -26,6 +29,9 @@ fun CallScreen(vm: MainViewModel) {
     val state by vm.peer.state.collectAsState()
     val callee by vm.callee.collectAsState()
     val redeemStatus by vm.redeemStatus.collectAsState()
+    val provenDid by vm.provenDid.collectAsState()
+    val authStatus by vm.authStatus.collectAsState()
+    var handleInput by remember { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
 
     Surface(Modifier.fillMaxSize()) {
@@ -50,6 +56,30 @@ fun CallScreen(vm: MainViewModel) {
                         TextButton(onClick = {
                             clipboard.setText(AnnotatedString((state as State.Ready).endpointId))
                         }) { Text("Copy endpoint id") }
+                    }
+
+                    // Identity (Phase 11 M3): signed in shows the proven DID;
+                    // signed out offers the browser sign-in by handle.
+                    val did = provenDid
+                    if (did != null) {
+                        Text("Signed in", style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(top = 10.dp))
+                        Text(did, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                        TextButton(onClick = vm::signOut) { Text("Sign out") }
+                    } else {
+                        OutlinedTextField(
+                            value = handleInput,
+                            onValueChange = { handleInput = it },
+                            label = { Text("atproto handle") },
+                            singleLine = true,
+                            modifier = Modifier.padding(top = 10.dp).fillMaxWidth(),
+                        )
+                        TextButton(onClick = { vm.signIn(handleInput) }) {
+                            Text("Sign in via browser")
+                        }
+                    }
+                    authStatus?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
