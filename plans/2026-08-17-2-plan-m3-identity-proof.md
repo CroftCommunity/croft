@@ -586,8 +586,9 @@ bounded at one), `AuthManager.kt` (browser hop, encrypted persistence
 across process death, DID-only logging), the `ing.croft.connect` manifest
 filter, the sign-in row and callability line in the UI, and
 `CallabilityStatus.kt` (lazy, TTL-cached, identity-keyed). In connect: the
-hosted client metadata at its final URL plus the README line. 101 unit
-tests green (was 67). Validated live on the Samsung against the real
+hosted client metadata at its final URL plus the README line. 96 unit
+tests green (was 67; the pushed Phase 4 commit message says 101 — that
+number was wrong, this one is from a counted run). Validated live on the Samsung against the real
 bsky.social entryway: sign-in round-trip, force-stop persistence, and the
 flip both directions with the live fixtures — `Callable(grant=
 m3registered)` signed in, `MayNotPermit` immediately on sign-out.
