@@ -302,7 +302,18 @@ and entryway — pinned by fail-closed tests from D2's real shapes.
 **Validation:** Moderate: unit tests here; the live-server proof is
 Phase 3's on-device sign-in (deliberately not faked there).
 
-### Phase 3a: AuthManager + redirect capture (no UI yet)
+### Phase 3a: AuthManager + redirect capture — ✅ SHIPPED (`2125da5`)
+
+**Delivered:** as specified, with two recorded deviations. (1) The
+on-device browser round-trip rides with Phase 3b's validation — the
+plan's headless `signIn` drive would have required a dev-only intent
+trigger that 3b's UI deletes immediately; one on-device run at the 3b
+boundary validates both (taps for sign-in, kill-and-relaunch for
+persistence). (2) `MainViewModel.kt` gained the minimal plumbing
+(AuthManager ownership + `onOAuthRedirect`) here rather than 3b —
+MainActivity cannot route to an AuthManager nobody owns. Prefs are
+injected (plain in tests, encrypted in production) because
+AndroidKeyStore is absent under Robolectric.
 
 **Goal:** The app can run the whole dance headlessly: launch the browser,
 capture the redirect, hold tokens and the DID durably.
