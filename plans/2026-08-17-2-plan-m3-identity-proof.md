@@ -1,6 +1,7 @@
 # Phase 11 M3 — identity proof: `provenDid` via atproto OAuth
 
-Plan doc (phase-plan skill, Pass 1). Parent plan:
+Plan doc (phase-plan skill — passes 1–3 complete, ready for execution).
+Parent plan:
 `plans/2026-08-17-phase11-cap-admission.md` (M3 is its third milestone).
 
 ## Problem Statement
@@ -172,7 +173,12 @@ metadata document is live at its final URL.
   clock in → compact JWS out), shaped per D3's decision.
 - [ ] `croft/android/app/src/test/java/ing/croft/call/caps/DpopTest.kt` —
   RED first: header/claims shape per RFC 9449, signature verifies with the
-  public key, nonce and htu/htm handling, base64url correctness.
+  public key, nonce and htu/htm handling, base64url correctness (no
+  padding, url-safe alphabet). **Edges (Pass 3):** the DER→raw conversion
+  must be tested with a *fixed* keypair/vector whose `r` or `s` needs
+  left-padding to 32 bytes — a random-key sign/verify roundtrip only
+  exercises that branch ~1 run in 256, so a broken pad survives as a
+  flaky pass, the worst kind of mutation survivor.
 - [ ] `connect/web/oauth-client-metadata.json` (path per D4) — the client
   metadata document, fields per D1; committed in the connect repo with its
   doc line (cross-repo).
@@ -192,8 +198,10 @@ corruptor — covered by a verify-roundtrip test, not just shape checks.
 **Done when:**
 1. Behavioral: a DPoP proof built by the engine validates (signature +
    claims) in our own tests, and the metadata URL serves the final JSON.
-2. Verification: `./gradlew testDebugUnitTest --tests '*DpopTest'` green;
-   `curl` of the metadata URL shows the D1-compliant document.
+2. Verification: full `./gradlew testDebugUnitTest` green (Pass 3: the
+   suite is 67 tests and cheap — run all of it so a regression surfaces
+   in the phase that caused it, not two phases later); `curl` of the
+   metadata URL shows the D1-compliant document.
 **Validation:** Narrow-moderate: unit tests + the live curl. No device
 needed yet.
 
@@ -218,7 +226,11 @@ cover everything except the human tap.
   fixtures: discovery chain, PAR carries the metadata client_id + PKCE,
   authorize URL shape, token exchange attaches a DPoP proof (the Phase 1
   wiring test), DPoP-nonce retry, refresh path, fail-closed on every
-  mismatch (issuer, state, missing fields).
+  mismatch (issuer, state, missing fields). **Edges (Pass 3):** the nonce
+  retry must be *bounded* — exactly one retry per nonce challenge, then
+  the error surfaces (a test asserting only "retries on 400+nonce" would
+  let a mutated infinite-retry loop pass; assert the second consecutive
+  400 is raised, not retried).
 - [ ] `net/UrlHttp.kt` — implement `HttpForm` alongside the existing GET
   (returns status+headers without throwing on non-2xx, per the port
   contract above).
@@ -238,8 +250,9 @@ and entryway — pinned by fail-closed tests from D2's real shapes.
 **Done when:**
 1. Behavioral: the full dance succeeds against canned servers, producing
    DPoP-bound tokens and the session DID.
-2. Verification: `./gradlew testDebugUnitTest --tests '*OAuthFlowTest'`
-   green, including the whole-chain test.
+2. Verification: full `./gradlew testDebugUnitTest` green, including the
+   whole-chain OAuthFlowTest (Pass 3: full suite per phase, same reason
+   as Phase 1).
 **Validation:** Moderate: unit tests here; the live-server proof is
 Phase 3's on-device sign-in (deliberately not faked there).
 
@@ -261,6 +274,20 @@ capture the redirect, hold tokens and the DID durably.
   (Pass 2 finding: the existing filter is `croftcall://call` only — a
   `croftcall://oauth` callback needs its own `host` entry; exact value
   per D1/OQ2).
+- [ ] `identity/AuthManagerTest.kt` (Robolectric) — RED first: the wiring
+  test below, plus token persistence round-trip (store → new AuthManager
+  instance → `provenDid` restored) and sign-out clears it. (Pass 3: this
+  file was described in prose but missing from Changes — the test is a
+  deliverable, not a footnote. Robolectric 4.14.1 confirmed present in
+  `build.gradle.kts`.)
+**Logging (Pass 3):** the OAuthFlow engine stays pure (throws carry the
+reason; no `android.util.Log` in `caps/`); AuthManager, at the effect
+edge, logs each milestone at the existing `CroftCall` TAG — sign-in
+started (handle), PAR accepted, browser launched, redirect received,
+exchange succeeded (DID only), refresh ran, and every failure at WARN
+with the thrown reason. Tokens, codes, and PKCE verifiers never appear
+in a log line. This is what makes the on-device Done-when debuggable:
+a stalled sign-in shows *which* hop died in `adb logcat -s CroftCall`.
 **Call chain:** AuthManager.signIn(handle) → OAuthFlow(UrlHttp) PAR →
 ACTION_VIEW browser → user approves → redirect intent → MainActivity →
 AuthManager.onRedirect → OAuthFlow.exchangeCode → EncryptedSharedPreferences
@@ -324,9 +351,20 @@ the UI, and the fixtures demonstrate MayNotPermit → Callable on-device.
   cache flush — a stale other-identity entry can never be read).
 - [ ] `ui/CallScreen.kt` — callability line on the callee card
   ("callable via grant …", "may not permit", "not listed").
+- [ ] `MainViewModelCallabilityTest.kt` (Robolectric) — RED first: the
+  ViewModel wiring — a callee arrival triggers exactly one resolve over
+  canned routes, a repeat inside the TTL hits the cache (no second
+  network pass), and the signed-in vs signed-out context produces the
+  two different derived states. (Pass 3: named as a Changes checkbox;
+  was only prose in the wiring-test field.)
 - [ ] `CHANGELOG.md` + `ops/RELEASING.md` + parent plan M3 stamp +
   `versionCode 4` / `versionName 0.4.0` (docs ride the phase that makes
   them stale).
+**Logging (Pass 3):** the ViewModel logs each resolution outcome at the
+`CroftCall` TAG — principal, derived state, grant rkey when Callable,
+and cache hit vs miss — mirroring the existing `redeemInvite` log
+lines. This is device-local logcat, not telemetry; it is how the
+on-device flip is *read* during validation.
 **Call chain:** deep link / redeem → MainViewModel → Callability.resolve
 (CallabilityCache, CallerContext with real provenDid) → CallScreen line.
 **Wiring test:** On-device with the live fixtures: signed **out**, a link
@@ -336,13 +374,19 @@ observed on the phone. Robolectric test for the ViewModel wiring.
 **Depends on:** Phase 3b (UI sign-in state is what the flip demonstrates
 against).
 **Read-set:** Callability, CallabilityCache, AuthManager.
-**Write-set:** the files above.
+**Write-set:** the files above (code: `MainViewModel.kt`,
+`ui/CallScreen.kt`, `MainViewModelCallabilityTest.kt`; the rest are the
+doc/version items — within the 4-code-file rule).
 **Shared-state contract:** live PDS reads on device; nothing else.
 **Risks:** cache keying across sign-in/out (covered by CallabilityCacheTest
 identity-keying already); AppView rate limits (lookups are lazy+cached).
 **Done when:**
 1. Behavioral: the on-device flip described in the wiring test, both
-   directions (sign out → MayNotPermit again after TTL/cache clear).
+   directions. (Pass 3 correction: sign-out flips back *immediately*, no
+   TTL wait — the signed-out lookup uses a different cache key (empty
+   provenDid), so it can never read the signed-in entry. The earlier
+   "after TTL/cache clear" wording contradicted the plan's own
+   identity-keyed cache design.)
 2. Verification: on-device run + full `./gradlew testDebugUnitTest` green;
    then cut `v0.4.0-rc.1` per RELEASING with the validation noted.
 **Validation:** Broad: the on-device flip with live records is the
@@ -404,3 +448,60 @@ milestone's acceptance gate, exactly like M1's redeem run.
   `route()` — the redirect capture slots into an existing seam.
 - The engine/effect split and fixtures claims in Verified Assumptions
   held against the code as committed (`f24e622`).
+
+### Pass 3: Quality Gates — 2026-08-17
+**TDD ordering:**
+- Phases 3a and 4 described Robolectric wiring tests in prose but did not
+  carry them as Changes checkboxes; both now name their test file as a
+  RED-first deliverable (`AuthManagerTest.kt`, `MainViewModelCallabilityTest.kt`).
+- Mutation-resistance edges named where a happy-path assertion would
+  survive a one-line break: Phase 1's DER→raw conversion needs a fixed
+  vector with a left-pad-required `r`/`s` (random keys hit that branch
+  ~1/256 — a broken pad would pass flakily); Phase 2's nonce retry must
+  assert the bound (one retry, then the second 400 raises).
+- Phase 1's deferred wiring test (the Dpop leaf is wired by Phase 2's
+  `token exchange attaches a DPoP proof`) reviewed and kept — it is
+  declared, named, and lands one phase later, not never.
+**Observability:**
+- Positive logging plans added to 3a (AuthManager milestone lines at the
+  existing `CroftCall` TAG; failures at WARN; tokens/codes/verifiers
+  never logged) and 4 (resolution outcome + cache hit/miss). `caps/`
+  stays pure — no `android.util.Log` in the engine; logging lives at the
+  effect edge, matching `redeemInvite`'s existing pattern.
+**Debugging readiness:**
+- Checkpoints are the per-phase commits plus `adb logcat -s CroftCall`;
+  each on-device Done-when now has log lines that localize which hop of
+  the dance failed. No state file needed — the phases are small and each
+  ends green.
+**Validation calibration:**
+- Phase 1/2 verification widened from targeted `--tests` runs to the full
+  unit suite (67 tests, cheap) so regressions surface in the phase that
+  caused them.
+- Phase 0 dispositions all declared and each `promote` has its named TDD
+  follow-up (D3→Phase 1 Dpop, D4→Phase 1 metadata). Considered resolving
+  D1 (spec read) during planning; kept in Phase 0 — D1's citations need
+  recording alongside D2's live confirmation, Phase 0 is the immediate
+  next step anyway, and splitting it saves nothing.
+**Concurrency honesty:**
+- Map confirmed; sequential plan. Pass 3's additions put test files into
+  their own phases' write-sets — no files moved between phases, no new
+  parallel candidates.
+**Coherence:**
+- One self-contradiction fixed: Phase 4's Done-when said the sign-out
+  flip appears "after TTL/cache clear", but the identity-keyed cache
+  means the signed-out lookup is a different key — the flip back is
+  immediate. Wording corrected; no design change.
+- Scope unchanged since Pass 2; the plan still answers the Problem
+  Statement (flip MayNotPermit→Callable via a proven DID).
+**Documentation impact:**
+- Section verified complete: every listed file has a phase item, doc
+  updates ride the phase that makes them stale, no trailing docs phase,
+  no renames. Spot-checked `versionCode` (currently 3) — the Phase 4
+  bump to 4/0.4.0 is correct.
+**Spot-checks:**
+- Robolectric 4.14.1 + androidx.test:core present in `build.gradle.kts`
+  (the 3a/4 wiring tests are runnable as planned); `Log.i/w("CroftCall", …)`
+  confirmed as the live logging convention in `MainViewModel.kt`.
+**Confirmed ready:** yes — all open questions carry user-confirmed
+severities from Pass 1 (OQ1 resolved; OQ2/OQ3 phase-gated on Phase 0;
+OQ4 advisory). Execution starts with Phase 0.
