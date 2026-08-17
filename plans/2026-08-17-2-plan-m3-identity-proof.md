@@ -113,12 +113,58 @@ executor gains nothing from the split.
 
 ## Phases
 
-### Phase 0: Discovery — the OAuth ground truth
+### Phase 0: Discovery — the OAuth ground truth — ✅ DONE 2026-08-17
+
+**Findings (all four probes ran live; evidence below, fixtures committed
+with this plan update; the connect-side draft is connect `ac9d022`):**
+
+- **D1 (spec, https://atproto.com/specs/oauth):** `client_id` is the URL
+  of a hosted metadata JSON. Required for a native public client:
+  `application_type: "native"`, `grant_types:
+  ["authorization_code","refresh_token"]`, `response_types: ["code"]`,
+  `token_endpoint_auth_method: "none"`, `dpop_bound_access_tokens: true`,
+  scope must include `atproto`. **PAR is mandatory** ("clients of all
+  types must use PAR") and **DPoP is mandatory**, ES256 required of all
+  clients/servers. Custom-scheme redirects: **yes, but the scheme must be
+  the client_id hostname in reverse-domain order**, followed by a single
+  colon, single slash, and a path — for `connect.croft.ing` that is
+  `ing.croft.connect:/oauth`. The plan's sketched `croftcall://oauth` is
+  not spec-legal; Phase 3a adjusted below. Access tokens < 30 min;
+  refresh tokens single-use rotating; public-client session ≤ 2 weeks.
+  For identity-only, `atproto` alone suffices (resolves OQ4).
+- **D2 (live servers):** test_user2's PDS is
+  `https://fibercap.us-west.host.bsky.network`; its
+  `/.well-known/oauth-protected-resource` names auth server
+  `https://bsky.social`, whose metadata advertises
+  `pushed_authorization_request_endpoint: /oauth/par`,
+  `authorization_endpoint: /oauth/authorize`, `token_endpoint:
+  /oauth/token`, `require_pushed_authorization_requests: true`, ES256 in
+  `dpop_signing_alg_values_supported`, S256 PKCE,
+  `client_id_metadata_document_supported: true`, scopes incl. `atproto`.
+  Responses saved verbatim as fixtures:
+  `android/app/src/test/resources/oauth/oauth-protected-resource.json`
+  and `.../oauth-authorization-server.json`.
+- **D3 (DPoP spike, desktop JVM, scratchpad — throwaway; findings
+  promote):** `java.security` alone builds a valid ES256 DPoP JWT —
+  P-256 keygen, `SHA256withECDSA`, hand-rolled DER→raw(64) conversion,
+  compact JWS with unpadded base64url; signature roundtrip-verifies.
+  **Decision: hand-roll, no JOSE dependency.** The left-pad branch is
+  empirically live: a 31-byte `r` appeared within 10 random signatures —
+  the Pass 3 fixed-vector edge test is not theoretical. EC coordinates
+  in the jwk also need 32-byte normalization (BigInteger sign bytes).
+- **D4 (hosting):** connect Pages deploys `web/` as the site root
+  (`.github/workflows/web.yml`); the draft metadata is live at the final
+  URL **`https://connect.croft.ing/oauth-client-metadata.json`**, served
+  `200` with `content-type: application/json; charset=utf-8` (resolves
+  OQ3). Draft committed as connect `ac9d022`; Phase 1 finalizes the
+  fields and adds the doc line.
+
+Original probe specs below, kept for the record.
 
 **Goal:** Replace every remembered fact about atproto OAuth with a cited
 one. No implementation code.
 
-- [ ] **D1: What does the atproto OAuth spec require of a native client?**
+- [x] **D1: What does the atproto OAuth spec require of a native client?**
   - **Probe:** Read https://atproto.com/specs/oauth (and the linked
     client-implementation guide). Record: required client-metadata fields
     for a native app (`application_type`, `redirect_uris` rules — is a
@@ -130,7 +176,7 @@ one. No implementation code.
     plan with every field's value justified by a spec citation, and a
     yes/no on custom-scheme redirects.
   - **Disposition:** throwaway (notes into Verified Assumptions).
-- [ ] **D2: What do the live servers actually serve?**
+- [x] **D2: What do the live servers actually serve?**
   - **Probe:** GET the caller account's PDS
     `/.well-known/oauth-protected-resource`, follow to the authorization
     server's `/.well-known/oauth-authorization-server`; record the PAR,
@@ -140,7 +186,7 @@ one. No implementation code.
     captured verbatim in this plan.
   - **Disposition:** keep-as-fixture (the JSON responses become test
     fixtures for the flow engine's discovery step).
-- [ ] **D3: Can we sign ES256 DPoP proofs with what we already ship?**
+- [x] **D3: Can we sign ES256 DPoP proofs with what we already ship?**
   - **Probe:** Confirm `java.security` on Android API 26+ generates P-256
     keypairs and signs SHA256withECDSA; confirm the signature needs
     DER→raw (JOSE) conversion; decide hand-rolled compact JWS vs a JOSE
@@ -150,7 +196,7 @@ one. No implementation code.
     decode to the RFC 9449 shape, and a named decision (hand-roll vs lib).
   - **Disposition:** promote (the spike signer becomes Phase 1 production
     code under TDD — the spike itself gets no tests).
-- [ ] **D4: Where exactly does the client metadata live and does Pages
+- [x] **D4: Where exactly does the client metadata live and does Pages
       serve it right?**
   - **Probe:** Push a draft metadata JSON to a scratch path on connect
     Pages (or verify with an existing JSON file already served); confirm
@@ -270,10 +316,13 @@ capture the redirect, hold tokens and the DID durably.
   and sign-out.
 - [ ] `MainActivity.kt` — route the redirect intent to `AuthManager`
   (alongside the existing invite/deep-link routing).
-- [ ] `AndroidManifest.xml` — a **new** intent-filter for the redirect URI
-  (Pass 2 finding: the existing filter is `croftcall://call` only — a
-  `croftcall://oauth` callback needs its own `host` entry; exact value
-  per D1/OQ2).
+- [ ] `AndroidManifest.xml` — a **new** intent-filter for the redirect URI.
+  **Phase 0 correction:** the spec ties the custom scheme to the
+  client_id hostname in reverse-domain order, so the redirect is
+  `ing.croft.connect:/oauth` — scheme `ing.croft.connect`, *not*
+  `croftcall`. Note the URI has no authority (`:` + `/`, no `//`), and
+  Android path filters only apply when an authority is present — so the
+  filter matches on scheme alone and `route()` checks the path.
 - [ ] `identity/AuthManagerTest.kt` (Robolectric) — RED first: the wiring
   test below, plus token persistence round-trip (store → new AuthManager
   instance → `provenDid` restored) and sign-out clears it. (Pass 3: this
@@ -397,18 +446,17 @@ milestone's acceptance gate, exactly like M1's redeem run.
 - [CONFIRMED: BLOCKING — RESOLVED 2026-08-17: straight OAuth, no
   app-password stepping stone (owner).] **OQ1.** *Fallback re-enters only
   if Phase 0 finds OAuth unworkable for a debug-signed native client.*
-- [CONFIRMED: PHASE-GATED (Phase 1)] **OQ2 — redirect URI scheme:
-  custom scheme (`croftcall://oauth`) vs https App Link.** *Confirmed
-  2026-08-17: decided by D1's spec citation before Phase 1; custom scheme
-  preferred if permitted (avoids the deferred assetlinks dependency).*
-- [CONFIRMED: PHASE-GATED (Phase 1)] **OQ3 — client metadata URL/path on
-  connect.croft.ing.** *Confirmed 2026-08-17: D4 fixes it concretely
-  before Phase 1; the connect-repo commit is coordinated per its
-  CLAUDE.md.*
-- [CONFIRMED: ADVISORY] **OQ4 — scope string.** *Confirmed 2026-08-17:
-  whether `atproto` alone suffices for identity-only or
-  `transition:generic` is needed; D1/D2 will say. Either answer fits the
-  same flow code.*
+- [RESOLVED 2026-08-17 by D1] **OQ2 — redirect URI scheme.** Custom
+  scheme permitted and chosen, but the spec fixes its value: the
+  client_id hostname reversed — `ing.croft.connect:/oauth`. No
+  assetlinks dependency.
+- [RESOLVED 2026-08-17 by D4] **OQ3 — client metadata URL.**
+  `https://connect.croft.ing/oauth-client-metadata.json`, live and
+  serving `application/json` (draft: connect `ac9d022`).
+- [RESOLVED 2026-08-17 by D1] **OQ4 — scope string.** `atproto` alone —
+  the spec says identity-only clients request just the base scope;
+  `transition:generic` is the app-password-equivalent write scope M3
+  does not need.
 
 ## Review Log
 
@@ -505,3 +553,15 @@ milestone's acceptance gate, exactly like M1's redeem run.
 **Confirmed ready:** yes — all open questions carry user-confirmed
 severities from Pass 1 (OQ1 resolved; OQ2/OQ3 phase-gated on Phase 0;
 OQ4 advisory). Execution starts with Phase 0.
+
+### Phase 0 close — 2026-08-17
+All four probes ran live; findings recorded in the Phase 0 section and
+every open question is now resolved. One plan correction: the redirect
+scheme is `ing.croft.connect:/oauth` (spec ties custom schemes to the
+client_id host reversed) — Phase 3a's manifest item updated; the change
+is contained to that one value, no restructuring. Dispositions honored:
+D1 notes in-plan (throwaway), D2 responses committed as fixtures under
+`android/app/src/test/resources/oauth/` (keep-as-fixture), D3 spike ran
+in the session scratchpad and only its findings promote (the Phase 1
+`Dpop.kt` is written TDD-first from scratch), D4's draft metadata is
+live at the final URL (promote — Phase 1 finalizes fields + doc line).
