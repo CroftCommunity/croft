@@ -77,12 +77,13 @@ build, never reuse.
 
 ## Current
 
-- `v0.2.0-rc.1` — rung 3: the endpoint camps on `relay.croft.ing:8443` (custom
-  RelayMap over the preset) and the call screen/logcat report the live
-  connection path. Cut 2026-08-17 from the same-day on-device validation
-  (split-network dial ~4.1 s, both sides born relayed on our relay, both
-  upgraded to cross-network direct). On promote → `v0.2.0`.
-- `v0.1.0` (Latest) — the one-app consolidation + the connect contract-v2 deep
-  link. Promoted 2026-08-17 from `v0.1.0-rc.1` after the two-device call test
-  passed (rungs 0–2; `ops/RUNBOOK-two-device-call-test.md` §8); the candidate is
+- `v0.2.0` (Latest) — rung 3: the endpoint camps on `relay.croft.ing:8443`
+  (custom RelayMap over the preset) and the call screen/logcat report the live
+  connection path. Promoted 2026-08-17 from `v0.2.0-rc.1` on the same-day
+  on-device validation (split-network dial ~4.1 s, both sides born relayed on
+  our relay, both upgraded to cross-network direct); the candidate is pruned.
+  Next: Phase 11 (cap/admission; `RelayConfig.authToken` is the client hook).
+- `v0.1.0` — the one-app consolidation + the connect contract-v2 deep link.
+  Promoted 2026-08-17 from `v0.1.0-rc.1` after the two-device call test passed
+  (rungs 0–2; `ops/RUNBOOK-two-device-call-test.md` §8); the candidate is
   pruned.

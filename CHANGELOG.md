@@ -10,39 +10,6 @@ to the environment and why*.
 
 ## [Unreleased]
 
-### Changed (app) — rung 3
-- **The endpoint camps on our relay.** `endpointOptions` now sets
-  `relayMode = RelayMode.custom(...)` over `CroftRelay.config()` —
-  `https://relay.croft.ing:8443`, QUIC address discovery on udp/7824, both
-  pinned by test against what the relay's own front page advertises
-  (nonstandard ports, so a bare URL would dial the defaults and miss). The
-  preset stays: iroh-ffi applies it first as the baseline (it installs the
-  crypto provider) and explicit fields win, so only the relay moves — n0's
-  discovery services remain in use. `authToken` is the Phase 11 hook and stays
-  null. Validated on-device 2026-08-17, split networks (WiFi caller, LTE
-  callee): ~4 s to connected, both sides' first path
-  `relayed https://relay.croft.ing:8443/`, then both upgraded to a
-  cross-network direct path — our relay carried the call *and* the holepunch
-  upgrade out of it worked. versionCode 2, versionName 0.2.0.
-
-### Added (app)
-- **The call screen and logcat now say which path a call is using** — `direct
-  <addr>` / `relayed <url>` / `path unknown`, from the connection's own
-  `paths()` snapshots, re-read every 2 s while connected so a post-connect
-  migration shows up (verified on-device: a callee that connected relayed
-  upgraded to direct two seconds later, and the line followed). This closes the
-  "direct or relayed: unknown" gap the 2026-08-17 two-device test had to
-  record, and is the instrument rung 3 (our own relay) needs. `PathSummary`
-  reports only what a selected snapshot actually says — no inference.
-  `Connection.watchPaths()` was tried first and fails from Kotlin ("no reactor
-  running"; iroh-ffi 1.0.0), hence the poll.
-
-### Changed (build)
-- Gradle now provisions its JDK via toolchains + the foojay resolver —
-  previously `env/toolchain.yml` claimed this but nothing was wired, and builds
-  ran on whatever JAVA_HOME held. Unit tests run on a JDK 21 launcher because
-  the iroh 1.0.0 jar ships Java-21 bytecode; compile (and the APK) stay at 17.
-
 ### Added
 - Repo skeleton: shared-core/per-platform-shell layout (`core/`, `shell/`,
   `design/`, `ports/`, `ffi/`, `web/`, `android/`, `apple/`).
@@ -132,6 +99,45 @@ to the environment and why*.
 - The **shared core** does not run yet — `core/`, `shell/`, `ports/` are still
   skeleton, and the android app is not rebuilt on them. `verify` still fails on
   the parts that have not landed.
+
+## [0.2.0] — 2026-08-17
+
+Cut and validated the same day as 0.1.0 — the ladder's rung 3. The artifact is
+byte-identical to candidate `v0.2.0-rc.1` (sha256 `f19e2b9f…204b60`), promoted
+after the split-network run through our own relay went green.
+
+### Changed (app) — rung 3
+- **The endpoint camps on our relay.** `endpointOptions` now sets
+  `relayMode = RelayMode.custom(...)` over `CroftRelay.config()` —
+  `https://relay.croft.ing:8443`, QUIC address discovery on udp/7824, both
+  pinned by test against what the relay's own front page advertises
+  (nonstandard ports, so a bare URL would dial the defaults and miss). The
+  preset stays: iroh-ffi applies it first as the baseline (it installs the
+  crypto provider) and explicit fields win, so only the relay moves — n0's
+  discovery services remain in use. `authToken` is the Phase 11 hook and stays
+  null. Validated on-device 2026-08-17, split networks (WiFi caller, LTE
+  callee): ~4 s to connected, both sides' first path
+  `relayed https://relay.croft.ing:8443/`, then both upgraded to a
+  cross-network direct path — our relay carried the call *and* the holepunch
+  upgrade out of it worked. versionCode 2, versionName 0.2.0.
+
+### Added (app)
+- **The call screen and logcat now say which path a call is using** — `direct
+  <addr>` / `relayed <url>` / `path unknown`, from the connection's own
+  `paths()` snapshots, re-read every 2 s while connected so a post-connect
+  migration shows up (verified on-device: a callee that connected relayed
+  upgraded to direct two seconds later, and the line followed). This closes the
+  "direct or relayed: unknown" gap the 2026-08-17 two-device test had to
+  record, and is the instrument rung 3 (our own relay) needs. `PathSummary`
+  reports only what a selected snapshot actually says — no inference.
+  `Connection.watchPaths()` was tried first and fails from Kotlin ("no reactor
+  running"; iroh-ffi 1.0.0), hence the poll.
+
+### Changed (build)
+- Gradle now provisions its JDK via toolchains + the foojay resolver —
+  previously `env/toolchain.yml` claimed this but nothing was wired, and builds
+  ran on whatever JAVA_HOME held. Unit tests run on a JDK 21 launcher because
+  the iroh 1.0.0 jar ships Java-21 bytecode; compile (and the APK) stay at 17.
 
 ## [0.1.0] — 2026-08-17
 

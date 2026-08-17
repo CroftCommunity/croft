@@ -8,9 +8,11 @@ chasemp (`chase@owasp.org`, `github-personal`).
 **Status: shared core is skeleton; the android app runs and is released.** The
 core (`core/`, `shell/`, `ports/`) has no implementation yet; the **android
 app** — the inherited croftcall client — builds, launches, and is published as
-**`v0.1.0`** (Latest), validated by the two-device call test on 2026-08-17
-(rungs 0–2 green; see `ops/RUNBOOK-two-device-call-test.md` §8). Do not describe
-anything else here as working until it has been run.
+**`v0.2.0`** (Latest): camps on **our relay** (`relay.croft.ing:8443`) and
+reports the live connection path. Rungs 0–3 of the two-device ladder are all
+validated on real devices, 2026-08-17 (`ops/RUNBOOK-two-device-call-test.md`
+§8/§5-rung-3). Do not describe anything else here as working until it has been
+run.
 
 ## Read before writing code
 
