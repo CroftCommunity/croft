@@ -98,6 +98,17 @@ unauthenticated, exactly as the client will do them):
 - Two-accounts becomes necessary only at M3 (`mutuals` needs a proven caller
   DID and a bidirectional follow).
 
+**Extended for M2/M3 (same day):** the second account
+(`bobzmudacroft.bsky.social` = `did:plc:l5xigmplwu7eyxjobjr23iza`, the caller
+identity) is mutual with the callee (follow records both ways; verified via
+`app.bsky.graph.getRelationships` — both `following` and `followedBy`
+populated, the exact shape `Evaluate.areMutuals` consumes). The callee repo
+gained two identity grants alongside `m1ticket`:
+`m3registered` (`registeredCallers`, dids=[caller], devices=["self"]) and
+`m3mutuals` (`mutuals`, all devices). Pre-OAuth, the resolver honestly
+derives MayNotPermit against these; with a proven DID (M3) both admit —
+the fixtures for that flip are now live.
+
 ## Decisions needed before code (the owner's, not the plan's)
 
 - **D1 — resolution strategy** (blocks M2): lazy-on-tap vs cached-TTL vs
