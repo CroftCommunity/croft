@@ -39,9 +39,12 @@ import computer.iroh.*
  * computer.iroh:iroh 1.0.0 jar (javap, not docs): EndpointOptions has a
  * `relayMode: RelayMode` field, and RelayMode.customFromUrls(urls) /
  * RelayMode.custom(RelayMap) / RelayMap.fromUrls(urls) all exist; RelayConfig
- * carries an authToken. Still UNVERIFIED: how `relayMode` interacts with
- * `preset` when both are set — read the iroh-ffi Rust source or probe before
- * enabling (rung 3).
+ * carries an authToken. The preset/relayMode interaction is also VERIFIED
+ * (iroh-ffi v1.0.0 src/endpoint.rs, Endpoint::bind): the preset applies
+ * first as the baseline — crucially installing the crypto provider — and
+ * explicit fields like relayMode are layered on top "so they always win".
+ * So rung 3 keeps preset = presetN0() and sets relayMode on top; note the
+ * preset's discovery services (n0 DNS/pkarr) remain in use either way.
  */
 class CallPeer(
     private val identity: IdentityStore,
