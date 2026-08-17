@@ -77,11 +77,21 @@ build, never reuse.
 
 ## Current
 
-- `v0.3.0-rc.1` — Phase 11 M1: ticket redemption (invite link → public-record
-  resolution → verified secret → callable contact). Cut 2026-08-17 from the
-  same-day on-device validation (redeem → dial → connected via our relay,
-  roles reversed). On promote → `v0.3.0`.
-- `v0.2.0` (Latest) — rung 3: the endpoint camps on `relay.croft.ing:8443`
+- `v0.4.0-rc.1` — Phase 11 M3: identity proof (atproto OAuth sign-in →
+  `provenDid`) and the callability line on the callee card. Cut 2026-08-17
+  from the same-day on-device validation: live OAuth against the
+  bsky.social entryway (PAR + DPoP + PKCE, redirect on
+  `ing.croft.connect:/oauth`), DID surviving force-stop, and the flip
+  observed both directions with live records (signed in: callable via
+  grant m3registered; signed out: may not permit, immediately). On
+  promote → `v0.4.0`.
+- `v0.3.0` (Latest) — Phase 11 M1: ticket redemption (invite link →
+  public-record resolution → verified secret → callable contact). Promoted
+  2026-08-17 from `v0.3.0-rc.1` on the same-day on-device validation
+  (redeem → dial → connected via our relay, roles reversed); the candidate
+  is pruned. (Ledger note: this entry was stale until the M3 docs pass —
+  the promote happened hours before it was recorded here.)
+- `v0.2.0` — rung 3: the endpoint camps on `relay.croft.ing:8443`
   (custom RelayMap over the preset) and the call screen/logcat report the live
   connection path. Promoted 2026-08-17 from `v0.2.0-rc.1` on the same-day
   on-device validation (split-network dial ~4.1 s, both sides born relayed on

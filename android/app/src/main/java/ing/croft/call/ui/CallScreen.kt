@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ing.croft.call.MainViewModel
+import ing.croft.call.caps.Callability
 import ing.croft.call.net.CallPeer.State
 
 /**
@@ -30,6 +31,7 @@ fun CallScreen(vm: MainViewModel) {
     val callee by vm.callee.collectAsState()
     val redeemStatus by vm.redeemStatus.collectAsState()
     val provenDid by vm.provenDid.collectAsState()
+    val callabilityState by vm.callabilityState.collectAsState()
     val authStatus by vm.authStatus.collectAsState()
     var handleInput by remember { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
@@ -103,6 +105,16 @@ fun CallScreen(vm: MainViewModel) {
                         Text(c.endpointId, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                         c.relayUrl?.let {
                             Text("via $it", style = MaterialTheme.typography.bodySmall)
+                        }
+                        // The derived callability (Phase 11 M3): what the
+                        // published grants say about *this* caller identity.
+                        callabilityState?.let { s ->
+                            val line = when (s) {
+                                is Callability.State.Callable -> "callable via grant ${s.grant}"
+                                Callability.State.MayNotPermit -> "may not permit"
+                                Callability.State.NotListed -> "not listed"
+                            }
+                            Text(line, style = MaterialTheme.typography.bodySmall)
                         }
                         Button(
                             onClick = vm::dialCallee,

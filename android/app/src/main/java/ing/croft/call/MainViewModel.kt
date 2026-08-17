@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Intent
 import android.net.Uri
+import ing.croft.call.caps.CallabilityStatus
 import ing.croft.call.caps.Redeem
 import ing.croft.call.identity.AuthManager
 import ing.croft.call.identity.IdentityStore
@@ -32,7 +33,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         peer = CallPeer(IdentityStore(app.applicationContext), viewModelScope)
     }
 
-    fun onDeepLink(c: Callee?) { if (c != null) _callee.value = c }
+    fun onDeepLink(c: Callee?) {
+        if (c != null) {
+            _callee.value = c
+            c.did?.let(::resolveCallability)
+        }
+    }
+
+    // Callability for the rendered callee (Phase 11 M3): resolved lazily on
+    // arrival (decision D1 — the link/lookup is the user action), cached
+    // 5 min per (principal, identity) inside CallabilityStatus.
+    private val callability = CallabilityStatus(UrlHttp)
+    val callabilityState: StateFlow<ing.croft.call.caps.Callability.State?> = callability.state
+
+    private fun resolveCallability(principal: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val r = callability.lookup(principal, provenDid = auth.provenDid.value)
+                Log.i(
+                    "CroftCall",
+                    "callability for $principal: ${r.state}" + if (r.fromCache) " (cached)" else "",
+                )
+            } catch (t: Throwable) {
+                Log.w("CroftCall", "callability lookup failed for $principal: ${t.message}")
+            }
+        }
+    }
 
     // OAuth identity (Phase 11 M3): the browser hop is an ACTION_VIEW to the
     // default browser (no Custom Tabs dependency); tokens live in encrypted
@@ -103,6 +129,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val r = Redeem.redeemTicket(UrlHttp, link, now = System.currentTimeMillis())
                 Log.i("CroftCall", "redeemed ${r.grant} for ${r.did}: device=${r.device}")
+                resolveCallability(r.did)
                 _callee.value = Callee(
                     endpointId = r.endpointId,
                     relayUrl = r.homeRelay.ifEmpty { null },

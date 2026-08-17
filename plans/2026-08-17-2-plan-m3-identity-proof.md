@@ -397,7 +397,7 @@ Pixel; the This-device card shows their DID after the browser round-trip.
 **Validation:** Moderate: the on-device tap-through is the check; engine
 risk was burned down in 3a.
 
-### Phase 4: The flip — callability surfaced, validated, cut
+### Phase 4: The flip — callability surfaced, validated, cut — ✅ SHIPPED
 
 **Goal:** The proven DID feeds the resolver, callability becomes visible in
 the UI, and the fixtures demonstrate MayNotPermit → Callable on-device.
@@ -576,3 +576,33 @@ D1 notes in-plan (throwaway), D2 responses committed as fixtures under
 in the session scratchpad and only its findings promote (the Phase 1
 `Dpop.kt` is written TDD-first from scratch), D4's draft metadata is
 live at the final URL (promote — Phase 1 finalizes fields + doc line).
+
+### Plan close-out — 2026-08-17
+**Shipped:** the whole M3 surface, all phases, one day. In croft: `Dpop.kt`
+(hand-rolled ES256 DPoP, DER→raw pinned by crafted vectors), `HttpForm.kt`
+(the non-throwing POST port), `OAuthFlow.kt` (discovery → PAR → authorize →
+redirect parse → exchange → refresh, fail-closed everywhere, nonce retry
+bounded at one), `AuthManager.kt` (browser hop, encrypted persistence
+across process death, DID-only logging), the `ing.croft.connect` manifest
+filter, the sign-in row and callability line in the UI, and
+`CallabilityStatus.kt` (lazy, TTL-cached, identity-keyed). In connect: the
+hosted client metadata at its final URL plus the README line. 101 unit
+tests green (was 67). Validated live on the Samsung against the real
+bsky.social entryway: sign-in round-trip, force-stop persistence, and the
+flip both directions with the live fixtures — `Callable(grant=
+m3registered)` signed in, `MayNotPermit` immediately on sign-out.
+Candidate `v0.4.0-rc.1` cut from this state; promote is the owner's call.
+**Stopped or skipped:** nothing from the plan. Deferred beyond it (already
+tracked): token refresh is implemented in the engine but nothing schedules
+it yet (M4 will need it for call-time evaluation); sign-in does not
+re-resolve an already-rendered callee (D1 lazy stance — reopen the link).
+**Discoveries:** the spec ties a native client's custom scheme to the
+client_id hostname reversed — the planned `croftcall://oauth` was never
+legal, and the manifest can only match the scheme because the URI has no
+authority. The entryway renders `login_hint` as a *disabled* identifier
+field. Samsung-keyboard adb text injection corrupted a 15-char secret to
+16 once — Playwright over the Chrome DevTools socket is the reliable way
+to drive the login page (the workspace orientation already said so). And
+the ViewModel cannot be constructed under Robolectric (iroh native), so
+the Phase 4 test landed as `CallabilityStatusTest` on an extracted
+component the ViewModel delegates to — same shape as `CallPeer`.

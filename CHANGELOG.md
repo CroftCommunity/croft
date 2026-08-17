@@ -10,6 +10,24 @@ to the environment and why*.
 
 ## [Unreleased]
 
+### Added (app) — Phase 11 M3
+- **Identity proof: `provenDid` via atproto OAuth, and callability made
+  visible.** Sign in with an atproto handle from the This-device card: the
+  app resolves the PDS, discovers the auth server, and runs the mandatory
+  PAR + DPoP (ES256, hand-rolled — no JOSE dependency) + PKCE dance through
+  the default browser; the redirect returns on `ing.croft.connect:/oauth`
+  (the spec ties a native client's custom scheme to the client_id hostname
+  reversed — the client metadata lives at
+  `https://connect.croft.ing/oauth-client-metadata.json`). Tokens and the
+  DPoP keypair persist in EncryptedSharedPreferences and never reach logs;
+  the proven DID survives restarts and feeds the M2 resolver, so the callee
+  card now carries a callability line ("callable via grant …" / "may not
+  permit" / "not listed") — derived lazily on callee arrival and TTL-cached
+  per (principal, identity), 5 min. Scope is `atproto` alone: identity, not
+  writes. Engine plan + live findings:
+  `plans/2026-08-17-2-plan-m3-identity-proof.md`. versionCode 4,
+  versionName 0.4.0.
+
 ### Added (app) — Phase 11 M1
 - **Ticket redeem: an exchange invite link is now a callable contact.** The
   app offers itself for `https://connect.croft.ing/redeem` links (chooser-based

@@ -60,6 +60,16 @@ OAuth lift (the biggest unknown) is not load-bearing for the first two:
    Needs decision D1 (below) first.
 3. **M3 — OAuth identity proof** (`provenDid` via atproto OAuth against the
    caller's PDS). Biggest lift; unlocks `mutuals` / `registeredCallers`.
+   **DONE 2026-08-17, validated on-device** (plan:
+   `plans/2026-08-17-2-plan-m3-identity-proof.md`): live OAuth against the
+   bsky.social entryway from the Samsung — PAR + hand-rolled ES256 DPoP +
+   PKCE, client metadata hosted at
+   `connect.croft.ing/oauth-client-metadata.json`, redirect on
+   `ing.croft.connect:/oauth` (the spec fixes the scheme to the client_id
+   host reversed) — DID surviving force-stop, and the flip observed both
+   directions with the live fixtures: signed in → callable via
+   `m3registered`; signed out → may-not-permit immediately (identity-keyed
+   cache). Candidate `v0.4.0-rc.1`.
 4. **M4 — call-time `evaluateGrant` as an effect** and the relay-side
    enforcement wire-up (`usesSoFar` / `grantExists` come from relay/CISS
    Membership, not the page; `authToken` starts carrying whatever the

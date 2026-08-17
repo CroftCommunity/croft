@@ -12,8 +12,8 @@ android {
         applicationId = "ing.croft.call"
         minSdk = 26            // matches iroh reference app floor (Android 8.0)
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
     }
 
     compileOptions {
