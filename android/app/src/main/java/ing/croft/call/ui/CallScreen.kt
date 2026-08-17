@@ -91,7 +91,7 @@ fun CallScreen(vm: MainViewModel) {
                     is State.Ready -> "ready, camped on relay"
                     is State.Dialing -> "dialing…"
                     is State.Connected ->
-                        "connected (${s.direction})" + (s.peerHello?.let { "  $it" } ?: "")
+                        "connected (${s.direction}, ${s.path})" + (s.peerHello?.let { "  $it" } ?: "")
                     is State.Failed -> s.message
                 }
                 Text(label, style = MaterialTheme.typography.bodySmall)

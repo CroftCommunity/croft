@@ -10,6 +10,24 @@ to the environment and why*.
 
 ## [Unreleased]
 
+### Added (app)
+- **The call screen and logcat now say which path a call is using** — `direct
+  <addr>` / `relayed <url>` / `path unknown`, from the connection's own
+  `paths()` snapshots, re-read every 2 s while connected so a post-connect
+  migration shows up (verified on-device: a callee that connected relayed
+  upgraded to direct two seconds later, and the line followed). This closes the
+  "direct or relayed: unknown" gap the 2026-08-17 two-device test had to
+  record, and is the instrument rung 3 (our own relay) needs. `PathSummary`
+  reports only what a selected snapshot actually says — no inference.
+  `Connection.watchPaths()` was tried first and fails from Kotlin ("no reactor
+  running"; iroh-ffi 1.0.0), hence the poll.
+
+### Changed (build)
+- Gradle now provisions its JDK via toolchains + the foojay resolver —
+  previously `env/toolchain.yml` claimed this but nothing was wired, and builds
+  ran on whatever JAVA_HOME held. Unit tests run on a JDK 21 launcher because
+  the iroh 1.0.0 jar ships Java-21 bytecode; compile (and the APK) stay at 17.
+
 ### Added
 - Repo skeleton: shared-core/per-platform-shell layout (`core/`, `shell/`,
   `design/`, `ports/`, `ffi/`, `web/`, `android/`, `apple/`).

@@ -31,6 +31,20 @@ android {
     }
 }
 
+// computer.iroh:iroh ships Java-21 bytecode; the app is fine (D8 dexes it for
+// Android) but JVM unit tests that load those classes need a 21 runtime. Only
+// the test launcher moves to 21 — compile stays at 17 (compileOptions above) so
+// the produced APK is unchanged. The JDK comes via Gradle toolchains + the
+// foojay resolver (settings.gradle.kts), not from JAVA_HOME.
+val javaToolchains = project.extensions.getByType<JavaToolchainService>()
+tasks.withType<Test>().configureEach {
+    javaLauncher.set(
+        javaToolchains.launcherFor {
+            languageVersion.set(JavaLanguageVersion.of(21))
+        }
+    )
+}
+
 dependencies {
     // iroh Kotlin bindings from Maven Central. Per n0's reference Android app,
     // this artifact bundles libiroh_ffi.so for every Android ABI (no NDK).

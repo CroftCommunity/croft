@@ -25,9 +25,18 @@ jdk:
   # Gradle provisions this itself via toolchains + the foojay resolver, so it does
   # NOT depend on whatever JAVA_HOME points at. This machine's default is
   # Temurin 8, which would silently be wrong.
+  #
+  # Honesty note (2026-08-17): this claim was aspirational until the foojay
+  # resolver actually landed in android/settings.gradle.kts — before that,
+  # builds ran on whatever JAVA_HOME provided (Temurin 17 here, by luck).
   version: "17"
   vendor: "temurin"
   provisioned_by: "gradle-toolchains"
+  # The JVM *unit-test* launcher is 21, not 17: computer.iroh:iroh 1.0.0 ships
+  # Java-21 bytecode (class major 65), which D8 dexes fine for the app but a 17
+  # JVM refuses to load in tests. Compile stays 17; only tasks of type Test get
+  # the 21 launcher (android/app/build.gradle.kts).
+  test_launcher_version: "21"
 
 gradle:
   # Committed wrapper is the pin. distributionSha256Sum in

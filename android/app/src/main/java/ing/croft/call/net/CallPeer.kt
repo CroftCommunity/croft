@@ -1,8 +1,11 @@
 package ing.croft.call.net
 
+import android.util.Log
 import ing.croft.call.identity.IdentityStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -31,9 +34,14 @@ import computer.iroh.*
  *   See docs/adr/0002-callpeer-api-verification.md for the full before/after.
  *
  * Relay note: preset presetN0() uses n0's public relays. Pointing at
- * relay.croft.ing (RelayMode::Custom / RelayMap in Rust) is isolated in
- * [endpointOptions] so wiring it up touches exactly one function; verify the
- * Kotlin surface for custom relay maps before enabling.
+ * relay.croft.ing is isolated in [endpointOptions] so wiring it up touches
+ * exactly one function. VERIFIED 2026-08-17 against the shipped
+ * computer.iroh:iroh 1.0.0 jar (javap, not docs): EndpointOptions has a
+ * `relayMode: RelayMode` field, and RelayMode.customFromUrls(urls) /
+ * RelayMode.custom(RelayMap) / RelayMap.fromUrls(urls) all exist; RelayConfig
+ * carries an authToken. Still UNVERIFIED: how `relayMode` interacts with
+ * `preset` when both are set — read the iroh-ffi Rust source or probe before
+ * enabling (rung 3).
  */
 class CallPeer(
     private val identity: IdentityStore,
@@ -44,7 +52,15 @@ class CallPeer(
         data object Binding : State
         data class Ready(val endpointId: String) : State
         data class Dialing(val peer: String) : State
-        data class Connected(val peer: String, val direction: String, val peerHello: String?) : State
+        data class Connected(
+            val peer: String,
+            val direction: String,
+            val peerHello: String?,
+            // From PathSummary over the connection's own path snapshots; starts
+            // as whatever is selected at connect (usually the relay) and updates
+            // live as iroh migrates, e.g. after a successful holepunch.
+            val path: String = "path unknown",
+        ) : State
         data class Failed(val message: String) : State
     }
 
@@ -52,6 +68,42 @@ class CallPeer(
     val state: StateFlow<State> = _state
 
     private var endpoint: Endpoint? = null
+    private var pathPoll: Job? = null
+
+    /**
+     * Publish the connected state and keep its path summary live. The summary
+     * is re-read from conn.paths() every couple of seconds while connected,
+     * because iroh migrates paths after the fact — verified on-device
+     * 2026-08-17: the callee's first snapshot said relayed while the caller's
+     * already said direct. Every change goes to logcat — the two-device test
+     * had to record "direct or relayed: unknown" because nothing said, and
+     * this line is what says.
+     *
+     * A poll, not conn.watchPaths(): the watch callback fails at runtime from
+     * Kotlin with "there is no reactor running, must be called from the
+     * context of a Tokio 1.x runtime" (iroh-ffi 1.0.0, seen on both devices);
+     * conn.paths() works from any thread.
+     */
+    private fun connected(conn: Connection, peer: String, direction: String, hello: String?) {
+        val initial = PathSummary.describe(try { conn.paths() } catch (t: Throwable) { emptyList() })
+        Log.i(TAG, "connected ($direction) $peer: $initial")
+        _state.value = State.Connected(peer, direction, hello, initial)
+        pathPoll?.cancel()
+        pathPoll = scope.launch(Dispatchers.IO) {
+            while (true) {
+                delay(2_000)
+                val current = _state.value
+                if (current !is State.Connected || current.peer != peer) break
+                val summary = PathSummary.describe(
+                    try { conn.paths() } catch (t: Throwable) { break }
+                )
+                if (summary != current.path) {
+                    Log.i(TAG, "path change ($direction) $peer: $summary")
+                    _state.value = current.copy(path = summary)
+                }
+            }
+        }
+    }
 
     private fun endpointOptions(secret: ByteArray?): EndpointOptions =
         if (secret != null) {
@@ -90,11 +142,7 @@ class CallPeer(
                         val bi = conn.acceptBi()
                         val hello = readHello(bi)
                         bi.send().writeAll(WireFormat.encodeHello("callee"))
-                        _state.value = State.Connected(
-                            peer = conn.remoteId().toString(),
-                            direction = "incoming",
-                            peerHello = hello,
-                        )
+                        connected(conn, conn.remoteId().toString(), "incoming", hello)
                     } catch (_: Throwable) {
                         // per-connection failure; keep accepting others
                     }
@@ -120,11 +168,7 @@ class CallPeer(
                 val bi = conn.openBi()
                 bi.send().writeAll(WireFormat.encodeHello(callerLabel))
                 val hello = readHello(bi)
-                _state.value = State.Connected(
-                    peer = peerEndpointId,
-                    direction = "outgoing",
-                    peerHello = hello,
-                )
+                connected(conn, peerEndpointId, "outgoing", hello)
             } catch (t: Throwable) {
                 _state.value = State.Failed("dial failed: ${t.message}")
             }
@@ -143,9 +187,15 @@ class CallPeer(
     fun stop() {
         val ep = endpoint ?: return
         endpoint = null
+        pathPoll?.cancel()
+        pathPoll = null
         scope.launch(Dispatchers.IO) {
             try { ep.shutdown() } catch (_: Throwable) {}
             _state.value = State.Idle
         }
+    }
+
+    private companion object {
+        const val TAG = "CroftCall"
     }
 }

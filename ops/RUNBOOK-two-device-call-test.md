@@ -228,6 +228,9 @@ gh release delete v0.1.0-rc.1 -R CroftCommunity/croft --yes --cleanup-tag
 **Follow-ups raised:**
 - The app logs nothing that names the chosen path (direct vs relayed) — rung 3
   will want that observable before we claim anything about our relay.
+  *(Landed same day: `PathSummary` + a 2 s poll over `Connection.paths()` now
+  put `direct <addr>` / `relayed <url>` in the footer and logcat, tag
+  `CroftCall`. On-device it watched a callee upgrade relayed → direct.)*
 - Test-device standing arrangement: the **Samsung SM-S947U1 is the dedicated
   test device** (developer mode on, stays ready; it has no SIM, so it is always
   the WiFi side). The Pixel 9 Pro is a personal phone borrowed for two-device

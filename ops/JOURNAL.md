@@ -358,3 +358,33 @@ was right and my invocation was wrong.
 (`iroh_ffi_tag` in toolchain.yml), resolves rustc absolutely, refuses a non-rustup
 rustc, and installs into `jniLibs/`. The five traps are documented in its header
 so the next person does not rediscover them one failure at a time.
+
+### 2026-08-17 — foojay resolver + JDK 21 unit-test launcher
+
+**Why:** the first unit test that constructs `computer.iroh` types
+(`PathSummaryTest`, the path-observability instrument) died with
+`UnsupportedClassVersionError`: the iroh 1.0.0 jar ships Java-21 bytecode
+(class major 65) and the tests ran on the machine's Temurin 17. The APK was
+never affected — D8 dexes 21-bytecode fine — only JVM-side tests. Investigating
+also showed `toolchain.yml`'s `provisioned_by: gradle-toolchains` claim was
+aspirational: no foojay resolver was configured anywhere, so builds silently
+ran on whatever JAVA_HOME held.
+
+**Ran:** no machine-level install. Added
+`org.gradle.toolchains.foojay-resolver-convention` 0.8.0 to
+`android/settings.gradle.kts` and pinned a JDK 21 `javaLauncher` on
+`tasks.withType<Test>` in `android/app/build.gradle.kts`; Gradle then
+provisioned Temurin 21 itself on the next `./gradlew testDebugUnitTest`.
+
+**Outcome:** all 20 unit tests green (DeepLink 9, WireFormat 5, PathSummary 6);
+`assembleDebug` unchanged (compile stays 17). The toolchain claim in
+`toolchain.yml` is now true rather than lucky, and the test-launcher exception
+is recorded there as `test_launcher_version: "21"`.
+
+**Also learned, on-device:** `Connection.watchPaths()` is unusable from the
+Kotlin binding — it fails at runtime with "there is no reactor running, must be
+called from the context of a Tokio 1.x runtime" (both devices, iroh-ffi 1.0.0).
+`Connection.paths()` works from any thread, so the path summary polls every 2 s
+while connected instead. The poll caught a real migration on its first run: the
+callee connected `relayed https://use1-1.relay.n0.iroh.link./` and upgraded to
+`direct 192.168.50.139:33660` two seconds later.
