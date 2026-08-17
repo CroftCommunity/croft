@@ -97,6 +97,49 @@ object Xrpc {
         return Policy(rules = rules, label = value.optString("label"))
     }
 
+    /** All of a repo's devices (§1) via listRecords; malformed records
+     *  (no endpointId) are skipped, mirroring resolver.js listEndpoints. */
+    suspend fun listEndpoints(http: Http, pdsUrl: String, did: String): List<Endpoint> =
+        listValues(http, pdsUrl, did, ENDPOINT_COLLECTION)
+            .filter { (_, v) -> v.optString("endpointId").isNotEmpty() }
+            .map { (rkey, v) ->
+                Endpoint(
+                    endpointId = v.getString("endpointId"),
+                    homeRelay = v.optString("homeRelay"),
+                    label = v.optString("label").ifEmpty { rkey },
+                )
+            }
+
+    /** All of a repo's grants (§2) as rkey → Grant; records with no matcher
+     *  are skipped (malformed, not deniable — they can never admit anyway). */
+    suspend fun listGrants(http: Http, pdsUrl: String, did: String): List<Pair<String, Grant>> =
+        listValues(http, pdsUrl, did, GRANT_COLLECTION)
+            .mapNotNull { (rkey, v) ->
+                val m = v.optJSONObject("matcher") ?: return@mapNotNull null
+                rkey to Grant(
+                    matcher = parseMatcher(m),
+                    devices = stringList(v, "devices"),
+                    policyRef = v.optString("policyRef"),
+                )
+            }
+
+    private suspend fun listValues(
+        http: Http, pdsUrl: String, did: String, collection: String,
+    ): List<Pair<String, JSONObject>> {
+        val body = http.getJson(
+            pdsUrl.trimEnd('/') +
+                "/xrpc/com.atproto.repo.listRecords?repo=${enc(did)}&collection=$collection",
+        )
+        val records = JSONObject(body).optJSONArray("records") ?: return emptyList()
+        return buildList {
+            for (i in 0 until records.length()) {
+                val rec = records.getJSONObject(i)
+                val rkey = rec.optString("uri").substringAfterLast('/')
+                add(rkey to (rec.optJSONObject("value") ?: JSONObject()))
+            }
+        }
+    }
+
     private fun parseMatcher(m: JSONObject): Matcher = when (val type = m.optString("type")) {
         "ticket" -> Matcher.Ticket(secretHash = m.getString("secretHash"))
         "mutuals" -> Matcher.Mutuals
