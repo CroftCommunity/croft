@@ -77,15 +77,17 @@ build, never reuse.
 
 ## Current
 
-- `v0.4.0-rc.1` — Phase 11 M3: identity proof (atproto OAuth sign-in →
-  `provenDid`) and the callability line on the callee card. Cut 2026-08-17
+- `v0.4.0` (Latest) — Phase 11 M2+M3: identity proof (atproto OAuth
+  sign-in → `provenDid`) and the derived callability line on the callee
+  card. Promoted 2026-08-18 from `v0.4.0-rc.1`, which was cut 2026-08-17
   from the same-day on-device validation: live OAuth against the
   bsky.social entryway (PAR + DPoP + PKCE, redirect on
   `ing.croft.connect:/oauth`), DID surviving force-stop, and the flip
   observed both directions with live records (signed in: callable via
-  grant m3registered; signed out: may not permit, immediately). On
-  promote → `v0.4.0`.
-- `v0.3.0` (Latest) — Phase 11 M1: ticket redemption (invite link →
+  grant m3registered; signed out: may not permit, immediately). The
+  candidate is pruned. Next: Phase 11 M4 (call-time `evaluateGrant` +
+  relay enforcement, gated on decision D3).
+- `v0.3.0` — Phase 11 M1: ticket redemption (invite link →
   public-record resolution → verified secret → callable contact). Promoted
   2026-08-17 from `v0.3.0-rc.1` on the same-day on-device validation
   (redeem → dial → connected via our relay, roles reversed); the candidate

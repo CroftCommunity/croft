@@ -5,10 +5,14 @@ The Croft client. One shared functional core, thin per-platform shells.
 **Status: shared core is skeleton; the android app runs and is released.** The
 functional core, the cross-platform shells, and the toolchain contract are here;
 the **core** is not yet implemented. The **android app** — the inherited
-croftcall client — builds, launches, and is published as **`v0.2.0`** (Latest):
-it camps on the croft relay (`relay.croft.ing:8443`) and reports the live
-connection path. Rungs 0–3 validated on real devices 2026-08-17 (see
-`ops/RUNBOOK-two-device-call-test.md`). It is not yet rebuilt on the shared core.
+croftcall client — builds, launches, and is published as **`v0.4.0`** (Latest):
+it camps on the croft relay (`relay.croft.ing:8443`), reports the live
+connection path, redeems exchange invite links, and proves caller identity
+via atproto OAuth, surfacing derived callability on the callee card
+(Phase 11 M1–M3). Rungs 0–3 and the Phase 11 milestones validated on real
+devices 2026-08-17 (see `ops/RUNBOOK-two-device-call-test.md` and
+`plans/2026-08-17-2-plan-m3-identity-proof.md`). It is not yet rebuilt on
+the shared core.
 
 ## The shape
 

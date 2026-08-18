@@ -10,41 +10,6 @@ to the environment and why*.
 
 ## [Unreleased]
 
-### Added (app) — Phase 11 M3
-- **Identity proof: `provenDid` via atproto OAuth, and callability made
-  visible.** Sign in with an atproto handle from the This-device card: the
-  app resolves the PDS, discovers the auth server, and runs the mandatory
-  PAR + DPoP (ES256, hand-rolled — no JOSE dependency) + PKCE dance through
-  the default browser; the redirect returns on `ing.croft.connect:/oauth`
-  (the spec ties a native client's custom scheme to the client_id hostname
-  reversed — the client metadata lives at
-  `https://connect.croft.ing/oauth-client-metadata.json`). Tokens and the
-  DPoP keypair persist in EncryptedSharedPreferences and never reach logs;
-  the proven DID survives restarts and feeds the M2 resolver, so the callee
-  card now carries a callability line ("callable via grant …" / "may not
-  permit" / "not listed") — derived lazily on callee arrival and TTL-cached
-  per (principal, identity), 5 min. Scope is `atproto` alone: identity, not
-  writes. Engine plan + live findings:
-  `plans/2026-08-17-2-plan-m3-identity-proof.md`. versionCode 4,
-  versionName 0.4.0.
-
-### Added (app) — Phase 11 M1
-- **Ticket redeem: an exchange invite link is now a callable contact.** The
-  app offers itself for `https://connect.croft.ing/redeem` links (chooser-based
-  until assetlinks lands; `croftcall://` unchanged) and runs contract §6
-  redemption: resolve the repo (handle → DID → PDS), fetch the grant, verify
-  the ticket secret against `secretHash`, enforce the redeem-time rule subset
-  (`expires` only — use-based rules are call-time facts), read the chosen
-  device's endpoint record, and populate the callee card carrying
-  `grant`+`device` for the §7 re-check. The engine (`ing.croft.call.caps`) is
-  a Kotlin mirror of connect's `resolver.js` — same test vectors, same
-  fail-closed semantics (unknown matcher/rule types deny, never crash), the
-  network behind one injected `Http` port, the clock an input. Resolution is
-  lazy-on-tap (decision D1): nothing resolves on render. Validated on-device
-  2026-08-17 against a live test repo: invite link → callee card from public
-  records alone → call connected via our relay, upgraded to direct. 57 unit
-  tests green. versionCode 3, versionName 0.3.0.
-
 ### Added
 - Repo skeleton: shared-core/per-platform-shell layout (`core/`, `shell/`,
   `design/`, `ports/`, `ffi/`, `web/`, `android/`, `apple/`).
@@ -76,9 +41,10 @@ to the environment and why*.
   forgiving background story.
 
 ### Open
-- Callability resolution strategy (lazy / cached / batched) — undecided, because
-  an always-visible call icon leaks *who you are looking at*, not just who you
-  call.
+- ~~Callability resolution strategy (lazy / cached / batched)~~ — **decided
+  2026-08-17 (D1, parent Phase 11 plan): lazy-on-tap plus a TTL cache of
+  derived state**, because an always-visible call icon leaks *who you are
+  looking at*. Shipped in 0.3.0 (lazy redeem) and 0.4.0 (the cache).
 - The push dependency (APNs/FCM in the delivery path of a no-central-operator
   project) — a values question, deliberately not optimised away.
 - Whether contract ownership eventually moves here from `connect`.
@@ -134,6 +100,55 @@ to the environment and why*.
 - The **shared core** does not run yet — `core/`, `shell/`, `ports/` are still
   skeleton, and the android app is not rebuilt on them. `verify` still fails on
   the parts that have not landed.
+
+## [0.4.0] — 2026-08-18
+
+Phase 11 **M2 + M3**. Validated on-device 2026-08-17; promoted 2026-08-18.
+
+### Added (app)
+- **Identity proof: `provenDid` via atproto OAuth, and callability made
+  visible.** Sign in with an atproto handle from the This-device card: the
+  app resolves the PDS, discovers the auth server, and runs the mandatory
+  PAR + DPoP (ES256, hand-rolled — no JOSE dependency) + PKCE dance through
+  the default browser; the redirect returns on `ing.croft.connect:/oauth`
+  (the spec ties a native client's custom scheme to the client_id hostname
+  reversed — the client metadata lives at
+  `https://connect.croft.ing/oauth-client-metadata.json`). Tokens and the
+  DPoP keypair persist in EncryptedSharedPreferences and never reach logs;
+  the proven DID survives restarts, and the flip was observed live both
+  directions (signed in: callable via grant `m3registered`; signed out:
+  may-not-permit, immediately). Scope is `atproto` alone: identity, not
+  writes. Plan + live findings:
+  `plans/2026-08-17-2-plan-m3-identity-proof.md`.
+- **The callability resolver (M2), now surfaced.** `Callability.resolve`
+  derives `callable / not-listed / may-not-permit` per the handoff ("does
+  any grant admit me and do its rules still hold" — never a lookup), with
+  matchers mirrored from `resolver.js` (`ticket` / `mutuals` via AppView
+  `getRelationships` / `registeredCallers`). The callee card carries the
+  derived line, resolved lazily on callee arrival (decision D1) and
+  TTL-cached 5 min per (principal, identity) — a different proven DID can
+  never read another identity's answer. versionCode 4, versionName 0.4.0.
+
+## [0.3.0] — 2026-08-17
+
+Phase 11 **M1**.
+
+### Added (app)
+- **Ticket redeem: an exchange invite link is now a callable contact.** The
+  app offers itself for `https://connect.croft.ing/redeem` links (chooser-based
+  until assetlinks lands; `croftcall://` unchanged) and runs contract §6
+  redemption: resolve the repo (handle → DID → PDS), fetch the grant, verify
+  the ticket secret against `secretHash`, enforce the redeem-time rule subset
+  (`expires` only — use-based rules are call-time facts), read the chosen
+  device's endpoint record, and populate the callee card carrying
+  `grant`+`device` for the §7 re-check. The engine (`ing.croft.call.caps`) is
+  a Kotlin mirror of connect's `resolver.js` — same test vectors, same
+  fail-closed semantics (unknown matcher/rule types deny, never crash), the
+  network behind one injected `Http` port, the clock an input. Resolution is
+  lazy-on-tap (decision D1): nothing resolves on render. Validated on-device
+  2026-08-17 against a live test repo: invite link → callee card from public
+  records alone → call connected via our relay, upgraded to direct. 57 unit
+  tests green. versionCode 3, versionName 0.3.0.
 
 ## [0.2.0] — 2026-08-17
 

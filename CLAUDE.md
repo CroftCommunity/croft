@@ -8,11 +8,17 @@ chasemp (`chase@owasp.org`, `github-personal`).
 **Status: shared core is skeleton; the android app runs and is released.** The
 core (`core/`, `shell/`, `ports/`) has no implementation yet; the **android
 app** — the inherited croftcall client — builds, launches, and is published as
-**`v0.2.0`** (Latest): camps on **our relay** (`relay.croft.ing:8443`) and
-reports the live connection path. Rungs 0–3 of the two-device ladder are all
-validated on real devices, 2026-08-17 (`ops/RUNBOOK-two-device-call-test.md`
-§8/§5-rung-3). Do not describe anything else here as working until it has been
-run.
+**`v0.4.0`** (Latest): camps on **our relay** (`relay.croft.ing:8443`),
+reports the live connection path, redeems exchange invite links (Phase 11
+M1, contract §6), and proves caller identity via **atproto OAuth**
+(Phase 11 M3: sign-in from the This-device card → durable `provenDid` →
+a derived callability line on the callee card). Rungs 0–3 of the
+two-device ladder and Phase 11 M1–M3 are all validated on real devices,
+2026-08-17 (`ops/RUNBOOK-two-device-call-test.md` §8/§5-rung-3;
+`plans/2026-08-17-2-plan-m3-identity-proof.md` close-out). What remains of
+Phase 11 is **M4** — call-time `evaluateGrant` + relay-side enforcement,
+gated on decision D3 (relay token semantics). Do not describe anything
+else here as working until it has been run.
 
 ## Read before writing code
 
@@ -53,7 +59,7 @@ gate you cannot yet run is theatre; skipping the ratchet is how a repo arrives a
   estate's history reads as prose and consistency beats convention here.
 - **G2 — no claim that something runs until it has been run.** The README, the
   changelog and this file track what runs and what does not — the shared core does
-  not yet; the android app does (published as `v0.1.0-rc.1`). When that changes,
+  not yet; the android app does (published as `v0.4.0`). When that changes,
   the change ships in the same commit as the thing that made it true.
 - **G3 — checksums never regress.** Once a value replaces `UNSET`, a commit that
   reintroduces `UNSET` is a defect, not a rollback.
@@ -124,7 +130,11 @@ connect **v0.2.0**, no further development there. The two apps are now one.
 
 Contract **v2** (per-device `listRecords` + the capability model) is landed and
 canonical on connect `main`; `DeepLink` here captures its `device`/`grant` params.
-The client's Phase 11 work — callability resolver, OAuth identity proof,
-call-time `evaluateGrant` as an effect — is specified in
-`CroftCommunity/connect` `docs/PHASE11-HANDOFF.md`. Build against v2, never the
+The client's Phase 11 work is specified in `CroftCommunity/connect`
+`docs/PHASE11-HANDOFF.md`; of its items, ticket redemption (M1, v0.3.0),
+the callability resolver (M2), and OAuth identity proof (M3, v0.4.0) are
+**shipped and device-validated** — the engine lives in
+`android/.../caps/` behind injected `Http`/`HttpForm` ports, effects at
+the edges. What remains is call-time `evaluateGrant` as an effect + relay
+enforcement (M4, with croft-stack). Build against v2, never the
 single-record shape.
