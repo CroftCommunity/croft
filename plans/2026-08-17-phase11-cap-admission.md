@@ -10,8 +10,22 @@ re-leak a lookup. The cache holds *derived state*, not raw records.
 **D2 decided:** the engine is Kotlin in `croft/android` now, written pure
 (no Android imports, effects at the edges) so the shared Rust core can absorb
 it later without a rewrite of the semantics.
-**D3 remains open** (relay token semantics — design against the croft-stack
-admission plan, blocks M4 only).
+**D3 decided 2026-08-19** (owner talk-through; full record in the
+tiered-admission plan's Review Log,
+`discovery/alpha/plans/2026-08-07-1-plan-croft-relay-tiered-admission.md`):
+caller identity at mint is **atproto service auth** (`getServiceAuth`,
+audience-bound to croft-admit, verified from the DID document — the phone's
+OAuth tokens never leave the phone↔PDS pair); the relay token's claims are
+**`sponsorship`** (unlimited for member-involved pairs, else a byte budget)
+plus **device `scope`** from the callee's grant record, retiring the
+superseded tier/rate-bucket vocabulary; throughput is managed by a **flat,
+identity-blind QoS ceiling in relay ops config** (never sold, never in the
+token — prefer upstream iroh-relay's own limiter if 1.0.x ships one);
+blocking is the **denylist at mint and at attach**, by DID or EndpointId.
+Three probes ride the croft-stack phases: `getServiceAuth` under scope
+`atproto`, the upstream limiter knob, and who consumes `scope`. The croft
+client treats the token as opaque — M4's client work is insulated from all
+claim details.
 
 ## Problem statement
 
@@ -129,7 +143,9 @@ the fixtures for that flip are now live.
   repo is *for*, but `core/` is skeleton and nothing runs on it). The handoff
   says "effect + port, never awaited in a core" — which is a constraint on
   shape *if* the core is used, not a mandate to build the core now.
-- **D3 — relay enforcement semantics** (blocks M4): what the relay actually
+- **D3 — relay enforcement semantics** (blocked M4): what the relay actually
   checks per contract §7 and what the Bearer token contains — belongs to the
   croft-stack/relay plan (`discovery` tiered-admission plan) and should be
-  designed against it, not guessed here.
+  designed against it, not guessed here. **Decided 2026-08-19 exactly that
+  way** — see the status block at the top of this plan and the tiered-
+  admission plan's Review Log for the full record.
