@@ -8,6 +8,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import computer.iroh.*
 
@@ -73,6 +74,10 @@ class CallPeer(
     private var endpoint: Endpoint? = null
     private var pathPoll: Job? = null
 
+    /** The relay admission token the NEXT bind presents (M4c). */
+    @Volatile
+    private var authToken: String? = null
+
     /**
      * Publish the connected state and keep its path summary live. The summary
      * is re-read from conn.paths() every couple of seconds while connected,
@@ -115,8 +120,30 @@ class CallPeer(
     // remain in use; only the relay moves to relay.croft.ing.
     private fun croftRelayMode(): RelayMode {
         val map = RelayMap.empty()
-        map.insert(CroftRelay.config())
+        map.insert(CroftRelay.config(authToken))
         return RelayMode.custom(map)
+    }
+
+    /**
+     * Re-bind with [token] on the relay upgrade (M4c). The persisted secret
+     * key makes the EndpointId stable across the swap — asserted, because
+     * the mint bound the token to that id and a drift would make every
+     * token worthless. Suspends until the endpoint is Ready (or Failed).
+     */
+    suspend fun rebindWithToken(token: String?): String? {
+        val before = (state.value as? State.Ready)?.endpointId
+        if (token == authToken && before != null) return before // already bound so
+        authToken = token
+        stop()
+        // stop() flips to Idle asynchronously; wait for it before rebinding.
+        state.first { it is State.Idle }
+        start()
+        val settled = state.first { it is State.Ready || it is State.Failed }
+        val after = (settled as? State.Ready)?.endpointId ?: return null
+        check(before == null || before == after) {
+            "EndpointId changed across token swap: $before -> $after"
+        }
+        return after
     }
 
     private fun endpointOptions(secret: ByteArray?): EndpointOptions =

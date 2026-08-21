@@ -30,6 +30,7 @@ fun CallScreen(vm: MainViewModel) {
     val state by vm.peer.state.collectAsState()
     val callee by vm.callee.collectAsState()
     val redeemStatus by vm.redeemStatus.collectAsState()
+    val dialStatus by vm.dialStatus.collectAsState()
     val provenDid by vm.provenDid.collectAsState()
     val callabilityState by vm.callabilityState.collectAsState()
     val authStatus by vm.authStatus.collectAsState()
@@ -115,6 +116,11 @@ fun CallScreen(vm: MainViewModel) {
                                 Callability.State.NotListed -> "not listed"
                             }
                             Text(line, style = MaterialTheme.typography.bodySmall)
+                        }
+                        // Dial admission (M4c): the mint's answer, honestly —
+                        // a refusal is not a network flake and says why.
+                        dialStatus?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall)
                         }
                         Button(
                             onClick = vm::dialCallee,

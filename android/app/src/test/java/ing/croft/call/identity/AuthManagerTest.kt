@@ -90,6 +90,27 @@ class AuthManagerTest {
     }
 
     @Test
+    fun `serviceAuthProof mints at the STORED pds with a fresh token`(): Unit = runBlocking {
+        val form = form()
+        val auth = signedIn(form)
+        val gets = mutableListOf<Pair<String, Map<String, String>>>()
+        val jwt = auth.serviceAuthProof(
+            http = { url, headers ->
+                gets += url to headers
+                ing.croft.call.caps.FormResponse(200, emptyMap(), """{"token":"svc.jwt"}""")
+            },
+            aud = "did:web:admit.croft.ing",
+            lxm = "ing.croft.relay.grantCall",
+        )
+        assertEquals("svc.jwt", jwt)
+        val (url, headers) = gets.single()
+        // The PDS resolved at sign-in is where the proof mints — stored, not
+        // re-resolved (the session is bound to it).
+        assertTrue(url.startsWith("$pds/xrpc/com.atproto.server.getServiceAuth?"))
+        assertEquals("DPoP at-1", headers["Authorization"])
+    }
+
+    @Test
     fun `a fresh access token is served from the store with no network`(): Unit = runBlocking {
         val form = form()
         val auth = signedIn(form)

@@ -6,13 +6,17 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Intent
 import android.net.Uri
+import ing.croft.call.caps.Admit
 import ing.croft.call.caps.CallabilityStatus
 import ing.croft.call.caps.Redeem
 import ing.croft.call.identity.AuthManager
 import ing.croft.call.identity.IdentityStore
 import ing.croft.call.net.CallPeer
+import ing.croft.call.net.CroftRelay
 import ing.croft.call.net.UrlHttp
 import ing.croft.call.net.UrlHttpForm
+import ing.croft.call.net.UrlHttpGet
+import ing.croft.call.net.UrlHttpJson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -147,9 +151,67 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // Dial admission status for the UI; null when nothing is worth saying.
+    private val _dialStatus = MutableStateFlow<String?>(null)
+    val dialStatus: StateFlow<String?> = _dialStatus
+
+    /**
+     * Mint-at-dial (M4c): decide the proof (pure — [DialAdmission]),
+     * perform it, act on the outcome. A refusal NEVER dials; an admit
+     * outage dials tokenless and says so (the relay is the actual gate);
+     * v1 callees dial tokenless exactly as before.
+     */
     fun dialCallee() {
         val c = _callee.value ?: return
-        peer.dial(c.endpointId, callerLabel = "croftcall-android")
+        _dialStatus.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                when (val plan = DialAdmission.plan(c, signedIn = auth.provenDid.value != null)) {
+                    is DialAdmission.Plan.DialTokenless -> {
+                        plan.note?.let { _dialStatus.value = it }
+                        peer.rebindWithToken(null)
+                        peer.dial(c.endpointId, callerLabel = "croftcall-android")
+                    }
+                    is DialAdmission.Plan.Mint -> {
+                        _dialStatus.value = "requesting admission…"
+                        val own = (peer.state.value as? CallPeer.State.Ready)?.endpointId
+                            ?: throw IllegalStateException("endpoint not ready")
+                        val proof = when (val source = plan.proof) {
+                            is DialAdmission.ProofSource.Ticket ->
+                                Admit.Proof.Ticket(source.secret)
+                            DialAdmission.ProofSource.ServiceAuth ->
+                                Admit.Proof.ServiceAuth(
+                                    auth.serviceAuthProof(
+                                        UrlHttpGet, CroftRelay.ADMIT_AUD, CroftRelay.ADMIT_LXM,
+                                    ),
+                                )
+                        }
+                        val outcome = Admit.grantCall(
+                            UrlHttpJson,
+                            admitBase = CroftRelay.ADMIT_BASE,
+                            calleeDid = plan.calleeDid,
+                            grant = plan.grant,
+                            endpointId = own,
+                            proof = proof,
+                        )
+                        when (val action = DialAdmission.action(outcome)) {
+                            is DialAdmission.Action.Refuse -> {
+                                Log.w("CroftCall", "dial refused: ${action.message}")
+                                _dialStatus.value = action.message
+                            }
+                            is DialAdmission.Action.Dial -> {
+                                _dialStatus.value = action.note
+                                peer.rebindWithToken(action.authToken)
+                                peer.dial(c.endpointId, callerLabel = "croftcall-android")
+                            }
+                        }
+                    }
+                }
+            } catch (t: Throwable) {
+                Log.w("CroftCall", "dial setup failed: ${t.message}")
+                _dialStatus.value = "call setup failed: ${t.message}"
+            }
+        }
     }
 
     // Lifecycle policy from iroh's Kotlin guide: Android tears down background

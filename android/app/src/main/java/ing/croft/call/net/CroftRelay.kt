@@ -10,14 +10,24 @@ import computer.iroh.RelayConfig
  * RelayConfig and not a bare URL: RelayMode.customFromUrls would dial the
  * defaults and miss.
  *
- * authToken stays null until Phase 11 (the admission layer) issues one; the
- * field becomes an `Authorization: Bearer` header on the relay upgrade
- * request (iroh-ffi src/relay.rs).
+ * authToken becomes an `Authorization: Bearer` header on the relay upgrade
+ * request (iroh-ffi src/relay.rs). Null = the pre-M4 posture (production
+ * runs admission="open", which admits token-less connections); M4c passes
+ * the token `/grantCall` minted for this endpoint.
  */
 object CroftRelay {
-    fun config(): RelayConfig = RelayConfig(
+    fun config(authToken: String? = null): RelayConfig = RelayConfig(
         url = "https://relay.croft.ing:8443",
         quicPort = 7824u,
-        authToken = null,
+        authToken = authToken,
     )
+
+    /** croft-admit, the mint (declared at services/croft-admit.toml). */
+    const val ADMIT_BASE = "https://admit.croft.ing"
+
+    /** Service-auth audience: croft-admit's DID (D3). */
+    const val ADMIT_AUD = "did:web:admit.croft.ing"
+
+    /** Service-auth method binding (D3). */
+    const val ADMIT_LXM = "ing.croft.relay.grantCall"
 }

@@ -70,6 +70,7 @@ class AuthManager(
         prefs.edit()
             .putString(K_PENDING_STATE, state)
             .putString(K_PENDING_VERIFIER, verifier)
+            .putString(K_PDS, pds)
             .putString(K_PRIVATE, b64(keyPair.private.encoded))
             .putString(K_PUBLIC, b64(keyPair.public.encoded))
             .putString(K_ISSUER, server.issuer)
@@ -138,6 +139,27 @@ class AuthManager(
         Log.i(TAG, "session refreshed")
         return tokens.accessToken
     }
+
+    /**
+     * A service-auth JWT proving this session's DID (M4c) — minted at the
+     * PDS the session was established against (stored at sign-in, not
+     * re-resolved), with a fresh access token (the before-mint half of
+     * E113). The JWT is returned verbatim; never logged.
+     */
+    suspend fun serviceAuthProof(
+        http: ing.croft.call.caps.HttpGet,
+        aud: String,
+        lxm: String,
+    ): String = ing.croft.call.caps.ServiceAuth.fetch(
+        http,
+        pdsBase = required(K_PDS),
+        accessToken = freshAccessToken(),
+        keyPair = storedKeyPair(),
+        aud = aud,
+        lxm = lxm,
+        jti = randomToken(),
+        nowMs = nowMs(),
+    )
 
     /** Drop the session: tokens, keys and DID all cleared. */
     fun signOut() {
@@ -212,6 +234,7 @@ class AuthManager(
         private const val K_DID = "did"
         private const val K_ACCESS = "access_token"
         private const val K_EXPIRES_AT = "access_expires_at"
+        private const val K_PDS = "session_pds"
 
         /** Refresh this long before nominal expiry — a token that dies
          *  mid-getServiceAuth helps nobody. */

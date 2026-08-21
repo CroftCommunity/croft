@@ -1,7 +1,8 @@
 # Phase 11 M4 — call-time admission: the cap becomes a relay token (plan)
 
-**Status: ACTIVE — M4a and M4b are DONE (2026-08-20, same day); O2
-resolved from source; M4c is next.** Written 2026-08-20, the day the relay
+**Status: ACTIVE — M4a, M4b, and M4c (code-complete) are DONE
+2026-08-20; O2 resolved from source. Next: M4d, the validation ladder —
+the first rung that needs hardware.** Written 2026-08-20, the day the relay
 side finished its build surface (croft-stack Phase 8: caps evaluation, service-auth verify,
 `/grantCall` mint on the running binary, usage transport, declared deploy —
 Review Log in `discovery/alpha/plans/2026-08-07-1-plan-croft-relay-tiered-admission.md`,
@@ -72,7 +73,16 @@ carefully as the admits.
    (The croft-stack probe used an app-password session.) If the entryway
    refuses, the fallback is a scope bump in the client metadata — a connect
    Pages change, named here so it is not discovered in a debugger.
-3. **M4c — the token reaches the wire.** Mint-at-dial: `dialCallee` becomes
+3. **M4c — CODE-COMPLETE 2026-08-20 (device validation = M4d): the token
+   reaches the wire.** As built: `DialAdmission` (pure plan/action core),
+   `CallPeer.rebindWithToken` (EndpointId stability CHECKED across the
+   swap; no-op when the token is unchanged), `AuthManager.serviceAuthProof`
+   (minted at the sign-in PDS, before-mint refresh inside),
+   `MainViewModel.dialCallee` orchestration + a `dialStatus` UI line. One
+   posture decision baked in: an admit OUTAGE dials tokenless with a
+   visible note — the relay is the actual gate (open today; under enforce
+   it refuses the attach), so calling never dies because croft-admit is
+   down; REFUSALS never dial and say why.** Mint-at-dial: `dialCallee` becomes
    resolve-proof → mint → re-bind the node with
    `RelayConfig(authToken = token)` → dial. Re-bind = the existing
    stop/start (persisted key ⇒ same EndpointId — assert it, since the mint
