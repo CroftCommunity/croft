@@ -72,4 +72,10 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("androidx.test:core:1.6.1")
+    // The workflow harness (M4): FixtureExchange serves every backend the
+    // client talks to from one in-JVM server, so journey tests drive the
+    // REAL ports over real sockets. com.sun.net.httpserver is not on the
+    // android unit-test compile classpath; MockWebServer is the standard
+    // socket server for this layer.
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }

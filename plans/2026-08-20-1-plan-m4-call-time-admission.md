@@ -88,6 +88,29 @@ carefully as the admits.
    OUT of this plan (croft-stack activation prerequisites + open question
    O1 below).
 
+### The workflow harness is a first-class outcome (owner, 2026-08-20)
+
+Not a by-product of M4d: the admission story only means something end to
+end — a redeem that works and a mint that works can still compose into a
+dial that never gets a token. So the repo gains a journey layer alongside
+the unit layer, in the croft-stack mold:
+
+- **`workflow/FixtureExchange`** — ONE in-JVM server standing in for every
+  backend (AppView, plc.directory, the callee's PDS, croft-admit), with
+  **mutable** state so tests tell revocation stories (delete a grant
+  mid-test → the next mint refuses). Its `/grantCall` mirrors the real
+  server's shapes and discriminants (`mint.rs`, external-API rule) — it is
+  not the real binary; M4d(b) closes that gap against real croft-admit.
+- **Real ports, not fakes:** journeys drive `UrlHttp`/`UrlHttpJson` over
+  real sockets. Only name resolution is faked (`Rewired`, an /etc/hosts
+  for tests); the PDS needs no rewrite because the fixture's DID documents
+  name the fixture itself as the PDS.
+- **Every M4 chunk lands with its journey**, not only its units: M4a ships
+  the ticket journey (link → redeem → mint → token, plus revocation and
+  wrong-secret rows); M4b adds the identity journey (refresh → serviceAuth
+  → mint) and the fixture's OAuth token endpoint; M4c adds
+  dial-composition (mint outcome → authToken → dial vs refusal → no dial).
+
 ## Reasoning
 
 - **Mint-at-dial, not mint-at-redeem:** the token is EndpointId-bound and
