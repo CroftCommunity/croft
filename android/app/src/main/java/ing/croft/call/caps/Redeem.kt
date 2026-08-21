@@ -9,13 +9,18 @@ package ing.croft.call.caps
  */
 object Redeem {
 
-    /** What a successful redeem yields — everything CallPeer needs to dial. */
+    /**
+     * What a successful redeem yields — everything CallPeer needs to dial,
+     * plus the ticket [secret], which is the call-time proof the mint
+     * presents (M4). Kept in memory with the callee card, never logged.
+     */
     data class Redeemed(
         val endpointId: String,
         val homeRelay: String,
         val did: String,
         val device: String,
         val grant: String,
+        val secret: String,
     )
 
     suspend fun redeemTicket(http: Http, inviteLink: String, now: Long): Redeemed {
@@ -45,6 +50,7 @@ object Redeem {
             did = did,
             device = device,
             grant = invite.grant,
+            secret = invite.secret,
         )
     }
 

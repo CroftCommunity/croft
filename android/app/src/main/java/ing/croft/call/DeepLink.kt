@@ -22,6 +22,14 @@ data class Callee(
     val did: String?,
     val device: String?,
     val grant: String?,
+    /**
+     * The ticket secret, when this callee came from an in-app redeem (M4):
+     * the call-time possession proof the mint presents. Never in a deep
+     * link's query (contract §4 keeps secrets out of URLs a server could
+     * log), so a page-produced link arrives without it — identity proofs
+     * cover those callees. In-memory only; never logged.
+     */
+    val ticketSecret: String? = null,
 )
 
 object DeepLink {

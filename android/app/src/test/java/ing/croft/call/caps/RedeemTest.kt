@@ -56,6 +56,9 @@ class RedeemTest {
         assertEquals("did:plc:callee", r.did)
         assertEquals("phone", r.device)   // grant.devices[0] when the link names none
         assertEquals("g1", r.grant)
+        // M4: the secret is the call-time ticket proof — a redeem that drops
+        // it forces the user back to the invite link at every dial.
+        assertEquals(secret, r.secret)
     }
 
     @Test

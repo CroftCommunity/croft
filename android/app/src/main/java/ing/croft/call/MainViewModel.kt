@@ -137,6 +137,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     did = r.did,
                     device = r.device.takeIf { it != "self" },
                     grant = r.grant,
+                    ticketSecret = r.secret,
                 )
                 _redeemStatus.value = null
             } catch (t: Throwable) {
