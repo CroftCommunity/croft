@@ -15,10 +15,15 @@ M1, contract §6), and proves caller identity via **atproto OAuth**
 a derived callability line on the callee card). Rungs 0–3 of the
 two-device ladder and Phase 11 M1–M3 are all validated on real devices,
 2026-08-17 (`ops/RUNBOOK-two-device-call-test.md` §8/§5-rung-3;
-`plans/2026-08-17-2-plan-m3-identity-proof.md` close-out). What remains of
-Phase 11 is **M4** — call-time `evaluateGrant` + relay-side enforcement,
-gated on decision D3 (relay token semantics). Do not describe anything
-else here as working until it has been run.
+`plans/2026-08-17-2-plan-m3-identity-proof.md` close-out). **M4 is in
+progress** (plan `plans/2026-08-20-1-plan-m4-call-time-admission.md`): D3
+is decided, the relay side is built (croft-stack Phase 8 — `/grantCall`
+mints sponsorship+scope tokens), and client chunks M4a+M4b are landed
+with the **workflow harness** (`android/.../workflow/` — journey tests
+over the real ports against `FixtureExchange`; first-class per the plan).
+Remaining: M4c (mint-at-dial, `authToken` on the wire) and M4d (the
+device ladder). Do not describe anything else here as working until it
+has been run.
 
 ## Read before writing code
 

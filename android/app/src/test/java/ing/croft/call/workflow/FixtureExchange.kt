@@ -46,6 +46,17 @@ class FixtureExchange : AutoCloseable {
     /** Every /grantCall request body, for assertions. */
     val mints = mutableListOf<JSONObject>()
 
+    /** Every PAR request's form fields, for assertions (state, scope, …). */
+    val parRequests = mutableListOf<Map<String, String>>()
+
+    /** Force the next /grantCall to refuse with this discriminant. */
+    var nextMintRefusal: String? = null
+
+    /** The admit mirror's clock for policy `expires` rules (epoch ms). */
+    var nowMs: Long = 1_700_000_000_000L
+
+    private var tokenSerial = 0
+
     private val server = MockWebServer().apply {
         dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = route(request)
@@ -121,11 +132,73 @@ class FixtureExchange : AutoCloseable {
                     json(200, JSONObject().put("records", rows).toString())
                 }
                 path == "/xrpc/com.atproto.server.getServiceAuth" -> serviceAuth(request)
+                path == "/.well-known/oauth-protected-resource" ->
+                    json(200, JSONObject().put("authorization_servers", JSONArray().put(base)).toString())
+                path == "/.well-known/oauth-authorization-server" ->
+                    json(
+                        200,
+                        JSONObject()
+                            .put("issuer", base)
+                            .put("pushed_authorization_request_endpoint", "$base/oauth/par")
+                            .put("authorization_endpoint", "$base/oauth/authorize")
+                            .put("token_endpoint", "$base/oauth/token")
+                            .toString(),
+                    )
+                path == "/oauth/par" -> par(request)
+                path == "/oauth/token" -> token(request)
                 path == "/grantCall" -> grantCall(request)
                 else -> json(404, """{"error":"no fixture route for $path"}""")
             }
         } catch (t: Throwable) {
             json(500, """{"error":"fixture: ${t.message}"}""")
+        }
+    }
+
+    /** RFC 9449 §8: a DPoP request whose proof lacks our nonce is bounced
+     *  with the nonce; the engine retries once. Applied to PAR, token, and
+     *  getServiceAuth alike — the real entryway does. */
+    private fun nonceGate(request: RecordedRequest): MockResponse? {
+        val proofClaims = request.getHeader("DPoP")?.split(".")?.getOrNull(1)
+            ?.let { String(java.util.Base64.getUrlDecoder().decode(it)) }.orEmpty()
+        if (proofClaims.contains("\"nonce\":\"$SERVICE_NONCE\"")) return null
+        return json(400, """{"error":"use_dpop_nonce"}""").setHeader("DPoP-Nonce", SERVICE_NONCE)
+    }
+
+    private fun formFields(request: RecordedRequest): Map<String, String> =
+        request.body.readUtf8().split('&').filter { it.contains('=') }.associate {
+            val (k, v) = it.split('=', limit = 2)
+            k to URLDecoder.decode(v, "UTF-8")
+        }
+
+    private fun par(request: RecordedRequest): MockResponse {
+        nonceGate(request)?.let { return it }
+        val fields = formFields(request)
+        parRequests += fields
+        return json(200, """{"request_uri":"urn:fx:r${parRequests.size}","expires_in":60}""")
+    }
+
+    /** The token endpoint: code exchange and single-use refresh rotation,
+     *  both minting a numbered pair so tests can watch the rotation. */
+    private fun token(request: RecordedRequest): MockResponse {
+        nonceGate(request)?.let { return it }
+        val fields = formFields(request)
+        val did = accounts.keys.firstOrNull() ?: "did:plc:nobody"
+        return when (fields["grant_type"]) {
+            "authorization_code", "refresh_token" -> {
+                tokenSerial += 1
+                json(
+                    200,
+                    JSONObject()
+                        .put("access_token", "fx-at-$tokenSerial")
+                        .put("refresh_token", "fx-rt-$tokenSerial")
+                        .put("token_type", "DPoP")
+                        .put("expires_in", 1799)
+                        .put("scope", fields["scope"] ?: "atproto")
+                        .put("sub", fields["_sub"] ?: did)
+                        .toString(),
+                )
+            }
+            else -> json(400, """{"error":"unsupported_grant_type"}""")
         }
     }
 
@@ -159,6 +232,10 @@ class FixtureExchange : AutoCloseable {
     private fun grantCall(request: RecordedRequest): MockResponse {
         val body = JSONObject(request.body.readUtf8())
         mints += body
+        nextMintRefusal?.let {
+            nextMintRefusal = null
+            return json(if (it == "unavailable") 503 else 403, """{"error":"$it"}""")
+        }
         if (body.optString("grant").isEmpty() || !body.has("proof")) {
             return json(403, """{"error":"no_cap"}""")
         }
@@ -175,6 +252,21 @@ class FixtureExchange : AutoCloseable {
             else -> false
         }
         if (!admitted) return json(403, """{"error":"cap_mismatch"}""")
+        // Policy rules, like the real mint: a failed rule is revocation.
+        val policyRef = grant.optString("policyRef")
+        if (policyRef.isNotEmpty()) {
+            val policy = records["${body.optString("callee")}/ing.croft.call.policy/$policyRef"]
+                ?: return json(403, """{"error":"cap_revoked"}""")
+            val rules = policy.optJSONArray("rules") ?: JSONArray()
+            for (i in 0 until rules.length()) {
+                val rule = rules.getJSONObject(i)
+                if (rule.optString("type") == "expires" &&
+                    nowMs > java.time.Instant.parse(rule.getString("at")).toEpochMilli()
+                ) {
+                    return json(403, """{"error":"cap_revoked"}""")
+                }
+            }
+        }
         return json(200, JSONObject().put("token", "fixture-token-${mints.size}").toString())
     }
 

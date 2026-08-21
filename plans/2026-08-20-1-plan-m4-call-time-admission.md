@@ -1,7 +1,8 @@
 # Phase 11 M4 — call-time admission: the cap becomes a relay token (plan)
 
-**Status: DRAFT — written 2026-08-20, the day the relay side finished its
-build surface** (croft-stack Phase 8: caps evaluation, service-auth verify,
+**Status: ACTIVE — M4a and M4b are DONE (2026-08-20, same day); O2
+resolved from source; M4c is next.** Written 2026-08-20, the day the relay
+side finished its build surface (croft-stack Phase 8: caps evaluation, service-auth verify,
 `/grantCall` mint on the running binary, usage transport, declared deploy —
 Review Log in `discovery/alpha/plans/2026-08-07-1-plan-croft-relay-tiered-admission.md`,
 chunks C–E).
@@ -49,7 +50,8 @@ carefully as the admits.
 
 ## Approach — chunks, each independently testable
 
-1. **M4a — the admit client, and the secret survives redeem.**
+1. **M4a — DONE 2026-08-20 (`24d6b09`): the admit client, and the secret
+   survives redeem.**
    `caps/Admit.kt`: pure request/response mapping for `/grantCall` (typed
    refusals, fail closed on unknown shapes) over a new `HttpJson` post port
    (UrlHttp gains a JSON POST; `HttpForm` stays form-only). `Redeem` returns
@@ -57,7 +59,8 @@ carefully as the admits.
    persistence only if a later chunk shows re-dial-after-restart matters).
    No network in tests; the admit fixture is canned JSON from the real
    server's shapes.
-2. **M4b — proof acquisition.** Ticket path: the retained secret, no
+2. **M4b — DONE 2026-08-20 (`c32cca9` + `64410ce`; O2 resolved from
+   source, scope bumped in code and hosted metadata): proof acquisition.** Ticket path: the retained secret, no
    identity. Identity path: authed XRPC `com.atproto.server.getServiceAuth`
    against the caller's PDS — new `Xrpc.getServiceAuth(http, accessToken,
    dpopKeyPair, aud, lxm)` with DPoP proof (reuses `Dpop`); **E113 lands
@@ -110,6 +113,18 @@ the unit layer, in the croft-stack mold:
   wrong-secret rows); M4b adds the identity journey (refresh → serviceAuth
   → mint) and the fixture's OAuth token endpoint; M4c adds
   dial-composition (mint outcome → authToken → dial vs refusal → no dial).
+- **Maturity pass (owner, 2026-08-20, landed):** the fixture grew a full
+  authorization server (protected-resource + AS metadata + PAR + token
+  endpoints, the RFC 9449 nonce dance on every DPoP surface, single-use
+  refresh rotation) and the admit mirror evaluates policy `expires` and
+  takes a forced-refusal knob. New journeys: the **session journey** (the
+  whole OAuth arc — discovery → PAR → redirect → exchange → staleness →
+  rotation — over real sockets for the first time anywhere unattended;
+  pins the O2 scope so a regression to identity-only fails in CI, not on
+  a device) and the **callability journeys** (derived state composed with
+  the mint's answer, INCLUDING the disagreement cases: callability-said-
+  yes-mint-says-no is a designed outcome the UI must survive, because
+  derivation is lookup-time and the mint is the durable gate).
 
 ## Reasoning
 

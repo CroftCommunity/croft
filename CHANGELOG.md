@@ -10,6 +10,29 @@ to the environment and why*.
 
 ## [Unreleased]
 
+Phase 11 **M4 in progress** (plan: `plans/2026-08-20-1-plan-m4-call-time-admission.md`).
+M4a + M4b landed 2026-08-20; M4c (mint-at-dial, `authToken` on the wire) is next.
+
+### Added (M4, unreleased)
+- `caps/Admit` — the admit client: `POST /grantCall` on croft-admit, typed
+  refusal taxonomy (refused ≠ unavailable ≠ bad request), token kept opaque.
+- `caps/ServiceAuth` — the caller proof: DPoP-authed `getServiceAuth` at the
+  caller's own PDS (`ath`-bound proofs, resource-server nonce dance).
+- `AuthManager.freshAccessToken` — single-use refresh rotation, the new pair
+  persisted before return; wired on-foreground (closes discovery E113).
+- The **workflow harness** (first-class per the plan): `FixtureExchange`
+  stands in for every backend incl. a full OAuth authorization server;
+  journeys drive the REAL ports over real sockets (ticket, identity,
+  session, callability — including the callability-vs-mint disagreement
+  rows and revocation stories via mutable fixture state).
+- `Redeem` retains the ticket secret (the call-time possession proof).
+
+### Changed (M4, unreleased)
+- OAuth scope is now `atproto transition:generic` — under OAuth,
+  `getServiceAuth` requires an RPC permission the bare scope lacks, and
+  bsky.social does not yet advertise granular `rpc:` scopes (plan O2,
+  resolved from PDS source). Existing sessions must re-sign-in to mint.
+
 ### Added
 - Repo skeleton: shared-core/per-platform-shell layout (`core/`, `shell/`,
   `design/`, `ports/`, `ffi/`, `web/`, `android/`, `apple/`).
