@@ -75,6 +75,30 @@ class DpopTest {
     }
 
     @Test
+    fun `an access token adds the ath claim for resource-server proofs`() {
+        // RFC 9449 par 4.3: presenting an access token binds the proof to it via
+        // ath = base64url(sha256(token)). M4: getServiceAuth on the PDS.
+        val kp = Dpop.generateKeyPair()
+        val jws = Dpop.proof(
+            kp, "GET", "https://pds.example/xrpc/com.atproto.server.getServiceAuth",
+            iatMs = 1_700_000_000_000L, jti = "j1", accessToken = "tok-abc",
+        )
+        val (_, claims, _) = parts(jws)
+        val expected = Base64.getUrlEncoder().withoutPadding().encodeToString(
+            java.security.MessageDigest.getInstance("SHA-256").digest("tok-abc".toByteArray()),
+        )
+        assertEquals(expected, claims.getString("ath"))
+    }
+
+    @Test
+    fun `no access token means no ath claim — auth-server proofs unchanged`() {
+        val kp = Dpop.generateKeyPair()
+        val jws = Dpop.proof(kp, "POST", "https://as.example/token", 1_700_000_000_000L, "j2")
+        val (_, claims, _) = parts(jws)
+        assertFalse(claims.has("ath"))
+    }
+
+    @Test
     fun `signature is raw 64 bytes and verifies with the key in the header`() {
         val key = Dpop.generateKeyPair()
         val jws = Dpop.proof(key, htm = "POST", htu = "https://x/t", iatMs = 1, jti = "j")

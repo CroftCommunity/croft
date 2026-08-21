@@ -31,6 +31,9 @@ object Dpop {
      * Build one DPoP proof JWS. [iatMs] is wall-clock millis (truncated to
      * the seconds NumericDate RFC 7519 wants); [nonce] is the server nonce
      * from a `DPoP-Nonce` response header, absent on the first request.
+     * [accessToken] binds a RESOURCE-server proof to the token it presents
+     * (RFC 9449 §4.3: `ath` = base64url(sha256(token))) — absent for
+     * auth-server requests, which present no token yet.
      */
     fun proof(
         keyPair: KeyPair,
@@ -39,6 +42,7 @@ object Dpop {
         iatMs: Long,
         jti: String,
         nonce: String? = null,
+        accessToken: String? = null,
     ): String {
         val pub = keyPair.public as ECPublicKey
         val header = buildString {
@@ -54,6 +58,13 @@ object Dpop {
             append(",\"htu\":\"").append(htu).append('"')
             append(",\"iat\":").append(iatMs / 1000)
             if (nonce != null) append(",\"nonce\":\"").append(nonce).append('"')
+            if (accessToken != null) {
+                val ath = b64.encodeToString(
+                    java.security.MessageDigest.getInstance("SHA-256")
+                        .digest(accessToken.toByteArray()),
+                )
+                append(",\"ath\":\"").append(ath).append('"')
+            }
             append('}')
         }
         val signingInput =

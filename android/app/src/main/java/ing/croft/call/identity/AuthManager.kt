@@ -102,11 +102,41 @@ class AuthManager(
             .putString(K_DID, tokens.did)
             .putString(K_ACCESS, tokens.accessToken)
             .putString(K_REFRESH, tokens.refreshToken)
+            .putLong(K_EXPIRES_AT, nowMs() + tokens.expiresInSeconds * 1000)
             .remove(K_PENDING_STATE)
             .remove(K_PENDING_VERIFIER)
             .apply()
         _provenDid.value = tokens.did
         Log.i(TAG, "exchange succeeded: signed in as ${tokens.did}")
+    }
+
+    /**
+     * A usable access token, refreshing first when the stored one is stale
+     * (M4b; closes ROADMAP_TODO E113 — the mint is the first load-bearing
+     * consumer of a live session). atproto refresh tokens are SINGLE-USE
+     * and rotate: the new pair is persisted before this returns, so a
+     * process death after a refresh never strands a spent token as the
+     * stored one. Call on-foreground and before every mint.
+     */
+    suspend fun freshAccessToken(): String {
+        val access = prefs.getString(K_ACCESS, null)
+            ?: throw IllegalStateException("not signed in")
+        val expiresAt = prefs.getLong(K_EXPIRES_AT, 0)
+        if (nowMs() < expiresAt - EXPIRY_MARGIN_MS) return access
+
+        Log.i(TAG, "access token stale; refreshing")
+        val tokens = OAuthFlow.refresh(
+            form, server = storedServer(), clientId = CLIENT_ID,
+            refreshToken = required(K_REFRESH), keyPair = storedKeyPair(),
+            jti = randomToken(), nowMs = nowMs(),
+        )
+        prefs.edit()
+            .putString(K_ACCESS, tokens.accessToken)
+            .putString(K_REFRESH, tokens.refreshToken)
+            .putLong(K_EXPIRES_AT, nowMs() + tokens.expiresInSeconds * 1000)
+            .apply()
+        Log.i(TAG, "session refreshed")
+        return tokens.accessToken
     }
 
     /** Drop the session: tokens, keys and DID all cleared. */
@@ -171,6 +201,11 @@ class AuthManager(
 
         private const val K_DID = "did"
         private const val K_ACCESS = "access_token"
+        private const val K_EXPIRES_AT = "access_expires_at"
+
+        /** Refresh this long before nominal expiry — a token that dies
+         *  mid-getServiceAuth helps nobody. */
+        private const val EXPIRY_MARGIN_MS = 60_000L
         private const val K_REFRESH = "refresh_token"
         private const val K_PRIVATE = "dpop_private"
         private const val K_PUBLIC = "dpop_public"

@@ -77,7 +77,61 @@ class AuthManagerTest {
     private fun manager(
         form: FakeForm,
         opened: MutableList<String> = mutableListOf(),
-    ) = AuthManager(prefs(), http(), form, openUrl = { opened += it }, nowMs = { 1_755_400_000_000 })
+        nowMs: () -> Long = { 1_755_400_000_000 },
+    ) = AuthManager(prefs(), http(), form, openUrl = { opened += it }, nowMs = nowMs)
+
+    /** Sign in against the scripted form so the session is stored. */
+    private suspend fun signedIn(form: FakeForm, nowMs: () -> Long = { 1_755_400_000_000 }): AuthManager {
+        val auth = manager(form, nowMs = nowMs)
+        auth.signIn("bobzmudacroft.bsky.social")
+        val state = form.sent[0].fields.getValue("state")
+        auth.onRedirect("ing.croft.connect:/oauth?code=c-1&state=$state")
+        return auth
+    }
+
+    @Test
+    fun `a fresh access token is served from the store with no network`(): Unit = runBlocking {
+        val form = form()
+        val auth = signedIn(form)
+        val posts = form.sent.size
+        assertEquals("at-1", auth.freshAccessToken())
+        assertEquals("no token-endpoint traffic for a fresh token", posts, form.sent.size)
+    }
+
+    @Test
+    fun `a stale token refreshes once and the rotated pair is durable`(): Unit = runBlocking {
+        // Sign in at t0 (expires_in 1799s), then move the clock past expiry.
+        // The script: PAR, exchange, then ONE refresh.
+        val scripted = FakeForm(
+            mutableListOf(
+                FormResponse(200, emptyMap(), """{"request_uri":"urn:r1","expires_in":60}"""),
+                FormResponse(
+                    200, emptyMap(),
+                    """{"access_token":"at-1","token_type":"DPoP","expires_in":1799,
+                        "refresh_token":"rt-1","scope":"atproto","sub":"$did"}""",
+                ),
+                FormResponse(
+                    200, emptyMap(),
+                    """{"access_token":"at-2","token_type":"DPoP","expires_in":1799,
+                        "refresh_token":"rt-2","scope":"atproto","sub":"$did"}""",
+                ),
+            ),
+        )
+        var now = 1_755_400_000_000L
+        val auth = signedIn(scripted, nowMs = { now })
+        now += 1_900_000 // past the 1799s lifetime
+
+        assertEquals("at-2", auth.freshAccessToken())
+        // The refresh was a rotation grant against the token endpoint...
+        val refresh = scripted.sent.last()
+        assertEquals("refresh_token", refresh.fields["grant_type"])
+        assertEquals("rt-1", refresh.fields["refresh_token"])
+        // ...and the NEW pair is durable: a fresh call needs no more traffic,
+        // even from a new instance over the same prefs.
+        val posts = scripted.sent.size
+        assertEquals("at-2", auth.freshAccessToken())
+        assertEquals(posts, scripted.sent.size)
+    }
 
     @Test
     fun `sign-in then redirect intent lands a stored proven DID`(): Unit = runBlocking {

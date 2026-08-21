@@ -120,12 +120,34 @@ class FixtureExchange : AutoCloseable {
                     }
                     json(200, JSONObject().put("records", rows).toString())
                 }
+                path == "/xrpc/com.atproto.server.getServiceAuth" -> serviceAuth(request)
                 path == "/grantCall" -> grantCall(request)
                 else -> json(404, """{"error":"no fixture route for $path"}""")
             }
         } catch (t: Throwable) {
             json(500, """{"error":"fixture: ${t.message}"}""")
         }
+    }
+
+    /**
+     * The PDS service-auth mint, with the RFC 9449 resource-server nonce
+     * dance the real bsky PDS performs: a proof without our nonce gets a
+     * 401 + `DPoP-Nonce`; a nonce-carrying retry with a DPoP-scheme access
+     * token mints. Structural checks only — the cryptographic half is the
+     * real PDS's (and croft-admit verifies the signature on its side).
+     */
+    private fun serviceAuth(request: RecordedRequest): MockResponse {
+        val authz = request.getHeader("Authorization").orEmpty()
+        if (!authz.startsWith("DPoP ")) {
+            return json(401, """{"error":"AuthRequired"}""")
+        }
+        val proofClaims = request.getHeader("DPoP")?.split(".")?.getOrNull(1)
+            ?.let { String(java.util.Base64.getUrlDecoder().decode(it)) }.orEmpty()
+        if (!proofClaims.contains("\"nonce\":\"$SERVICE_NONCE\"")) {
+            return json(401, """{"error":"use_dpop_nonce"}""")
+                .setHeader("DPoP-Nonce", SERVICE_NONCE)
+        }
+        return json(200, JSONObject().put("token", "svc-jwt-fixture").toString())
     }
 
     /**
@@ -175,6 +197,11 @@ class FixtureExchange : AutoCloseable {
             .setResponseCode(status)
             .setHeader("Content-Type", "application/json")
             .setBody(body)
+
+    companion object {
+        /** The fixture PDS's DPoP nonce (see [serviceAuth]). */
+        const val SERVICE_NONCE = "fx-nonce-1"
+    }
 }
 
 /**

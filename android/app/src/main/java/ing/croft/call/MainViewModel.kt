@@ -157,6 +157,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // secret key, same EndpointId) on foreground. Staying callable while
     // backgrounded requires a foreground service; that is a later phase,
     // paired with push-to-wake for incoming calls.
-    fun onForeground() = peer.start()
+    fun onForeground() {
+        peer.start()
+        // E113 (M4b): keep the OAuth session live — refresh a stale access
+        // token on foreground so the before-mint refresh is the rare path,
+        // not the every-time path. Best-effort: a failure here surfaces at
+        // the next mint with real context, not as a foreground crash.
+        if (auth.provenDid.value != null) {
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching { auth.freshAccessToken() }
+                    .onFailure { Log.w("CroftCall", "foreground token refresh failed: ${it.message}") }
+            }
+        }
+    }
     fun onBackground() = peer.stop()
 }
