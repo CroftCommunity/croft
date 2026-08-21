@@ -136,8 +136,20 @@ the unit layer, in the croft-stack mold:
   against its own repo with a self-proof; or the mint returns a second
   token the caller relays in-band; or camping admission rides membership
   rather than grants.
-- **O2 — scope `atproto` vs getServiceAuth** — resolved by M4b's on-phone
-  probe, fallback named there.
+- **O2 — scope `atproto` vs getServiceAuth** — **RESOLVED 2026-08-20 from
+  the PDS source plus a live entryway probe, no device needed.** Under
+  OAuth, `getServiceAuth` authorizes via `permissions.assertRpc({aud,lxm})`
+  (`packages/pds/src/api/com/atproto/server/getServiceAuth.ts`); the bare
+  `atproto` scope carries no RPC permission → `ScopeMissingError`. The
+  granular scope (`rpc:ing.croft.relay.grantCall?aud=did:web:admit.croft.ing`,
+  `oauth-scopes/src/scopes/rpc-permission.ts`) is implemented upstream but
+  bsky.social's `scopes_supported` does not advertise rpc scopes yet
+  (probed live: atproto + the three transition scopes only). So M4 requests
+  **`atproto transition:generic`** (`allowsRpc` admits any non-chat lxm) —
+  client metadata and `AuthManager.SCOPE` both updated; NARROW to the rpc
+  scope when the entryway ships it. Existing scope=atproto sessions lack
+  the permission: the on-device run must re-sign-in. The shipped v0.4.0 is
+  unaffected (its `atproto` request stays a valid subset of the metadata).
 - **O3 — per-callee proof storage:** v1 keeps the ticket secret in-memory
   with the Callee card; durable multi-callee cap storage (the "wallet") is
   a later phase with its own privacy design.

@@ -183,8 +183,18 @@ class AuthManager(
         /** Spec rule: custom scheme = client_id hostname reversed (D1). */
         const val REDIRECT_URI = "ing.croft.connect:/oauth"
 
-        /** Identity-only: the base scope suffices (D1, OQ4). */
-        const val SCOPE = "atproto"
+        /**
+         * M4 (plan O2, resolved from PDS source 2026-08-20): the mint's
+         * caller proof is `getServiceAuth`, which under OAuth requires an
+         * RPC permission the bare `atproto` scope does not carry
+         * (`assertRpc` → ScopeMissingError). The granular form
+         * (`rpc:ing.croft.relay.grantCall?aud=did:web:admit.croft.ing`) is
+         * implemented upstream but NOT advertised by the bsky.social
+         * entryway yet, so this is `transition:generic` (app-password
+         * equivalence) until it is — narrow it when `scopes_supported`
+         * grows rpc scopes. Must match the hosted client metadata.
+         */
+        const val SCOPE = "atproto transition:generic"
 
         fun isOAuthRedirect(url: String?): Boolean =
             url != null && url.startsWith("ing.croft.connect:")
