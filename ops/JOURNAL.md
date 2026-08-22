@@ -388,3 +388,31 @@ called from the context of a Tokio 1.x runtime" (both devices, iroh-ffi 1.0.0).
 while connected instead. The poll caught a real migration on its first run: the
 callee connected `relayed https://use1-1.relay.n0.iroh.link./` and upgraded to
 `direct 192.168.50.139:33660` two seconds later.
+
+## 2026-08-21 — the M4d device rig (local admit + phones)
+
+**What:** stood up the first call-time-admission device rig: a local
+`croft-relay-admit` on the workstation (memory store, `[mint]` against
+production atproto, throwaway keypair from the new `--keygen`), phones on
+debug builds carrying `-PcroftAdmitBase=http://<LAN-IP>:8401` (the new
+BuildConfig overrides; debug-only cleartext manifest). macOS prompted the
+application firewall for both binaries — allow both, or the phone's mint
+POST times out while raw TCP still connects (a confusing half-open state
+we hit before realizing the first failure was transient).
+
+**Outcome:** the full lifecycle on hardware — real mint (sub-second,
+against production plc+PDS), minted-token dial (rebind, EndpointId
+stable, connected direct), live revocation ("this invite has been
+revoked", no dial, `cap_revoked` at the admit), restore → connected
+again. Run record: RUNBOOK §11.
+
+**Learned, the expensive way:** a plain-HTTP local `croft-relay` cannot
+host phones. iroh-ffi endpoints never complete the attach against http
+(the rust `iroh_relay::client` attaches to the same binary fine —
+croft-stack `examples/attach_probe.rs`), and once each phone's discovery
+record carries the http relay URL, even LAN-direct dials fail with
+`dial failed: null`. Also `computer.iroh.setLogLevel(DEBUG)` produced no
+logcat output — native iroh logging on Android is still an open question.
+Point phones back at the production relay (TLS) to clear the polluted
+records; the on-device enforce rung waits for a TLS staging relay or
+admit activation.

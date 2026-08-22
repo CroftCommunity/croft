@@ -21,9 +21,13 @@ is decided, the relay side is built (croft-stack Phase 8 — `/grantCall`
 mints sponsorship+scope tokens), and client chunks M4a+M4b are landed
 with the **workflow harness** (`android/.../workflow/` — journey tests
 over the real ports against `FixtureExchange`; first-class per the plan).
-Remaining: M4c (mint-at-dial, `authToken` on the wire) and M4d (the
-device ladder). Do not describe anything else here as working until it
-has been run.
+M4c (mint-at-dial) is landed, and **M4d's first device run is done
+2026-08-21** (runbook §11): real mint from a phone, minted-token dial
+(EndpointId stable), live revocation refused with words, recovery.
+Remaining: the enforce rung (needs a TLS staging relay or croft-admit
+activation, shared with open question O1), the identity-proof mint
+on-device, journal attribution, and the three call-endings. Do not
+describe anything else here as working until it has been run.
 
 ## Read before writing code
 

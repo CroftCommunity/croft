@@ -13,7 +13,20 @@ to the environment and why*.
 Phase 11 **M4 in progress** (plan: `plans/2026-08-20-1-plan-m4-call-time-admission.md`).
 M4a + M4b landed 2026-08-20; M4c (mint-at-dial, `authToken` on the wire) is next.
 
+M4c (mint-at-dial) and M4d's first device run landed 2026-08-21: the
+whole lifecycle — real mint from a phone, minted-token dial, live
+revocation refusing with words, restore-and-recover — validated on real
+devices (runbook §11). Remaining before promotion: the enforce rung
+(needs a TLS staging relay or admit activation, shared with O1), the
+identity-proof mint on-device, attribution, the three call-endings.
+
 ### Added (M4, unreleased)
+- `DialAdmission` + mint-at-dial in `dialCallee`: refusals never dial and
+  say why; an admit outage dials tokenless with a note (the relay is the
+  gate); v1 callees dial exactly as before. `CallPeer.rebindWithToken`
+  checks EndpointId stability across the token swap.
+- Debug-build rig overrides (`-PcroftRelayUrl`/`-PcroftAdmitBase`) and a
+  debug-only cleartext manifest — production defaults untouched.
 - `caps/Admit` — the admit client: `POST /grantCall` on croft-admit, typed
   refusal taxonomy (refused ≠ unavailable ≠ bad request), token kept opaque.
 - `caps/ServiceAuth` — the caller proof: DPoP-authed `getServiceAuth` at the
