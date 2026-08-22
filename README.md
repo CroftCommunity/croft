@@ -9,9 +9,14 @@ croftcall client — builds, launches, and is published as **`v0.4.0`** (Latest)
 it camps on the croft relay (`relay.croft.ing:8443`), reports the live
 connection path, redeems exchange invite links, and proves caller identity
 via atproto OAuth, surfacing derived callability on the callee card
-(Phase 11 M1–M3). Rungs 0–3 and the Phase 11 milestones validated on real
-devices 2026-08-17 (see `ops/RUNBOOK-two-device-call-test.md` and
-`plans/2026-08-17-2-plan-m3-identity-proof.md`). It is not yet rebuilt on
+(Phase 11 M1–M3). Rungs 0–3 and those milestones validated on real devices
+2026-08-17. **Phase 11 M4 (call-time admission) is in progress** — the mint
+client, proof acquisition, and mint-at-dial are landed with a first-class
+workflow test harness, and both proof paths (ticket possession and
+OAuth-proven identity) were device-validated 2026-08-21 against a local
+croft-admit, including live revocation ("this invite has been revoked", no
+dial) and recovery (see `plans/2026-08-20-1-plan-m4-call-time-admission.md`
+and `ops/RUNBOOK-two-device-call-test.md` §11). It is not yet rebuilt on
 the shared core.
 
 ## The shape
