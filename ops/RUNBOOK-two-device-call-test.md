@@ -329,3 +329,17 @@ Not yet observed on-device: server-side attribution (`admitted
 sponsorship=…` needs a relay `[token]` pointed at a real mint key —
 arrives with croft-admit activation), the identity-proof mint (needs the
 re-sign-in under the new scope), and the three call-endings.
+
+**§11 addendum, same night — the identity-proof mint on-device.** Fresh
+sign-in on the Pixel as the caller account under the NEW scope
+(`atproto transition:generic`): PAR accepted, password via Playwright
+over the browser's DevTools socket (the workspace rule; the default
+browser turned out to be Brave — same `chrome_devtools_remote` socket),
+consent authorized, `signed in as did:plc:l5xig…`. Then a deep link
+carrying `grant=m3registered` (no secret): callability flipped to
+`Callable via m3registered`, and Connect ran the identity path —
+`freshAccessToken` → `getServiceAuth` at the caller's PDS (the O2 scope
+working LIVE) → the admit resolved BOTH identities, verified the real
+ES256K proof against the caller's DID document, admitted via
+`registeredCallers`, and `minted cap=m3registered` → connected direct.
+Both proof paths (possession and identity) are now device-validated.

@@ -99,7 +99,13 @@ carefully as the admits.
    a plain-HTTP local relay cannot carry the on-device rung (iroh-ffi
    endpoints never attach; rust client does — `attach_probe`), so the
    ENFORCE rung is deferred to a TLS staging listener or admit
-   activation, alongside O1 which it would hit immediately.** (a) Robolectric: the full mint matrix
+   activation, alongside O1 which it would hit immediately. **Same
+   night: the identity-proof mint validated on-device too** — fresh
+   sign-in under the new scope, `getServiceAuth` live (O2 closed in
+   production, not just from source), the admit verifying the real
+   ES256K proof against the caller's DID document, `registeredCallers`
+   admitting, connected. Both proof paths are device-validated;
+   remaining on-device: enforce, attribution, call-endings.** (a) Robolectric: the full mint matrix
    against canned fixtures (every refusal reason surfaces as a distinct,
    honest UI state — "not permitted" ≠ "network failed"). (b) Emulator
    against a LOCAL croft-relay(enforce)+croft-admit pair — the first
