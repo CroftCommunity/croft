@@ -34,6 +34,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // resolver reads system DNS via LinkProperties, which needs the
         // process JavaVM and a Context installed. (Reference app quirk list.)
         IrohAndroid.installAndroidContext(app.applicationContext)
+        if (BuildConfig.DEBUG) {
+            // Native iroh logs to logcat — the M4d rig needs to see the
+            // relay attach story; release builds stay quiet.
+            try { computer.iroh.setLogLevel(computer.iroh.LogLevel.DEBUG) } catch (_: Throwable) {}
+        }
         peer = CallPeer(IdentityStore(app.applicationContext), viewModelScope)
     }
 

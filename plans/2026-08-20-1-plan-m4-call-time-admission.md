@@ -90,7 +90,16 @@ carefully as the admits.
    relay verifies the token at attach (`on_connect`) only; an established
    connection outlives token expiry, and the next dial mints fresh. Renewal
    machinery would be speculative.
-4. **M4d — validation ladder.** (a) Robolectric: the full mint matrix
+4. **M4d — validation ladder. First device run DONE 2026-08-21
+   (runbook §11):** the real mint from a phone (local admit, production
+   atproto reads, real secret), the minted-token dial (rebind, EndpointId
+   stable, connected direct), live revocation (grant deleted from the
+   real repo → "this invite has been revoked", no dial, admit
+   `cap_revoked`) and recovery (restored → minted → connected). Finding:
+   a plain-HTTP local relay cannot carry the on-device rung (iroh-ffi
+   endpoints never attach; rust client does — `attach_probe`), so the
+   ENFORCE rung is deferred to a TLS staging listener or admit
+   activation, alongside O1 which it would hit immediately.** (a) Robolectric: the full mint matrix
    against canned fixtures (every refusal reason surfaces as a distinct,
    honest UI state — "not permitted" ≠ "network failed"). (b) Emulator
    against a LOCAL croft-relay(enforce)+croft-admit pair — the first

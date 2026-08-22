@@ -17,13 +17,13 @@ import computer.iroh.RelayConfig
  */
 object CroftRelay {
     fun config(authToken: String? = null): RelayConfig = RelayConfig(
-        url = "https://relay.croft.ing:8443",
-        quicPort = 7824u,
+        url = ing.croft.call.BuildConfig.CROFT_RELAY_URL,
+        quicPort = ing.croft.call.BuildConfig.CROFT_RELAY_QUIC_PORT.toUShort(),
         authToken = authToken,
     )
 
     /** croft-admit, the mint (declared at services/croft-admit.toml). */
-    const val ADMIT_BASE = "https://admit.croft.ing"
+    val ADMIT_BASE: String = ing.croft.call.BuildConfig.CROFT_ADMIT_BASE
 
     /** Service-auth audience: croft-admit's DID (D3). */
     const val ADMIT_AUD = "did:web:admit.croft.ing"

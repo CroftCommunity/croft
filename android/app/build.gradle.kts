@@ -21,7 +21,26 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+
+    // M4d test-rig overrides: point a DEBUG build's relay/admit at a local
+    // enforce pair (-PcroftRelayUrl=... -PcroftAdmitBase=...). Defaults are
+    // production; release builds always use them.
+    defaultConfig.buildConfigField(
+        "String", "CROFT_RELAY_URL",
+        "\"" + (project.findProperty("croftRelayUrl") ?: "https://relay.croft.ing:8443") + "\"",
+    )
+    defaultConfig.buildConfigField(
+        "String", "CROFT_RELAY_QUIC_PORT",
+        "\"" + (project.findProperty("croftRelayQuicPort") ?: "7824") + "\"",
+    )
+    defaultConfig.buildConfigField(
+        "String", "CROFT_ADMIT_BASE",
+        "\"" + (project.findProperty("croftAdmitBase") ?: "https://admit.croft.ing") + "\"",
+    )
 
     testOptions {
         // DeepLink.parse reads android.net.Uri, so its JVM unit tests run under

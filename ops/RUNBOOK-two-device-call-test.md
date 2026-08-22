@@ -290,3 +290,42 @@ promote-and-prune in §8), the staged follow-up is already thought through:
 So the ladder does not stop at "a call connected": it climbed to our relay, then
 into admission. This runbook validates the bottom rungs; the handoff carries the
 rest.
+
+## §11 — M4 call-time admission, first device run (2026-08-21)
+
+Rig: **local croft-admit** on the workstation (memory store, `[mint]`
+against production atproto; `--keygen` throwaway keypair) + **production
+relay** (open mode). Debug builds carry `-PcroftAdmitBase=http://<LAN-IP>:8401`
+(new BuildConfig overrides; debug-only cleartext). Pixel = caller,
+Samsung = callee (endpoint id matched the published record exactly).
+
+What validated, in order, all driven over adb with the live test repo:
+
+1. **The real mint from a phone**: redeem `m1ticket` → tap Connect →
+   local admit logs `minted cap=m1ticket budget=Bytes(262144)` — real plc
+   + PDS reads, the real invite secret, sub-second.
+2. **The minted-token dial**: mint → `rebindWithToken` (EndpointId stable)
+   → dial → `connected (outgoing) … direct` with the callee's hello —
+   the M4c pipeline end to end on hardware.
+3. **Revocation, live**: grant deleted from the real repo (record backed
+   up first) → next Connect → app shows **"this invite has been
+   revoked"** and does NOT dial; admit WARNs `cap_revoked` (not
+   `cap_not_found` — the seen-grants memory held).
+4. **Recovery**: grant restored via putRecord → next Connect minted and
+   connected again.
+
+**Finding — the local-relay rig needs TLS**: with BOTH endpoints pointed
+at a plain-HTTP relay on the LAN, phones never complete a relay attach
+and even LAN-direct dials fail (`dial failed: null`) — the discovery
+records carry the http relay URL and iroh-ffi chokes. The rust
+`iroh_relay::client` attaches to the same relay fine (see croft-stack
+`examples/attach_probe.rs`), so this is endpoint/ffi-side. Consequence:
+the on-device ENFORCE loop needs a TLS relay — either the staging
+listener on the production box (real certs, separate port) or admit
+activation itself. Deferred with O1 (the callee's camping token), which
+the enforce loop would hit immediately anyway.
+
+Not yet observed on-device: server-side attribution (`admitted
+sponsorship=…` needs a relay `[token]` pointed at a real mint key —
+arrives with croft-admit activation), the identity-proof mint (needs the
+re-sign-in under the new scope), and the three call-endings.
