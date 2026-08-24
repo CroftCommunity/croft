@@ -6,7 +6,11 @@
 
 use crate::model::*;
 
-fn decode_envelope_from_canonical(raw: &[u8]) -> Result<AssertionEnvelope, String> {
+/// Decode an envelope from its canonical-with-signature bytes. Refuses unknown
+/// wire versions loudly (a stale store demands a rebuild). The one decoder —
+/// adapters use this; private copies are how the corpus once shipped a silent
+/// mis-parse.
+pub fn decode_envelope_from_canonical(raw: &[u8]) -> Result<AssertionEnvelope, String> {
     // Layout (from canonical_bytes_with_sig), envelope wire v2 — no wall-clock field:
     // version(1) + assertion_type(2) + author_device(32) + author_principal(32)
     // + group(32) + antecedents_count(4) + antecedents*(32) + lamport(8)
