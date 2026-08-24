@@ -1,0 +1,41 @@
+# The croft gate, in CI (G7 — trigger: G6, which fired when the first core
+# landed). The CI-PATTERN rules this encodes: a workflow without a pull_request
+# trigger is a notification, not a gate; the toolchain is the SAME pin CI and
+# local resolve (rust-toolchain.toml; env/verify.sh refuses drift); one gate
+# command, identical locally and in CI (`make gate`). Watch it fail before
+# trusting it.
+name: gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: rustup syncs the pinned toolchain (rust-toolchain.toml)
+        run: rustup show
+      - name: make gate
+        run: make gate
+
+  core-purity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: rustup syncs the pinned toolchain
+        run: rustup show
+      - name: wasm arm — the core compiles for wasm32-unknown-unknown
+        run: cargo check -p social-tree-core --target wasm32-unknown-unknown
+      - name: no-default-features arm
+        run: cargo check -p social-tree-core --no-default-features
+      - name: clippy, including the disallowed-methods purity lints
+        run: cargo clippy -p social-tree-core -- -D warnings -A missing_docs
+      - name: fmt
+        run: cargo fmt -p social-tree-core -- --check

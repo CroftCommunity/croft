@@ -1,0 +1,6 @@
+# The croft Rust workspace. Shells (android/apple/web) build separately; this
+# workspace is the shared functional core — pure crates, no I/O, no clock
+# (docs/ADR-0002-core-layering.md).
+[workspace]
+resolver = "2"
+members = ["core/social-tree-core"]

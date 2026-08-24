@@ -2,9 +2,14 @@
 
 The Croft client. One shared functional core, thin per-platform shells.
 
-**Status: shared core is skeleton; the android app runs and is released.** The
-functional core, the cross-platform shells, and the toolchain contract are here;
-the **core** is not yet implemented. The **android app** — the inherited
+**Status: the first core crate is real; the android app runs and is released.**
+`core/social-tree-core` — the Drystone social-tree substrate (the governance
+fold, CONTESTED, charter-quorum resolution, the wire codecs) — landed at E117
+Phase 2, extracted from the discovery corpus's mutation-vetted experiment and
+pure by mechanical enforcement (no storage, no clock; wasm32 and
+no-default-features CI arms). `make gate` is armed (G6) and green; CI runs the
+same gate (G7). The layering — foundation vs ponds, the two admissions, the
+effect-composition rule — is ADR-0002. The per-pond cores are still to come. The **android app** — the inherited
 croftcall client — builds, launches, and is published as **`v0.4.0`** (Latest):
 it camps on the croft relay (`relay.croft.ing:8443`), reports the live
 connection path, redeems exchange invite links, and proves caller identity

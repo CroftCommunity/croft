@@ -1,0 +1,15 @@
+[package]
+name = "social-tree-core"
+version = "0.1.0"
+edition = "2021"
+# Owner decision 2026-08-21 (E117 integration §6.7), consistent with the standing
+# A14 decision: AGPL for everything Drystone/Croft.
+license = "AGPL-3.0-or-later"
+description = "The Drystone social-tree substrate: the governance fold, its projections, and the wire codecs — pure, storage-free, clock-free. The foundation the per-pond feature cores stand on."
+
+[dependencies]
+blake3 = "1"
+thiserror = "1"
+
+[dev-dependencies]
+proptest = "1"
