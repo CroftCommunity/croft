@@ -49,8 +49,8 @@ impl HeadCurrency {
     /// means an incoming fact referenced a head this node has not folded — the behind-via-traffic
     /// signal. Any other outcome (applied, duplicate, a real rejection) leaves the flag untouched:
     /// only *unseen-head* references imply the node is behind.
-    pub fn observe_ingest(&mut self, outcome: &Result<IngestResult, FoldError>) {
-        if matches!(outcome, Err(FoldError::MissingAntecedents { .. })) {
+    pub fn observe_ingest<E: BehindSignal>(&mut self, outcome: &Result<IngestResult, E>) {
+        if matches!(outcome, Err(e) if e.is_missing_antecedents()) {
             self.behind = true;
         }
     }
@@ -114,4 +114,18 @@ pub fn admits_membership_origination(
         });
     }
     Ok(())
+}
+
+/// The one signal currency listens for in an ingest outcome: an incoming fact
+/// referenced a head this node has not folded. Adapters implement this for
+/// their own error types so their outcomes feed currency without conversion.
+pub trait BehindSignal {
+    /// Was this outcome a missing-antecedents refusal?
+    fn is_missing_antecedents(&self) -> bool;
+}
+
+impl BehindSignal for FoldError {
+    fn is_missing_antecedents(&self) -> bool {
+        matches!(self, FoldError::MissingAntecedents { .. })
+    }
 }
