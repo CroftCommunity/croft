@@ -7,6 +7,8 @@
 use std::collections::HashMap;
 
 use social_tree_core::metrics::NoopMetrics;
+use social_tree_core::ports::ed25519::{Ed25519Signer, Ed25519Verifier};
+use social_tree_core::ports::{DeviceId as PortDeviceId, Signer, Verifier};
 use social_tree_core::model::{
     envelope_hash, AssertionEnvelope, AssertionType, DeviceId, ForkStatus, GroupId, GroupState,
     Hash, MembershipView, PrincipalId, ENVELOPE_WIRE_VERSION,
@@ -25,6 +27,16 @@ struct MemStore {
 
 impl MemStore {
     fn ingest(&mut self, env: &AssertionEnvelope) -> Result<Evaluation, String> {
+        // Authorship on real crypto: every fact's signature verifies against the
+        // author device's ed25519 key before the fold sees it (the adapter's
+        // step 2, reproduced here so the pins pin the composed check).
+        Ed25519Verifier
+            .verify(
+                &PortDeviceId(*env.author_device.as_bytes()),
+                &env.canonical_bytes(),
+                &env.signature,
+            )
+            .map_err(|e| format!("signature: {e:?}"))?;
         let g = *env.group.as_bytes();
         let log = self.logs.entry(g).or_default().clone();
         let gov = is_governance(&env.assertion_type);
@@ -83,24 +95,27 @@ impl MemStore {
 }
 
 fn env(
-    device: u8,
+    device_seed: u8,
     principal: u8,
     ty: AssertionType,
     lamport: u64,
     antecedents: Vec<Hash>,
     payload: Vec<u8>,
 ) -> AssertionEnvelope {
-    AssertionEnvelope {
+    let signer = Ed25519Signer::from_seed([device_seed; 32]);
+    let mut e = AssertionEnvelope {
         version: ENVELOPE_WIRE_VERSION,
         assertion_type: ty,
-        author_device: DeviceId::new([device; 32]),
+        author_device: DeviceId::new(signer.device_id().0),
         author_principal: PrincipalId::new([principal; 32]),
         group: GroupId::new([0xC7; 32]),
         antecedents,
         lamport,
         payload,
         signature: vec![],
-    }
+    };
+    e.signature = signer.sign(&e.canonical_bytes());
+    e
 }
 
 fn genesis_payload() -> Vec<u8> {
