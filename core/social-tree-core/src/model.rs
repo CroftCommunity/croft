@@ -1293,7 +1293,8 @@ impl GroupState {
     }
 }
 
-pub(crate) fn role_to_u8(r: &Role) -> u8 {
+/// Encode a [`Role`] to its wire byte (see ../WIRE-REGISTER.md).
+pub fn role_to_u8(r: &Role) -> u8 {
     match r {
         Role::Owner => 0,
         Role::Admin => 1,
@@ -1302,7 +1303,8 @@ pub(crate) fn role_to_u8(r: &Role) -> u8 {
     }
 }
 
-pub(crate) fn u8_to_role(v: u8) -> Result<Role, ()> {
+/// Decode a wire byte to a [`Role`]; `Err` on an unknown byte.
+pub fn u8_to_role(v: u8) -> Result<Role, ()> {
     match v {
         0 => Ok(Role::Owner),
         1 => Ok(Role::Admin),

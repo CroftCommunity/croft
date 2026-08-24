@@ -118,7 +118,9 @@ pub trait BlobPresence: Send + Sync {
 // Mock implementations
 // ---------------------------------------------------------------------------
 
-#[cfg(any(test, feature = "test-mocks"))]
+// Deliberately ungated: the redb adapter's suites (a separate crate, pinned by
+// commit) drive the fold through these mocks; a cfg(test) gate is invisible
+// across crates. Mock-only, no production code path constructs them.
 pub mod mocks {
     use super::{
         BlobPresence, CredentialError, CredentialResolver, DeviceId, Hash, LamportSource,
