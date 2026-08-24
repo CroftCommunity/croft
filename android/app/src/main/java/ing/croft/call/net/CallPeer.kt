@@ -66,6 +66,15 @@ class CallPeer(
             val path: String = "path unknown",
         ) : State
         data class Failed(val message: String) : State
+
+        /** A call ended (E129) — the endpoint is STILL bound and camped, so
+         *  the device stays callable; [message] says how it ended, in words
+         *  ([CallEnding] decides them). */
+        data class Ended(
+            val endpointId: String,
+            val peer: String,
+            val message: String,
+        ) : State
     }
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -73,6 +82,16 @@ class CallPeer(
 
     private var endpoint: Endpoint? = null
     private var pathPoll: Job? = null
+
+    /** The live call's connection (E129) — held so hang-up can close it and
+     *  the closed-watcher can end the state honestly. One call at a time. */
+    @Volatile
+    private var activeConn: Connection? = null
+
+    /** Set by [hangUp] before closing, read by the closed-watcher so a local
+     *  ending never masquerades as the transport's. */
+    @Volatile
+    private var localHangUp = false
 
     /** The relay admission token the NEXT bind presents (M4c). */
     @Volatile
@@ -95,7 +114,25 @@ class CallPeer(
     private fun connected(conn: Connection, peer: String, direction: String, hello: String?) {
         val initial = PathSummary.describe(try { conn.paths() } catch (t: Throwable) { emptyList() })
         Log.i(TAG, "connected ($direction) $peer: $initial")
+        activeConn = conn
+        localHangUp = false
         _state.value = State.Connected(peer, direction, hello, initial)
+        // The closed-watcher (E129): `closed()` suspends until the connection
+        // ends — hang-up, remote close, or transport death alike — and
+        // returns the reason. Before this watcher, a remote ending left the
+        // state STUCK at Connected (the path poll just broke silently).
+        scope.launch(Dispatchers.IO) {
+            val reason = try { conn.closed() } catch (t: Throwable) { t.message }
+            val current = _state.value
+            if (current is State.Connected && current.peer == peer) {
+                val ownId = endpoint?.id()?.toString().orEmpty()
+                val ended = CallEnding.ended(ownId, peer, localHangUp, reason)
+                Log.i(TAG, "call ended ($direction) $peer: ${ended.message}")
+                activeConn = null
+                pathPoll?.cancel()
+                _state.value = ended
+            }
+        }
         pathPoll?.cancel()
         pathPoll = scope.launch(Dispatchers.IO) {
             while (true) {
@@ -228,10 +265,28 @@ class CallPeer(
         String(body, Charsets.UTF_8)
     } catch (t: Throwable) { null }
 
+    /**
+     * Hang up the live call (E129): close the connection with an application
+     * code; the closed-watcher lands the [State.Ended] with "you ended the
+     * call". The endpoint stays bound and camped — still callable.
+     */
+    fun hangUp() {
+        val conn = activeConn ?: return
+        localHangUp = true
+        scope.launch(Dispatchers.IO) {
+            try {
+                conn.close(0L, "hangup".toByteArray())
+            } catch (t: Throwable) {
+                Log.w(TAG, "hang-up close failed: ${t.message}")
+            }
+        }
+    }
+
     /** Per iroh's Android guidance: shut down on background, re-bind on return. */
     fun stop() {
         val ep = endpoint ?: return
         endpoint = null
+        activeConn = null
         pathPoll?.cancel()
         pathPoll = null
         scope.launch(Dispatchers.IO) {

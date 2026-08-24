@@ -29,9 +29,14 @@ behind a pluggable proof seam; the TLS staging listener enforces live
 on relay.croft.ing:8444 running the v0.2.0 candidate), and **M4e
 (camp-at-attach) landed under tests 2026-08-23**: `CampAdmission` +
 `Admit.campToken` + the ViewModel trigger — the pass is the cache
-(wire `expiresIn`), refusals camp tokenless with words. Remaining:
-the on-device enforce rehearsal (phones at the staging listener),
-the identity-proof mint on-device, and the three call-endings. Do not
+(wire `expiresIn`), refusals camp tokenless with words. **The three
+call-endings landed under tests 2026-08-23 (E129)**: the app holds the
+live Connection, a closed()-watcher ends the state honestly (before it,
+a remote ending left the UI stuck at Connected), Hang up closes with
+"you ended the call", and Ended keeps the endpoint bound — still
+camped, still callable. Remaining: the on-device enforce rehearsal
+(phones at the staging listener, runbook §12), which also validates the
+endings on hardware. Do not
 describe anything else here as working until it has been run.
 
 ## Read before writing code

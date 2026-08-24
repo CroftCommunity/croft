@@ -50,6 +50,7 @@ fun CallScreen(vm: MainViewModel) {
                 Column(Modifier.fillMaxWidth().padding(14.dp)) {
                     Text("This device", style = MaterialTheme.typography.labelLarge)
                     val id = (state as? State.Ready)?.endpointId
+                        ?: (state as? State.Ended)?.endpointId
                         ?: (state as? State.Connected)?.let { "connected" }
                         ?: "…"
                     Text(
@@ -128,11 +129,20 @@ fun CallScreen(vm: MainViewModel) {
                         dialStatus?.let {
                             Text(it, style = MaterialTheme.typography.bodySmall)
                         }
-                        Button(
-                            onClick = vm::dialCallee,
-                            enabled = state is State.Ready,
-                            modifier = Modifier.padding(top = 10.dp).fillMaxWidth(),
-                        ) { Text("Connect") }
+                        // A live call hangs up (E129); otherwise dial. Ended
+                        // still counts as dialable — the endpoint stays bound.
+                        if (state is State.Connected) {
+                            Button(
+                                onClick = vm::hangUp,
+                                modifier = Modifier.padding(top = 10.dp).fillMaxWidth(),
+                            ) { Text("Hang up") }
+                        } else {
+                            Button(
+                                onClick = vm::dialCallee,
+                                enabled = state is State.Ready || state is State.Ended,
+                                modifier = Modifier.padding(top = 10.dp).fillMaxWidth(),
+                            ) { Text("Connect") }
+                        }
                     }
                 }
             }
@@ -149,6 +159,9 @@ fun CallScreen(vm: MainViewModel) {
                     is State.Connected ->
                         "connected (${s.direction}, ${s.path})" + (s.peerHello?.let { "  $it" } ?: "")
                     is State.Failed -> s.message
+                    // E129: how the call ended, in the mapper's words — and
+                    // still camped, still callable.
+                    is State.Ended -> "${s.message} — ready, camped on relay"
                 }
                 Text(label, style = MaterialTheme.typography.bodySmall)
             }

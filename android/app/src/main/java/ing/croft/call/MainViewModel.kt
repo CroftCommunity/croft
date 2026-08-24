@@ -188,7 +188,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun campIfPossible() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val ready = peer.state.value as? CallPeer.State.Ready ?: return@launch
+                val ownEndpoint = when (val s = peer.state.value) {
+                    is CallPeer.State.Ready -> s.endpointId
+                    is CallPeer.State.Ended -> s.endpointId // still bound (E129)
+                    else -> return@launch
+                }
                 val plan = CampAdmission.plan(
                     signedIn = auth.provenDid.value != null,
                     cached = campPass,
@@ -207,7 +211,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         val outcome = Admit.campToken(
                             UrlHttpJson,
                             admitBase = CroftRelay.ADMIT_BASE,
-                            endpointId = ready.endpointId,
+                            endpointId = ownEndpoint,
                             serviceAuthJwt = jwt,
                         )
                         when (val action =
@@ -255,8 +259,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     is DialAdmission.Plan.Mint -> {
                         _dialStatus.value = "requesting admission…"
-                        val own = (peer.state.value as? CallPeer.State.Ready)?.endpointId
-                            ?: throw IllegalStateException("endpoint not ready")
+                        val own = when (val s = peer.state.value) {
+                            is CallPeer.State.Ready -> s.endpointId
+                            is CallPeer.State.Ended -> s.endpointId // still bound (E129)
+                            else -> throw IllegalStateException("endpoint not ready")
+                        }
                         val proof = when (val source = plan.proof) {
                             is DialAdmission.ProofSource.Ticket ->
                                 Admit.Proof.Ticket(source.secret)
@@ -314,4 +321,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     fun onBackground() = peer.stop()
+
+    /** Hang up the live call (E129); the peer lands the Ended state. */
+    fun hangUp() = peer.hangUp()
 }
