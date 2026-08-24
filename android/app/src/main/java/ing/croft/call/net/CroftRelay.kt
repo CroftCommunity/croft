@@ -30,4 +30,7 @@ object CroftRelay {
 
     /** Service-auth method binding (D3). */
     const val ADMIT_LXM = "ing.croft.relay.grantCall"
+
+    /** The camp mint's method binding (M4e, O1). */
+    const val ADMIT_CAMP_LXM = "ing.croft.relay.campToken"
 }

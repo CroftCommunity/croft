@@ -86,6 +86,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** The OAuth-proven identity for the UI; null when signed out. */
     val provenDid: StateFlow<String?> = auth.provenDid
 
+    init {
+        // Camp-at-attach trigger (M4e): whenever the endpoint is Ready with a
+        // signed-in session, make sure a camping pass is bound. Both flows
+        // change rarely; the cached pass makes repeats free.
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(peer.state, auth.provenDid) { s, did ->
+                s is CallPeer.State.Ready && did != null
+            }.collect { ready -> if (ready) campIfPossible() }
+        }
+    }
+
     // Sign-in progress/error for the UI; null when nothing is wrong.
     private val _authStatus = MutableStateFlow<String?>(null)
     val authStatus: StateFlow<String?> = _authStatus
@@ -108,6 +119,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun signOut() {
         auth.signOut()
         _authStatus.value = null
+        // A cached pass without a session must not outlive it (CampAdmission
+        // would refuse it anyway; dropping it keeps the state honest).
+        campPass = null
+        _campStatus.value = null
     }
 
     /** The OAuth redirect landed (routed by MainActivity). */
@@ -152,6 +167,67 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             } catch (t: Throwable) {
                 Log.w("CroftCall", "redeem failed: ${t.message}")
                 _redeemStatus.value = "redeem failed: ${t.message}"
+            }
+        }
+    }
+
+    // Camp-at-attach (M4e, O1): the callee's own pass to camp on an enforce
+    // relay. The pass is the cache (in-memory, O3's v1 posture): one identity
+    // round-trip per pass lifetime, re-mint inside the margin or on refusal.
+    private var campPass: CampAdmission.CampPass? = null
+    private val _campStatus = MutableStateFlow<String?>(null)
+    val campStatus: StateFlow<String?> = _campStatus
+
+    /**
+     * Mint/refresh the camping pass and bind it, when there is anything to
+     * do: needs a Ready endpoint and a signed-in session ([CampAdmission]
+     * decides; signed-out camps tokenless silently, exactly v0.4.0).
+     * Safe to call repeatedly — a cached pass short-circuits in
+     * [CallPeer.rebindWithToken] when it is already bound.
+     */
+    fun campIfPossible() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val ready = peer.state.value as? CallPeer.State.Ready ?: return@launch
+                val plan = CampAdmission.plan(
+                    signedIn = auth.provenDid.value != null,
+                    cached = campPass,
+                    nowMs = System.currentTimeMillis(),
+                )
+                when (plan) {
+                    is CampAdmission.Plan.UseCached -> {
+                        _campStatus.value = null
+                        peer.rebindWithToken(plan.token)
+                    }
+                    is CampAdmission.Plan.CampTokenless -> _campStatus.value = plan.note
+                    CampAdmission.Plan.Mint -> {
+                        val jwt = auth.serviceAuthProof(
+                            UrlHttpGet, CroftRelay.ADMIT_AUD, CroftRelay.ADMIT_CAMP_LXM,
+                        )
+                        val outcome = Admit.campToken(
+                            UrlHttpJson,
+                            admitBase = CroftRelay.ADMIT_BASE,
+                            endpointId = ready.endpointId,
+                            serviceAuthJwt = jwt,
+                        )
+                        when (val action =
+                            CampAdmission.action(outcome, nowMs = System.currentTimeMillis())
+                        ) {
+                            is CampAdmission.Action.Camp -> {
+                                campPass = action.pass
+                                _campStatus.value = null
+                                peer.rebindWithToken(action.authToken)
+                            }
+                            is CampAdmission.Action.CampTokenless -> {
+                                Log.w("CroftCall", "camping tokenless: ${action.note}")
+                                _campStatus.value = action.note
+                            }
+                        }
+                    }
+                }
+            } catch (t: Throwable) {
+                Log.w("CroftCall", "camp setup failed: ${t.message}")
+                _campStatus.value = "camping pass setup failed: ${t.message}"
             }
         }
     }

@@ -34,6 +34,7 @@ fun CallScreen(vm: MainViewModel) {
     val provenDid by vm.provenDid.collectAsState()
     val callabilityState by vm.callabilityState.collectAsState()
     val authStatus by vm.authStatus.collectAsState()
+    val campStatus by vm.campStatus.collectAsState()
     var handleInput by remember { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
 
@@ -82,6 +83,11 @@ fun CallScreen(vm: MainViewModel) {
                         }
                     }
                     authStatus?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
+                    // Camp-at-attach (M4e): why this device is camping without
+                    // a pass, when it is — silence means the pass is bound.
+                    campStatus?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall)
                     }
                 }

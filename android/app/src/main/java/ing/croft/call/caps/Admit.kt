@@ -110,4 +110,72 @@ object Admit {
             else -> Refusal.UNKNOWN
         }
     }
+
+    // ---- the camp mint (M4e, O1) --------------------------------------------
+    // Wire shapes from the server source (croft-stack
+    // `croft-relay-admit/src/camp.rs`): the callee proves its own identity
+    // (service-auth, lxm = ing.croft.relay.campToken) and receives the pass
+    // to camp, with `expiresIn` so the opaque token can be cached (the token
+    // is the cache — O1 point 3; the client never parses the JWT).
+
+    /** The camp mint's refusal discriminants, plus a fail-closed unknown. */
+    enum class CampRefusal {
+        NO_PROOF, PROOF_UNSUPPORTED, JWT_INVALID, REPLAY,
+        UNKNOWN_KEY, ENDPOINT_UNBOUND, UNKNOWN,
+    }
+
+    /** Every way a camp mint ends. */
+    sealed interface CampOutcome {
+        /** The camping pass, opaque, plus when the wire says it expires. */
+        data class Minted(val token: String, val expiresInSecs: Long) : CampOutcome
+
+        /** The mint said no, and why. */
+        data class Refused(val reason: CampRefusal) : CampOutcome
+
+        /** The mint is down — camping must not conclude anything from it. */
+        data object Unavailable : CampOutcome
+
+        /** We sent something malformed — a defect here, not a policy fact. */
+        data object BadRequest : CampOutcome
+    }
+
+    suspend fun campToken(
+        http: HttpJson,
+        admitBase: String,
+        endpointId: String,
+        serviceAuthJwt: String,
+    ): CampOutcome {
+        val body = JSONObject().apply {
+            put("endpoint", endpointId)
+            put("proof", JSONObject().put("serviceAuth", serviceAuthJwt))
+        }
+        val res = http.postJson("${admitBase.trimEnd('/')}/campToken", body.toString())
+        return when (res.status) {
+            200 -> parseCampToken(res.body)
+            403 -> CampOutcome.Refused(parseCampRefusal(res.body))
+            400 -> CampOutcome.BadRequest
+            else -> CampOutcome.Unavailable
+        }
+    }
+
+    private fun parseCampToken(body: String): CampOutcome {
+        val json = runCatching { JSONObject(body) }.getOrNull() ?: return CampOutcome.Unavailable
+        val token = json.optString("token")
+        // A 200 with no token is not a mint, whatever the status said.
+        if (token.isEmpty()) return CampOutcome.Unavailable
+        return CampOutcome.Minted(token, json.optLong("expiresIn"))
+    }
+
+    private fun parseCampRefusal(body: String): CampRefusal {
+        val wire = runCatching { JSONObject(body).optString("error") }.getOrDefault("")
+        return when (wire) {
+            "no_proof" -> CampRefusal.NO_PROOF
+            "proof_unsupported" -> CampRefusal.PROOF_UNSUPPORTED
+            "jwt_invalid" -> CampRefusal.JWT_INVALID
+            "replay" -> CampRefusal.REPLAY
+            "unknown_key" -> CampRefusal.UNKNOWN_KEY
+            "endpoint_unbound" -> CampRefusal.ENDPOINT_UNBOUND
+            else -> CampRefusal.UNKNOWN
+        }
+    }
 }

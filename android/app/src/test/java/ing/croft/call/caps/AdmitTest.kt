@@ -135,4 +135,77 @@ class AdmitTest {
             mint(FakeJson(403, "not json")),
         )
     }
+
+    // ---- the camp mint (M4e) -------------------------------------------------
+    // Wire shapes from the server source (croft-relay-admit/src/camp.rs):
+    // request {endpoint, proof:{serviceAuth}}, 200 {token, expiresIn},
+    // refusals {error: no_proof|proof_unsupported|jwt_invalid|replay|
+    // unknown_key|endpoint_unbound}.
+
+    private fun camp(http: FakeJson) = runBlocking {
+        Admit.campToken(
+            http,
+            admitBase = "https://admit.croft.ing",
+            endpointId = endpointHex,
+            serviceAuthJwt = "svc-jwt",
+        )
+    }
+
+    @Test
+    fun `campToken posts exactly endpoint and serviceAuth proof`() {
+        val http = FakeJson(200, """{"token":"opaque","expiresIn":43200}""")
+        camp(http)
+        assertEquals("https://admit.croft.ing/campToken", http.url)
+        val sent = JSONObject(http.sent!!)
+        assertEquals(endpointHex, sent.getString("endpoint"))
+        assertEquals("svc-jwt", sent.getJSONObject("proof").getString("serviceAuth"))
+        assertEquals(setOf("endpoint", "proof"), sent.keys().asSequence().toSet())
+    }
+
+    @Test
+    fun `a camp mint carries the token and the wire's expiresIn`() {
+        val http = FakeJson(200, """{"token":"opaque","expiresIn":43200}""")
+        assertEquals(Admit.CampOutcome.Minted("opaque", 43_200), camp(http))
+    }
+
+    @Test
+    fun `a 200 with no token is not a camp mint`() {
+        assertEquals(Admit.CampOutcome.Unavailable, camp(FakeJson(200, """{}""")))
+    }
+
+    @Test
+    fun `camp refusal discriminants map one to one`() {
+        fun refused(wire: String) = camp(FakeJson(403, """{"error":"$wire"}"""))
+        assertEquals(
+            Admit.CampOutcome.Refused(Admit.CampRefusal.ENDPOINT_UNBOUND),
+            refused("endpoint_unbound"),
+        )
+        assertEquals(
+            Admit.CampOutcome.Refused(Admit.CampRefusal.JWT_INVALID),
+            refused("jwt_invalid"),
+        )
+        assertEquals(Admit.CampOutcome.Refused(Admit.CampRefusal.REPLAY), refused("replay"))
+        assertEquals(
+            Admit.CampOutcome.Refused(Admit.CampRefusal.PROOF_UNSUPPORTED),
+            refused("proof_unsupported"),
+        )
+        assertEquals(Admit.CampOutcome.Refused(Admit.CampRefusal.NO_PROOF), refused("no_proof"))
+        assertEquals(
+            Admit.CampOutcome.Refused(Admit.CampRefusal.UNKNOWN_KEY),
+            refused("unknown_key"),
+        )
+        assertEquals(
+            Admit.CampOutcome.Refused(Admit.CampRefusal.UNKNOWN),
+            refused("something_new"),
+        )
+    }
+
+    @Test
+    fun `camp outage and defect stay distinct facts`() {
+        assertEquals(
+            Admit.CampOutcome.Unavailable,
+            camp(FakeJson(503, """{"error":"unavailable"}""")),
+        )
+        assertEquals(Admit.CampOutcome.BadRequest, camp(FakeJson(400, """{"error":"bad_request"}""")))
+    }
 }

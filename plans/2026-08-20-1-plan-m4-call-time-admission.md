@@ -116,6 +116,48 @@ carefully as the admits.
    OUT of this plan (croft-stack activation prerequisites + open question
    O1 below).
 
+### M4e — camp-at-attach (added 2026-08-23; LANDED under tests the same day — device run pending)
+
+**Problem:** O1 decided camping is identity-checked self-mint, `/campToken`
+exists on croft-relay-admit, and the TLS staging listener enforces on
+8444 — but the app has no camp-mint caller: under enforce the callee's
+own camp is refused and the app has no words for it.
+
+**Approach:** the production proof path ONLY — the callee's session mints
+an atproto service-auth JWT (`lxm = ing.croft.relay.campToken`) exactly
+as M4b does for calls; the local-keypair backend stays a host-rig tool
+(attach_probe proved it; dev crypto does not belong in the app). Pieces:
+
+- Server (croft-stack): `/campToken`'s 200 body gains `expiresIn`
+  (seconds) — the client must know when to re-mint WITHOUT parsing the
+  opaque token (D3 holds; the wire tells it, not the JWT).
+- `Admit.campToken(http, admitBase, endpointId, serviceAuthJwt)` with the
+  camp refusal taxonomy from the server source (camp.rs): `no_proof`,
+  `proof_unsupported`, `jwt_invalid`, `replay`, `unknown_key`,
+  `endpoint_unbound` + BadRequest/Unavailable.
+- `CampAdmission` pure core (DialAdmission's sibling): plan(signedIn,
+  cachedPass, now) → UseCached | Mint | CampTokenless; action(outcome) →
+  Camp(token, pass) | CampTokenless(note). **The token is the cache**
+  (O1): a `CampPass(token, expiresAtMillis)` reused across reconnects,
+  re-mint inside a safety margin of expiry or on refusal.
+- Posture, deliberately unlike dial: a camp REFUSAL still camps
+  tokenless WITH the worded reason — in open mode reception must keep
+  working, and under enforce the relay's refusal is the visible gate. An
+  OUTAGE camps tokenless with the M4c-style note.
+- ViewModel wiring: mint when Ready+signed-in, rebind the camp token
+  when idle; a dial token minted later also validly camps this endpoint
+  (same `sub`), so dial rebinds need no undo before call-endings land.
+- FixtureExchange grows the `/campToken` mirror (endpoint-published
+  check against fixture records, `expiresIn`, forced-refusal knob) and
+  the camp journey lands with the chunk.
+
+**Reasoning:** signed-out callees simply have no camping identity under
+O1 — that is the decided model, not a gap; the tokenless attempt keeps
+v0.4.0 behavior in open mode and produces the honest relay refusal under
+enforce. Client-side expiry via `expiresIn` keeps D3's opacity while
+avoiding the only alternatives — parsing the JWT (breaks opacity) or
+re-minting every reconnect (exactly the per-flap OAuth O1 refused).
+
 ### The workflow harness is a first-class outcome (owner, 2026-08-20)
 
 Not a by-product of M4d: the admission story only means something end to

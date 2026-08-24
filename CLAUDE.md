@@ -24,9 +24,14 @@ over the real ports against `FixtureExchange`; first-class per the plan).
 M4c (mint-at-dial) is landed, and **M4d's first device run is done
 2026-08-21** (runbook §11): real mint from a phone, minted-token dial
 (EndpointId stable), live revocation refused with words, recovery.
-Remaining: the enforce rung (needs a TLS staging relay or croft-admit
-activation, shared with open question O1), the identity-proof mint
-on-device, journal attribution, and the three call-endings. Do not
+O1 was decided AND built 2026-08-21/23 (croft-stack: `/campToken`
+behind a pluggable proof seam; the TLS staging listener enforces live
+on relay.croft.ing:8444 running the v0.2.0 candidate), and **M4e
+(camp-at-attach) landed under tests 2026-08-23**: `CampAdmission` +
+`Admit.campToken` + the ViewModel trigger — the pass is the cache
+(wire `expiresIn`), refusals camp tokenless with words. Remaining:
+the on-device enforce rehearsal (phones at the staging listener),
+the identity-proof mint on-device, and the three call-endings. Do not
 describe anything else here as working until it has been run.
 
 ## Read before writing code

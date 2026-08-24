@@ -52,6 +52,15 @@ class FixtureExchange : AutoCloseable {
     /** Force the next /grantCall to refuse with this discriminant. */
     var nextMintRefusal: String? = null
 
+    /** Every /campToken request body, for assertions (M4e). */
+    val camps = mutableListOf<JSONObject>()
+
+    /** Force the next /campToken to refuse with this discriminant. */
+    var nextCampRefusal: String? = null
+
+    /** The camping TTL the fixture reports as `expiresIn` (seconds). */
+    var campExpiresIn: Long = 43_200L
+
     /** The admit mirror's clock for policy `expires` rules (epoch ms). */
     var nowMs: Long = 1_700_000_000_000L
 
@@ -147,6 +156,7 @@ class FixtureExchange : AutoCloseable {
                 path == "/oauth/par" -> par(request)
                 path == "/oauth/token" -> token(request)
                 path == "/grantCall" -> grantCall(request)
+                path == "/campToken" -> campToken(request)
                 else -> json(404, """{"error":"no fixture route for $path"}""")
             }
         } catch (t: Throwable) {
@@ -268,6 +278,41 @@ class FixtureExchange : AutoCloseable {
             }
         }
         return json(200, JSONObject().put("token", "fixture-token-${mints.size}").toString())
+    }
+
+    /**
+     * The camp mirror (M4e): shapes and discriminants verbatim from the
+     * server source (croft-relay-admit/src/camp.rs). Structural serviceAuth
+     * check like [grantCall]; the binding rule — an identity may only camp
+     * on an endpoint it stands behind — is mirrored as "some account's
+     * published endpoint records list this endpoint id" (the real server
+     * derives the DID from the verified proof; E123/E124 prove that half).
+     */
+    private fun campToken(request: RecordedRequest): MockResponse {
+        val body = JSONObject(request.body.readUtf8())
+        camps += body
+        nextCampRefusal?.let {
+            nextCampRefusal = null
+            return json(if (it == "unavailable") 503 else 403, """{"error":"$it"}""")
+        }
+        val proof = body.optJSONObject("proof")
+            ?: return json(403, """{"error":"no_proof"}""")
+        if (!proof.has("serviceAuth") && !proof.has("localKey")) {
+            return json(403, """{"error":"no_proof"}""")
+        }
+        val endpoint = body.optString("endpoint")
+        val published = records.any { (key, value) ->
+            key.contains("/ing.croft.iroh.endpoint/") &&
+                value.optString("endpointId") == endpoint
+        }
+        if (!published) return json(403, """{"error":"endpoint_unbound"}""")
+        return json(
+            200,
+            JSONObject()
+                .put("token", "fixture-camp-token-${camps.size}")
+                .put("expiresIn", campExpiresIn)
+                .toString(),
+        )
     }
 
     private fun didDoc(did: String): String =
