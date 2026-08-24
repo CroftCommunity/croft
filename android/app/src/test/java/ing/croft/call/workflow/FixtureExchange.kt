@@ -55,6 +55,10 @@ class FixtureExchange : AutoCloseable {
     /** Every /campToken request body, for assertions (M4e). */
     val camps = mutableListOf<JSONObject>()
 
+    /** Every getServiceAuth `lxm`, in order — pins method binding (a camp
+     *  proof must be bound to campToken, never grantCall). */
+    val serviceAuthLxms = mutableListOf<String>()
+
     /** Force the next /campToken to refuse with this discriminant. */
     var nextCampRefusal: String? = null
 
@@ -220,6 +224,7 @@ class FixtureExchange : AutoCloseable {
      * real PDS's (and croft-admit verifies the signature on its side).
      */
     private fun serviceAuth(request: RecordedRequest): MockResponse {
+        request.requestUrl?.queryParameter("lxm")?.let { serviceAuthLxms += it }
         val authz = request.getHeader("Authorization").orEmpty()
         if (!authz.startsWith("DPoP ")) {
             return json(401, """{"error":"AuthRequired"}""")

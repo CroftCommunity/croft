@@ -97,6 +97,80 @@ class CampJourneyTest {
             }
         }
 
+    /**
+     * The WHOLE workflow end to end, no canned session: OAuth sign-in
+     * (discovery → PAR → redirect → exchange, nonce-danced) → the session's
+     * own camp proof, method-bound to campToken — never grantCall — → the
+     * pass, bound and cached → the cache rides reconnects free → the margin
+     * forces a real re-mint over the wire.
+     */
+    @Test
+    fun `oauth session to camping pass to expiry re-mint — the full arc`() {
+        FixtureExchange().use { fx ->
+            fx.accounts[calleeDid] = "callee.example"
+            fx.putEndpoint(calleeDid, "home", homeEndpoint)
+
+            var clock = now
+            val opened = mutableListOf<String>()
+            val prefs = androidx.test.core.app.ApplicationProvider
+                .getApplicationContext<android.content.Context>()
+                .getSharedPreferences("camp-journey", android.content.Context.MODE_PRIVATE)
+            val auth = ing.croft.call.identity.AuthManager(
+                prefs,
+                http = Rewired(ing.croft.call.net.UrlHttp, fx.base),
+                form = ing.croft.call.net.UrlHttpForm,
+                openUrl = { opened += it },
+                nowMs = { clock },
+            )
+
+            runBlocking {
+                // The session, over real sockets — the same arc a phone walks.
+                auth.signIn("callee.example")
+                val state = fx.parRequests.last()["state"]
+                auth.onRedirect("ing.croft.connect:/oauth?code=c-1&state=$state")
+                assertEquals(calleeDid, auth.provenDid.value)
+
+                // The camp proof comes from the SESSION, bound to campToken.
+                val jwt = auth.serviceAuthProof(
+                    UrlHttpGet, "did:web:admit.croft.ing", "ing.croft.relay.campToken",
+                )
+                assertEquals("ing.croft.relay.campToken", fx.serviceAuthLxms.last())
+
+                val out = Admit.campToken(
+                    UrlHttpJson, admitBase = fx.base,
+                    endpointId = homeEndpoint, serviceAuthJwt = jwt,
+                )
+                val camp =
+                    CampAdmission.action(out, nowMs = clock) as CampAdmission.Action.Camp
+                assertEquals(1, fx.camps.size)
+
+                // Reconnects ride the cache — no network.
+                assertEquals(
+                    CampAdmission.Plan.UseCached(camp.authToken),
+                    CampAdmission.plan(signedIn = true, cached = camp.pass, nowMs = clock),
+                )
+                assertEquals(1, fx.camps.size)
+
+                // Past the margin, the plan demands a REAL re-mint — and the
+                // wire sees it.
+                clock = camp.pass.expiresAtMillis - CampAdmission.REMINT_MARGIN_MILLIS
+                assertEquals(
+                    CampAdmission.Plan.Mint,
+                    CampAdmission.plan(signedIn = true, cached = camp.pass, nowMs = clock),
+                )
+                val again = Admit.campToken(
+                    UrlHttpJson, admitBase = fx.base,
+                    endpointId = homeEndpoint,
+                    serviceAuthJwt = auth.serviceAuthProof(
+                        UrlHttpGet, "did:web:admit.croft.ing", "ing.croft.relay.campToken",
+                    ),
+                )
+                assertTrue(again is Admit.CampOutcome.Minted)
+                assertEquals(2, fx.camps.size)
+            }
+        }
+    }
+
     @Test
     fun `an admit outage camps tokenless with the availability note`() = runBlocking {
         FixtureExchange().use { fx ->
