@@ -343,3 +343,44 @@ working LIVE) → the admit resolved BOTH identities, verified the real
 ES256K proof against the caller's DID document, admitted via
 `registeredCallers`, and `minted cap=m3registered` → connected direct.
 Both proof paths (possession and identity) are now device-validated.
+
+## §12 — the ENFORCE rehearsal against the staging listener (prepared 2026-08-23, not yet run)
+
+Everything below is staged; the run needs the owner and the phones.
+
+**What exists already:** `croft-relay-staging` is LIVE on the production
+box — `https://relay.croft.ing:8444`, `admission = "enforce"`, real
+certs (same certsync), running the croft-relay **v0.2.0 candidate**
+(v0.1.1's tier-era claims refuse today's tokens — found by this rung).
+Its `[token]` verifies the STAGING mint key; the private half is in
+`CroftC/.env` as `CROFT_STAGING_MINT_KEY` (never on the box, never in
+logs). Host-side the whole loop is proven (tiered-admission Review Log
+2026-08-23): token-less refused with words → `/campToken` mint →
+attached + pong + `admitted sponsorship=…` in the journal.
+
+**Client is ready (M4e):** camp-at-attach is landed under tests — when
+Ready meets a signed-in session the app mints its camping pass
+(service-auth, `lxm ing.croft.relay.campToken`) and binds it; refusals
+camp tokenless with words on screen; the pass re-mints at expiry margin.
+
+**The run, sketched:**
+1. LAN admit on the workstation, as §11, but `[mint] signing_key_env`
+   pointed at `CROFT_STAGING_MINT_KEY` and `issuer` unchanged — the
+   staging relay then honors its mints. Allow it in the macOS firewall.
+2. Samsung (callee): debug build with
+   `-PcroftRelayUrl=https://relay.croft.ing:8444`
+   `-PcroftAdmitBase=http://<LAN-IP>:<port>`; **sign in as the callee
+   account** (the camp proof needs the session; Playwright-over-DevTools
+   recipe in §5). Expect: camp REFUSED tokenless at first attach (words
+   in logcat/journal), then the camp mint fires and the re-attach camps
+   — `admitted sponsorship=…` for the callee's endpoint in the staging
+   journal.
+3. Pixel (caller): same relay override; redeem/dial as §11 — the dial
+   mint now needs the staging-keyed admit too. Expect the §11 story
+   under enforcement: refusals refuse, admits carry the call.
+4. Negative rungs: sign the callee out → next attach camps tokenless →
+   staging refuses the camp (reception dies WITH words on screen);
+   unpublish the callee's endpoint record → next camp mint refuses
+   `endpoint_unbound` with its words.
+5. Point both phones back at production 8443 before ending the session
+   (polluted discovery records — the §11 lesson).
