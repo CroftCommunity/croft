@@ -416,3 +416,42 @@ logcat output — native iroh logging on Android is still an open question.
 Point phones back at the production relay (TLS) to clear the polluted
 records; the on-device enforce rung waits for a TLS staging relay or
 admit activation.
+
+## 2026-08-23 — the TLS staging enforce listener goes live (E124)
+
+**What:** deployed `croft-relay-staging` on the production box — a second
+croft-relay unit in the same relayns netns, `[::]:8444` DNAT'd next to
+8443, same Caddy-cert-via-certsync tmpfs, `admission = "enforce"` with a
+fresh STAGING mint keypair (`--keygen`; private half in `CroftC/.env` as
+`CROFT_STAGING_MINT_KEY` for the rig's local admit — never on the box).
+Production 8443 stayed `admission = "open"` and was not restarted.
+Rollback is `systemctl disable --now croft-relay-staging` (ROLLBACK.md).
+
+**Outcome:** enforce is real over TLS: a token-less `attach_probe` is
+refused with words ("no admission token"), and the refusal lands in the
+journal as `denied … reason="no_token"` — the first enforce refusal ever
+produced by this box.
+
+**Learned, immediately:** the deployed v0.1.1 artifact predates the D3
+token-claims rework — a camping token minted by today's admit
+(sponsorship+scope) fails its `tier`-era deserializer as
+`SignatureOrMalformed` even though the signature verifies against the
+configured pubkey. Exactly the mismatch class a staging rung exists to
+catch before a production enforce flip. Fixed the same night:
+croft-relay v0.2.0 released as the CANDIDATE (two CI runs died ENOSPC
+first — both workflows now free ~25 GB of preinstalled toolchains before
+building) and the staging unit repointed at its own artifact dir
+(`/opt/iroh-relay/staging`), so the two units stop sharing a binary the
+moment their token formats diverge.
+
+**Loop closed on v0.2.0 (same night):** token-less `attach_probe` →
+`denied reason="no_token"`; the camping token from the rig's local admit
+(`/campToken`, local-keypair proof, staging mint key) → `ATTACHED` +
+`PONG`, and the journal line `admitted endpoint_id=62a611b472
+sponsorship=Unlimited` — the FIRST `admitted sponsorship=…` attribution
+ever observed (it was on M4d's not-yet-seen list). Production 8443
+re-probed token-less: still admitted, shipped clients unaffected. What
+remains on this rung is the on-device rehearsal: phones pointed at
+`-PcroftRelayUrl=https://relay.croft.ing:8444` with a LAN admit holding
+`CROFT_STAGING_MINT_KEY` — and the app's camp-mint flow (the client does
+not yet call `/campToken` at attach).
