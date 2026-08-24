@@ -7,12 +7,12 @@
 use std::collections::HashMap;
 
 use social_tree_core::metrics::NoopMetrics;
-use social_tree_core::ports::ed25519::{Ed25519Signer, Ed25519Verifier};
-use social_tree_core::ports::{DeviceId as PortDeviceId, Signer, Verifier};
 use social_tree_core::model::{
     envelope_hash, AssertionEnvelope, AssertionType, DeviceId, ForkStatus, GroupId, GroupState,
     Hash, MembershipView, PrincipalId, ENVELOPE_WIRE_VERSION,
 };
+use social_tree_core::ports::ed25519::{Ed25519Signer, Ed25519Verifier};
+use social_tree_core::ports::{DeviceId as PortDeviceId, Signer, Verifier};
 use social_tree_core::update::{evaluate, is_governance, Evaluation, FoldContext, SlotOccupancy};
 
 /// The minimal honest adapter: hashmaps standing where redb stands in the

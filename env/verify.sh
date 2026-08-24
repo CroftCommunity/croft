@@ -16,6 +16,20 @@ fail=0
 red()  { printf '\033[31mFAIL\033[0m  %s\n' "$1"; fail=1; }
 ok()   { printf '\033[32m ok \033[0m  %s\n' "$1"; }
 note() { printf '      %s\n' "$1"; }
+skip() { printf '\033[33mskip\033[0m  %s\n' "$1"; }
+
+# CI profile: hosted runners have no emulator, no arm64 system image, and no
+# device. Those are DEVICE-LAB rows — on CI they become EXPLICIT skips with the
+# reason printed, never silent passes; everything a `testDebugUnitTest` build
+# actually consumes (rust pin, JDK, SDK, ndk, wrapper, checksums) still refuses
+# on drift. GitHub Actions sets CI=true; a workstation never should.
+is_ci() { [ "${CI:-}" = "true" ]; }
+ci_device_row() {
+  # $1 = the row label. True (and prints the skip) when this row is
+  # device-lab-only and we are on CI.
+  if is_ci; then skip "$1 — device-lab row, no emulator on CI runners (full set: 'make verify' on a workstation)"; return 0; fi
+  return 1
+}
 
 # Minimal YAML reads. The manifest is deliberately flat enough not to need a
 # parser -- a dependency here would itself need pinning.
@@ -105,6 +119,10 @@ else
     installed="$("$sdkmanager" --list_installed 2>/dev/null || true)"
     while IFS= read -r pkg; do
       [ -z "$pkg" ] && continue
+      case "$pkg" in
+        emulator|system-images\;*)
+          ci_device_row "sdk pkg $pkg" && continue ;;
+      esac
       if grep -qF "$pkg" <<<"$installed"; then ok "sdk pkg $pkg"; else
         red "sdk pkg missing: $pkg"
       fi
@@ -117,7 +135,7 @@ fi
 # arm64 reproduces, so a wrong ABI here makes the emulator lie about exactly the
 # class of bug we most need it to catch.
 want_abi="$(val abi)"
-if [ -n "$want_abi" ]; then
+if [ -n "$want_abi" ] && ! ci_device_row "system image ABI $want_abi"; then
   if [ -d "$sdk/system-images" ] && find "$sdk/system-images" -maxdepth 3 -type d -name "$want_abi" | grep -q .; then
     ok "system image ABI $want_abi"
   else
@@ -127,7 +145,7 @@ fi
 
 # ---- adb --------------------------------------------------------------------
 if command -v adb >/dev/null 2>&1 || [ -x "$sdk/platform-tools/adb" ]; then ok "adb present"; else
-  red "adb not found"
+  ci_device_row "adb" || red "adb not found"
 fi
 
 # ---- gradle wrapper ---------------------------------------------------------

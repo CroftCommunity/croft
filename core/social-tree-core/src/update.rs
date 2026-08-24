@@ -445,7 +445,7 @@ fn apply_governance(
             let mut pid_bytes = [0u8; 32];
             pid_bytes.copy_from_slice(&env.payload[..32]);
             let invitee = PrincipalId::new(pid_bytes);
-            let role = u8_to_role(env.payload[32]).map_err(|_| {
+            let role = u8_to_role(env.payload[32]).ok_or_else(|| {
                 FoldError::MalformedEnvelope(format!(
                     "MembershipAdd: unknown role byte {}",
                     env.payload[32]
@@ -484,7 +484,7 @@ fn apply_governance(
             let mut pid_bytes = [0u8; 32];
             pid_bytes.copy_from_slice(&env.payload[..32]);
             let subject = PrincipalId::new(pid_bytes);
-            let new_role = u8_to_role(env.payload[32]).map_err(|_| {
+            let new_role = u8_to_role(env.payload[32]).ok_or_else(|| {
                 FoldError::MalformedEnvelope(format!(
                     "RoleGrant: unknown role byte {}",
                     env.payload[32]
@@ -917,15 +917,14 @@ fn replay_excluding(
     let genesis = envs
         .iter()
         .find(|(_, e)| e.assertion_type == AssertionType::GroupGenesis)
-        .ok_or_else(|| FoldError::MissingGenesis)?;
+        .ok_or(FoldError::MissingGenesis)?;
     let mut ns = genesis_initial_state(&genesis.1, genesis.0)?;
-    let mut seq = 1u64;
-    for (h, env) in envs
+    for ((h, env), seq) in envs
         .iter()
         .filter(|(_, e)| e.assertion_type != AssertionType::GroupGenesis)
+        .zip(1u64..)
     {
         ns = apply_governance(&ns, env, *h, seq)?;
-        seq += 1;
     }
     ns.computed_at_gov_head = head_hash;
     ns.computed_at_gov_seq = head_seq;

@@ -36,6 +36,10 @@ jobs:
       - name: no-default-features arm
         run: cargo check -p social-tree-core --no-default-features
       - name: clippy, including the disallowed-methods purity lints
-        run: cargo clippy -p social-tree-core -- -D warnings -A missing_docs
+        # -D clippy::all, not -D warnings: the crate's own #![warn(missing_docs)]
+        # outranks a CLI -A (crate attributes beat command-line lint levels), so
+        # "-D warnings -A missing_docs" denied the very lint it named. Purity and
+        # correctness lints are the gate; the docs debt stays a visible warning.
+        run: cargo clippy -p social-tree-core -- -D clippy::all
       - name: fmt
         run: cargo fmt -p social-tree-core -- --check

@@ -1202,7 +1202,7 @@ impl GroupState {
             let off = 65 + i * 41;
             let mut pid_bytes = [0u8; 32];
             pid_bytes.copy_from_slice(&b[off..off + 32]);
-            let role = u8_to_role(b[off + 32]).map_err(|_| {
+            let role = u8_to_role(b[off + 32]).ok_or_else(|| {
                 FoldError::MalformedState(format!("GroupState: unknown role byte {}", b[off + 32]))
             })?;
             let since = u64::from_be_bytes(b[off + 33..off + 41].try_into().unwrap());
@@ -1303,13 +1303,14 @@ pub fn role_to_u8(r: &Role) -> u8 {
     }
 }
 
-/// Decode a wire byte to a [`Role`]; `Err` on an unknown byte.
-pub fn u8_to_role(v: u8) -> Result<Role, ()> {
+/// Decode a wire byte to a [`Role`]; `None` on an unknown byte (each caller
+/// names its own malformed-payload error).
+pub fn u8_to_role(v: u8) -> Option<Role> {
     match v {
-        0 => Ok(Role::Owner),
-        1 => Ok(Role::Admin),
-        2 => Ok(Role::Member),
-        3 => Ok(Role::Observer),
-        _ => Err(()),
+        0 => Some(Role::Owner),
+        1 => Some(Role::Admin),
+        2 => Some(Role::Member),
+        3 => Some(Role::Observer),
+        _ => None,
     }
 }
