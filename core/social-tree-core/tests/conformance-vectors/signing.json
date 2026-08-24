@@ -1,0 +1,29 @@
+{
+  "header": {
+    "spec_section": "CROFT-PROTOCOL.md §3 (signed message); signing pre-image \"msg-v1\" ‖ …",
+    "category": 2,
+    "note": "Real Ed25519 over Message::signing_bytes. Good vector MUST verify; one-bit-flipped signature MUST reject."
+  },
+  "good": {
+    "branch_hex": "5097d498814fb3683b2abfa19800709b4cae37b44747b63aa7e6a2edf04a5b84",
+    "seq": 3,
+    "author": "alice",
+    "author_seed": 1,
+    "payload_hex": "73656520796f752061742074686520747261696c68656164",
+    "signing_bytes_hex": "6d73672d76315097d498814fb3683b2abfa19800709b4cae37b44747b63aa7e6a2edf04a5b840300000000000000616c6963650073656520796f752061742074686520747261696c68656164",
+    "verifying_key_hex": "269a5afa8afd79a788b8f6e816504a1fe19918aaface2e14345d521c3d163f1b",
+    "signature_hex": "2c5ed5db6bd3e178b19fb7031a41db238a4932cee428a7ce4b97e499cb774b038138c134b0c1dbaee02d51831a4e6e89d8227ee0af00470a96ef03d0c3a4e109",
+    "expect": "accept"
+  },
+  "tampered": {
+    "branch_hex": "5097d498814fb3683b2abfa19800709b4cae37b44747b63aa7e6a2edf04a5b84",
+    "seq": 3,
+    "author": "alice",
+    "author_seed": 1,
+    "payload_hex": "73656520796f752061742074686520747261696c68656164",
+    "signing_bytes_hex": "6d73672d76315097d498814fb3683b2abfa19800709b4cae37b44747b63aa7e6a2edf04a5b840300000000000000616c6963650073656520796f752061742074686520747261696c68656164",
+    "verifying_key_hex": "269a5afa8afd79a788b8f6e816504a1fe19918aaface2e14345d521c3d163f1b",
+    "signature_hex": "2d5ed5db6bd3e178b19fb7031a41db238a4932cee428a7ce4b97e499cb774b038138c134b0c1dbaee02d51831a4e6e89d8227ee0af00470a96ef03d0c3a4e109",
+    "expect": "reject:bad-signature"
+  }
+}
