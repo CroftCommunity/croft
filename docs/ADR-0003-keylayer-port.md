@@ -1,6 +1,8 @@
 # ADR-0003 — The key layer is a port that carries artifacts and never answers "admit?"
 
-**Status:** proposed (2026-08-23). **Context:** E117 Phase 4 joins MLS to
+**Status:** accepted (2026-08-24 — the P4 build validated the shape; both
+admission paths run end-to-end at loopback on the openmls realization).
+**Context:** E117 Phase 4 joins MLS to
 `social-tree-core`. The plan (discovery
 `plans/2026-08-20-1-plan-social-tree-core.md`, Pass-3 Q2) requires this design
 beat before any P4 code, and the review integration (2026-08-21) ordered two
@@ -138,3 +140,14 @@ relay admits traffic, never members.
   is a P4 build decision, not fixed here.
 - Mutation posture per MUTATION.md: the new module joins the standing
   corpus-side burn-down; commit green before any hand-run mutant.
+- One membership-mutating operation remains OUTSIDE the slip discipline,
+  deliberately and visibly: the openmls adapter's inherent
+  `enact_departure` (loopback plumbing for P4's dormancy step). The removal
+  enactment joins the slip discipline when the eviction machinery lands —
+  an `authorize_removal_enactment` gated on the folded `MembershipRemove`,
+  the mirror of the invite slip. Until then it lives only on the concrete
+  adapter, never on the trait.
+- The wasm arm's honest rung: `keylayer-openmls` COMPILES for
+  wasm32-unknown-unknown with the `js` features on getrandom and openmls;
+  browser runtime behavior is unverified until a shell exercises it. The
+  core's lean arms still never pull openmls.

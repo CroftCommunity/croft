@@ -312,3 +312,46 @@ pub fn authorize_invite_enactment(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{
+        AssertionEnvelope, AssertionType, DeviceId, GroupId, ENVELOPE_WIRE_VERSION,
+    };
+
+    fn raw_env(ty: AssertionType, payload: Vec<u8>) -> (Hash, AssertionEnvelope) {
+        let e = AssertionEnvelope {
+            version: ENVELOPE_WIRE_VERSION,
+            assertion_type: ty,
+            author_device: DeviceId::new([1; 32]),
+            author_principal: PrincipalId::new([2; 32]),
+            group: GroupId::new([3; 32]),
+            antecedents: vec![],
+            lamport: 1,
+            payload,
+            signature: vec![],
+        };
+        (crate::model::envelope_hash(&e), e)
+    }
+
+    /// The fold refuses short payloads at ingest, but `issuance_view` takes
+    /// any slice — a truncated entry must be SKIPPED, never panic the view
+    /// (the guards the mutation audit flagged are load-bearing).
+    #[test]
+    fn truncated_entries_are_skipped_not_panicked() {
+        let log = vec![
+            raw_env(AssertionType::TokenIssuance, vec![0xAA; 40]), // short: skipped
+            raw_env(AssertionType::TokenRevocation, vec![0xBB; 8]), // short: skipped
+            raw_env(AssertionType::TokenIssuance, {
+                let mut p = vec![0xCC; 32];
+                p.extend_from_slice(&[0xDD; 32]);
+                p
+            }),
+        ];
+        let view = issuance_view(&log);
+        assert_eq!(view.len(), 1, "only the well-formed issuance derives");
+        assert_eq!(view[0].token, TokenId::new([0xCC; 32]));
+        assert!(!view[0].revoked, "the truncated revocation touched nothing");
+    }
+}
