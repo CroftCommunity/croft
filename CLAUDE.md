@@ -1,5 +1,12 @@
 # croft — agent directives
 
+## Identity (workspace architecture)
+
+**Scope:** THE Croft Call client — shared Rust functional core + android/web/apple shells (docs/adr/0001–0003).
+**Not this repo:** the contract (consumer of connect's); admission decisions (croft-stack); storage accounting (CISS).
+**Provides:** the client apps. **Consumes:** connect contract, relay admission, the key layer over MLS.
+Card + altitudes: `CroftC/.claude/ARCHITECTURE.md`.
+
 The Croft client: one shared Rust core, thin per-platform shells. These sit **on
 top of** the global coding-agents practices (`~/.claude/coding-agents/`) — TDD,
 type safety, fail-loud — and add only what is specific here. Git identity:
