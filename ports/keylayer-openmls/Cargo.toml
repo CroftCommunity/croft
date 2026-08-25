@@ -1,0 +1,21 @@
+# The KeyLayer port's native realization: meer-queue's measured openmls code
+# (S16/S23–S26 lineage), adapted behind social-tree-core's trait per
+# ADR-0003. The pins are the exact versions the experiments resolved
+# (w1_mls_roundtrip guarded them there); bumping any of them re-earns the
+# S-series evidence.
+[package]
+name = "keylayer-openmls"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "openmls realization of social-tree-core's KeyLayer port"
+
+[dependencies]
+social-tree-core = { path = "../../core/social-tree-core" }
+openmls = "=0.8.1"
+openmls_rust_crypto = "=0.5.1"
+openmls_basic_credential = "=0.5.0"
+openmls_traits = "=0.5.0"
+tls_codec = "0.4"
+blake3 = "1"
+thiserror = "1"
