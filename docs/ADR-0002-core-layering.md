@@ -1,9 +1,9 @@
 # ADR-0002 — The core layer has a foundation, and the foundation is not a pond
 
-**Status:** accepted (2026-08-23). **Context:** E117 Phase 2 lands the first real
-crate in `core/`; the layering must be on record before a second reader
-mis-shelves it. Extends ADR-0001 (one shared functional core, per-pond domain
-cores, thin shells); changes none of it.
+**Status:** accepted (2026-08-23); amended 2026-08-24 (the tree frame).
+**Context:** E117 Phase 2 lands the first real crate in `core/`; the layering
+must be on record before a second reader mis-shelves it. Extends ADR-0001 (one
+shared functional core, per-pond domain cores, thin shells); changes none of it.
 
 ## The two-layer core
 
@@ -26,6 +26,52 @@ A pond answers "what does this app do"; the foundation answers "who is here,
 in what group, with what standing." Mistaking the foundation for a fourth pond
 is how someone one day gives a pond its own copy of membership — the drift
 this ADR exists to refuse.
+
+## The foundation is a tree, and groups are its first-built aspect
+
+(Amended 2026-08-24, from the P4 design session.) The foundation's model is
+the **social tree**, and the tree is person-rooted: the person is the
+proverbial root and literal trunk, and everything else is drawn outward from
+that center — direct connections at radius one, their connections at radius
+two, mutuals as paired symmetry, mutuals-of-mutuals as the shape you can see.
+There is no global tree; every tree is rooted at someone. That is the
+data-model echo of a property the architecture already had epistemically
+(local truth, peer equality — every node folds its own view from its own
+position); the model here catches the data up to the epistemology.
+
+A **group**, in this frame, is a place where several trees' branches
+interweave and agree to shared rules — a derived enclosure with a charter,
+not the primitive. What `social-tree-core` holds today is that group aspect
+(membership, standing, charters, admission): built first because it is the
+hardest part, but one aspect, not the definition. The crate's name names the
+destination. The earlier croft-chat build got this wrong in the other
+direction — it built groups and forgot the person-outward root — and this
+section exists so that mistake is not repeatable by omission.
+
+The **connections aspect** is also foundation-layer, and lands beside the
+fold as its own module(s) under its own plan (discovery E134):
+
+- **edges outward** — follows/mutuals and the radius model (treesocial is
+  this aspect's presentation surface);
+- **vouches/bindings** — the DID↔persona binding as a recorded human act
+  (discovery E120);
+- **capability grants as edge facts** — callability attaches per pair at
+  the rendered-principal seam (the call-core section below); named here,
+  not designed;
+- **personal annotations** — mute and block. These hang on the *edge*,
+  never on the enclosure, so they are cross-group by construction (mute
+  someone for thirty days and it applies across every shared group), and
+  they are local truth — never folded, no quorum, no wire; being
+  local-only, a duration may even be clock-denominated where shared
+  governance facts never may.
+
+Two drifts refused in advance, the same species this ADR already refuses one
+of: a connection must never be modeled as a group (contacts-as-a-group-of-
+two), and a personal annotation must never be bolted into group governance.
+Both would smuggle the enclosure shape into the one place the model says the
+person is the center. The layering above the foundation is unchanged: ponds
+consume both aspects as projections, and chat is the first manifestation of
+the layers on top.
 
 ## Where call-core sits
 

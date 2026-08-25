@@ -5,8 +5,13 @@ top of** the global coding-agents practices (`~/.claude/coding-agents/`) — TDD
 type safety, fail-loud — and add only what is specific here. Git identity:
 chasemp (`chase@owasp.org`, `github-personal`).
 
-**Status: shared core is skeleton; the android app runs and is released.** The
-core (`core/`, `shell/`, `ports/`) has no implementation yet; the **android
+**Status: the shared core is real; the android app runs and is released.**
+`core/social-tree-core` holds the governance fold and the admission
+machinery (E117 P1–P4: CONTESTED, real Ed25519, §7.6.4 removal kinds, the
+token/admission facts), `ports/keylayer-openmls` realizes the KeyLayer port
+on real openmls — both admission paths green end-to-end at loopback
+(`ports/keylayer-openmls/tests/loopback_e2e.rs`); `shell/` is still
+skeleton. The **android
 app** — the inherited croftcall client — builds, launches, and is published as
 **`v0.4.0`** (Latest): camps on **our relay** (`relay.croft.ing:8443`),
 reports the live connection path, redeems exchange invite links (Phase 11

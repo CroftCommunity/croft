@@ -2,7 +2,7 @@
 
 The Croft client. One shared functional core, thin per-platform shells.
 
-**Status: the first core crate is real; the android app runs and is released.**
+**Status: the core is real through P4 — the governance fold plus the admission machinery, with real openmls behind the KeyLayer port (both admission paths green at loopback); the android app runs and is released.**
 `core/social-tree-core` — the Drystone social-tree substrate (the governance
 fold, CONTESTED, charter-quorum resolution, the wire codecs) — landed at E117
 Phase 2, extracted from the discovery corpus's mutation-vetted experiment and

@@ -36,10 +36,13 @@ jobs:
       - name: no-default-features arm
         run: cargo check -p social-tree-core --no-default-features
       - name: clippy, including the disallowed-methods purity lints
-        # -D clippy::all, not -D warnings: the crate's own #![warn(missing_docs)]
-        # outranks a CLI -A (crate attributes beat command-line lint levels), so
-        # "-D warnings -A missing_docs" denied the very lint it named. Purity and
-        # correctness lints are the gate; the docs debt stays a visible warning.
-        run: cargo clippy -p social-tree-core -- -D clippy::all
+        # --force-warn, not -A: the crate's own #![warn(missing_docs)] ratchet
+        # overrides a CLI -A (source attributes win), and -D warnings would then
+        # elevate the docs burn-down into a red gate. force-warn cannot be
+        # overridden from either side — the ratchet stays a warning until the
+        # crate flips it to deny when clean (ADR-0002). (Two sessions diagnosed
+        # the dead -A independently; this form also denies rustc warnings —
+        # unused imports, dead code — which -D clippy::all alone would let pass.)
+        run: cargo clippy -p social-tree-core -- -D warnings --force-warn missing_docs
       - name: fmt
         run: cargo fmt -p social-tree-core -- --check

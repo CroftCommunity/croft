@@ -26,6 +26,7 @@
 #![warn(missing_docs)]
 #![forbid(unsafe_code)]
 
+pub mod admission;
 pub mod charter;
 pub mod metrics;
 pub mod model;
