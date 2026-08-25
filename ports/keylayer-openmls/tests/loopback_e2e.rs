@@ -108,19 +108,27 @@ fn both_admission_paths_end_to_end_at_loopback() {
     // providers hold it. Possession carries no standing weight — the chain
     // fact above is what admits.
     let secret = [0x5A; 32];
-    o_kl.store_token(&token, &secret).expect("O holds the ledger entry");
-    b_kl.store_token(&token, &secret).expect("B holds their token");
+    o_kl.store_token(&token, &secret)
+        .expect("O holds the ledger entry");
+    b_kl.store_token(&token, &secret)
+        .expect("B holds their token");
 
     let slip = authorize_invite_enactment(&b, store.state(&group()))
         .expect("the folded decision mints the slip");
     let b_kp = b_kl.key_package_bytes().expect("B mints a KeyPackage");
-    o_kl.deposit_key_package(b, &b_kp).expect("O holds B's KeyPackage");
-    let artifacts = o_kl.add_with_welcome(slip).expect("the enactment runs on real MLS");
+    o_kl.deposit_key_package(b, &b_kp)
+        .expect("O holds B's KeyPackage");
+    let artifacts = o_kl
+        .add_with_welcome(slip)
+        .expect("the enactment runs on real MLS");
 
-    b_kl.join_from_welcome(&artifacts.welcome).expect("B seats from the Welcome");
+    b_kl.join_from_welcome(&artifacts.welcome)
+        .expect("B seats from the Welcome");
 
     // Proof of seating at AEAD grade: B seals, O opens.
-    let sealed = b_kl.seal(b"hello from the newly seated B").expect("B seals");
+    let sealed = b_kl
+        .seal(b"hello from the newly seated B")
+        .expect("B seals");
     let opened = o_kl.open(&sealed).expect("O opens");
     assert_eq!(opened, b"hello from the newly seated B");
 
@@ -148,15 +156,23 @@ fn both_admission_paths_end_to_end_at_loopback() {
     // TOKEN-RETURN PATH: external commit + PSK → stage → decide → merge →
     // deposit the fact.
     // =====================================================================
-    let gi = o_kl.group_info_with_tree().expect("the served pull artifact");
+    let gi = o_kl
+        .group_info_with_tree()
+        .expect("the served pull artifact");
     let commit_wire = b_kl
         .return_via_external_commit(&gi, &token)
         .expect("B builds the REAL external commit carrying the token");
 
     // The incumbent stages: claims as data, no decision made.
     let claims = o_kl.stage_commit(&commit_wire).expect("the commit stages");
-    assert_eq!(claims.joiner_lineage, b, "the leaf credential resolves to B");
-    assert_eq!(claims.presented_token, token, "the PSK proposal is countable");
+    assert_eq!(
+        claims.joiner_lineage, b,
+        "the leaf credential resolves to B"
+    );
+    assert_eq!(
+        claims.presented_token, token,
+        "the PSK proposal is countable"
+    );
 
     // The core decides against the CHAIN-DERIVED issuance view.
     let issuance = issuance_view(store.log(&group()));
@@ -172,7 +188,8 @@ fn both_admission_paths_end_to_end_at_loopback() {
     let fact = *approval.fact();
 
     // The port merges ONLY with the approval; the fact deposits to the fold.
-    o_kl.merge_admission(approval).expect("the merge seats B's return");
+    o_kl.merge_admission(approval)
+        .expect("the merge seats B's return");
     store
         .ingest(&env(
             0x10,
@@ -229,7 +246,8 @@ fn a_strangers_valid_commit_stages_but_never_seats() {
     // cryptographically flawless external commit with them.
     let leaked = TokenId::new([0x99; 32]);
     let secret = [0x11; 32];
-    o_kl.store_token(&leaked, &secret).expect("incumbent ledger");
+    o_kl.store_token(&leaked, &secret)
+        .expect("incumbent ledger");
     let mut s_kl = OpenMlsKeyLayer::new(stranger);
     s_kl.store_token(&leaked, &secret).expect("leaked bytes");
 
