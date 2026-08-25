@@ -271,7 +271,9 @@ fn a_ban_racing_a_readd_still_contests() {
     );
 
     store.ingest(&c_bans_d).expect("ban folds");
-    store.ingest(&o_readds_d).expect("the second half is the hard-stop");
+    store
+        .ingest(&o_readds_d)
+        .expect("the second half is the hard-stop");
 
     let state = store.state(&group());
     assert!(

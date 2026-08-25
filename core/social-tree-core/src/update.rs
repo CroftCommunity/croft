@@ -179,6 +179,48 @@ fn role_ge_member(r: &Role) -> bool {
     matches!(r, Role::Owner | Role::Admin | Role::Member)
 }
 
+/// The §7.6.4 removal kind carried in a `MembershipRemove` payload's byte 32.
+/// One primitive, distinct artifacts — and the distinction MUST be preserved
+/// (it is the only thing that lets a third party read a departure's
+/// provenance).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RemovalKind {
+    /// Voluntary exit, liveness eviction, or dormancy migration — standing
+    /// intact; deposits no group-authority stamp on the subject's standing.
+    Departure,
+    /// The quorum-stamped standing ceiling: the group stopped corroborating
+    /// this member.
+    Ban,
+}
+
+/// Parse a `MembershipRemove`'s removal kind. Kindless (32-byte) payloads
+/// are the pre-§7.6.4 wire and are refused loudly: a ban that decays to
+/// "unspecified" on old bytes is an illegible record — rebuild, never
+/// reinterpret (WIRE-REGISTER posture).
+fn removal_kind(env: &AssertionEnvelope) -> Result<RemovalKind, FoldError> {
+    if env.payload.len() < 33 {
+        return Err(FoldError::MalformedEnvelope(
+            "MembershipRemove: missing removal-kind byte (§7.6.4 wire is subject ‖ kind)"
+                .to_string(),
+        ));
+    }
+    match env.payload[32] {
+        0x00 => Ok(RemovalKind::Departure),
+        0x01 => Ok(RemovalKind::Ban),
+        b => Err(FoldError::MalformedEnvelope(format!(
+            "MembershipRemove: unknown removal-kind byte {b}"
+        ))),
+    }
+}
+
+/// A voluntary departure: the author removing themself, kind = departure.
+/// Exempt from the remove threshold — the exit floor (Part 1 §2.5).
+fn is_self_departure(env: &AssertionEnvelope) -> bool {
+    env.assertion_type == AssertionType::MembershipRemove
+        && matches!(removal_kind(env), Ok(RemovalKind::Departure))
+        && remove_subject(env).is_some_and(|s| s == env.author_principal)
+}
+
 fn check_authorization(state: &GroupState, env: &AssertionEnvelope) -> Result<(), FoldError> {
     let author = &env.author_principal;
     match &env.assertion_type {
@@ -192,13 +234,40 @@ fn check_authorization(state: &GroupState, env: &AssertionEnvelope) -> Result<()
             ))),
         },
 
-        AssertionType::MembershipRemove => match author_role_in(&state.members, author) {
-            Some(r) if role_ge_admin(r) => Ok(()),
-            _ => Err(FoldError::AuthorizationFailed(format!(
-                "MembershipRemove requires Owner or Admin; author {:?} is not",
-                author
-            ))),
-        },
+        AssertionType::MembershipRemove => {
+            let kind = removal_kind(env)?;
+            let subject = remove_subject(env).ok_or_else(|| {
+                FoldError::MalformedEnvelope("MembershipRemove payload too short".to_string())
+            })?;
+            if &subject == author {
+                // The exit floor (Part 1 §2.5): any member may depart alone —
+                // no role gate, and evaluate skips the remove threshold for
+                // this shape. A self-authored BAN is refused: the ban artifact
+                // carries group authority (§7.6.4's quorum-stamped ceiling),
+                // and no one stamps the group's ceiling on themselves.
+                if kind == RemovalKind::Ban {
+                    return Err(FoldError::AuthorizationFailed(
+                        "a ban carries group authority; a self-authored ban is refused \
+                         (a departure is the self-removal)"
+                            .to_string(),
+                    ));
+                }
+                match author_role_in(&state.members, author) {
+                    Some(_) => Ok(()),
+                    None => Err(FoldError::AuthorizationFailed(format!(
+                        "departure by non-member {author:?}"
+                    ))),
+                }
+            } else {
+                match author_role_in(&state.members, author) {
+                    Some(r) if role_ge_admin(r) => Ok(()),
+                    _ => Err(FoldError::AuthorizationFailed(format!(
+                        "MembershipRemove requires Owner or Admin; author {:?} is not",
+                        author
+                    ))),
+                }
+            }
+        }
 
         AssertionType::RoleGrant | AssertionType::RoleRevoke => {
             match author_role_in(&state.members, author) {
@@ -459,19 +528,14 @@ fn apply_governance(
         }
 
         AssertionType::MembershipRemove => {
-            if env.payload.len() < 32 {
-                return Err(FoldError::MalformedEnvelope(
-                    "MembershipRemove payload too short".to_string(),
-                ));
-            }
+            // Both kinds leave the hot roster; the §7.6.4 distinction is
+            // evidentiary (standing/provenance), read by detection and by the
+            // admission machinery — validated here so a malformed kind never
+            // folds.
+            removal_kind(env)?;
             let mut pid_bytes = [0u8; 32];
             pid_bytes.copy_from_slice(&env.payload[..32]);
             let subject = PrincipalId::new(pid_bytes);
-            // Soft-remove: retain in list but mark with a sentinel role byte.
-            // We keep the entry for history; the edge will be marked present=false.
-            // For GroupState members we actually retain them but the edge marking
-            // communicates absence. However the spec says "soft-remove for history",
-            // so we keep the record.
             next.members.retain(|(p, _, _)| *p != subject);
         }
 
@@ -832,52 +896,87 @@ fn mutual_expulsion_entry(g: &AssertionEnvelope, g_hash: &Hash, partner: Hash) -
 /// Detection sweep for the authorized-path contradiction shapes (both actors survive,
 /// so both facts are authorized): removed-then-included, role thrash, and competing
 /// RuleChange. Canonical entry regardless of which half of the pair arrived second.
+/// How a detected concurrent race on an authorized fact disposes (§7.3.2
+/// vs §7.4.1): a genuine contradiction hard-stops CONTESTED; a provably-
+/// benign race reconciles by canonical replay — convergence either way,
+/// escalation only for the pair that earns it.
+#[derive(Debug, Clone, PartialEq)]
+enum RaceDisposition {
+    /// No concurrent counterpart: plain apply.
+    None,
+    /// Two rival decisions on one slot: the hard-stop.
+    Contested(ContestedEntry),
+    /// A benign non-commutative race (e.g. departure vs re-add): fold the
+    /// full log in canonical order so every arrival order converges.
+    BenignReconcile,
+}
+
 fn detect_authorized_contested(
     log: &[(Hash, AssertionEnvelope)],
     env: &AssertionEnvelope,
     hash: &Hash,
-) -> Option<ContestedEntry> {
+) -> RaceDisposition {
     match env.assertion_type {
         AssertionType::MembershipAdd | AssertionType::MembershipRemove => {
-            detect_removed_then_included(log, env, hash).map(|(partner, remove_hash)| {
-                let subject = if env.assertion_type == AssertionType::MembershipRemove {
-                    remove_subject(env)
-                } else {
-                    add_subject(env)
+            let Some((partner, remove_hash)) = detect_removed_then_included(log, env, hash) else {
+                return RaceDisposition::None;
+            };
+            // §7.3.2's pair is decision-vs-decision on the standing slot, so
+            // only a BAN-kind removal contests a concurrent add. A departure
+            // racing a re-add is §7.4.1's provably-benign case — an ordinary
+            // re-invite crossing an eviction — reconciled, never escalated.
+            let remove_env = if env.assertion_type == AssertionType::MembershipRemove {
+                env
+            } else {
+                match log.iter().find(|(h, _)| *h == remove_hash) {
+                    Some((_, e)) => e,
+                    None => return RaceDisposition::None,
                 }
-                .expect("detection required a well-formed subject");
-                ContestedEntry {
-                    pair: ContestedEntry::order_pair(partner, *hash),
-                    subjects: vec![subject],
-                    excluded: vec![remove_hash],
-                }
+            };
+            if !matches!(removal_kind(remove_env), Ok(RemovalKind::Ban)) {
+                return RaceDisposition::BenignReconcile;
+            }
+            let subject = if env.assertion_type == AssertionType::MembershipRemove {
+                remove_subject(env)
+            } else {
+                add_subject(env)
+            }
+            .expect("detection required a well-formed subject");
+            RaceDisposition::Contested(ContestedEntry {
+                pair: ContestedEntry::order_pair(partner, *hash),
+                subjects: vec![subject],
+                excluded: vec![remove_hash],
             })
         }
         AssertionType::RoleGrant | AssertionType::RoleRevoke => {
-            detect_role_thrash(log, env, hash).map(|(partner, _)| {
+            match detect_role_thrash(log, env, hash) {
+                Some((partner, _)) => {
+                    let mut excluded = vec![partner, *hash];
+                    excluded.sort();
+                    RaceDisposition::Contested(ContestedEntry {
+                        pair: ContestedEntry::order_pair(partner, *hash),
+                        // A role contest does not contest membership (§7.3.2 scopes
+                        // CONTESTED to the membership projection).
+                        subjects: vec![],
+                        excluded,
+                    })
+                }
+                None => RaceDisposition::None,
+            }
+        }
+        AssertionType::RuleChange => match detect_competing_rulechange(log, env, hash) {
+            Some((partner, _)) => {
                 let mut excluded = vec![partner, *hash];
                 excluded.sort();
-                ContestedEntry {
-                    pair: ContestedEntry::order_pair(partner, *hash),
-                    // A role contest does not contest membership (§7.3.2 scopes
-                    // CONTESTED to the membership projection).
-                    subjects: vec![],
-                    excluded,
-                }
-            })
-        }
-        AssertionType::RuleChange => {
-            detect_competing_rulechange(log, env, hash).map(|(partner, _)| {
-                let mut excluded = vec![partner, *hash];
-                excluded.sort();
-                ContestedEntry {
+                RaceDisposition::Contested(ContestedEntry {
                     pair: ContestedEntry::order_pair(partner, *hash),
                     subjects: vec![],
                     excluded,
-                }
-            })
-        }
-        _ => None,
+                })
+            }
+            None => RaceDisposition::None,
+        },
+        _ => RaceDisposition::None,
     }
 }
 
@@ -941,7 +1040,7 @@ fn compute_next_governance_state(
     envelope: &AssertionEnvelope,
     hash: Hash,
     gov_seq: u64,
-    contested_new: Option<ContestedEntry>,
+    disposition: &RaceDisposition,
     fork_opt: Option<ForkStatus>,
 ) -> Result<GroupState, FoldError> {
     let mut ns = if envelope.assertion_type == AssertionType::Resolution {
@@ -980,7 +1079,7 @@ fn compute_next_governance_state(
             ForkStatus::Contested(remaining)
         };
         ns
-    } else if let Some(entry) = &contested_new {
+    } else if let RaceDisposition::Contested(entry) = disposition {
         // A new contradiction joins whatever is already open — set-valued, so two
         // simultaneously open pairs are representable (the retired single slot's
         // structural failure). Replay withholds every open entry's excluded facts
@@ -999,6 +1098,28 @@ fn compute_next_governance_state(
         let mut ns = replay_excluding(log, &excluded, hash, gov_seq)?;
         ns.fork_status = ForkStatus::Contested(entries);
         ns
+    } else if matches!(disposition, RaceDisposition::BenignReconcile) {
+        // §7.4.1's provably-benign race (e.g. a departure crossing a re-add):
+        // non-commutative but no contradiction, so convergence comes from the
+        // canonical order instead of a hard-stop — fold the full log plus this
+        // fact in merge_cmp order, withholding only what resolutions and open
+        // contests already exclude. Every arrival order computes this same fold.
+        let entries: Vec<ContestedEntry> = current_state.contested_entries().to_vec();
+        let mut excluded: Vec<Hash> = resolved_excluded(log);
+        for e in &entries {
+            excluded.extend_from_slice(&e.excluded);
+        }
+        excluded.sort();
+        excluded.dedup();
+        let mut full: Vec<(Hash, AssertionEnvelope)> = log.to_vec();
+        full.push((hash, envelope.clone()));
+        let mut ns = replay_excluding(&full, &excluded, hash, gov_seq)?;
+        ns.fork_status = if entries.is_empty() {
+            current_state.fork_status.clone()
+        } else {
+            ForkStatus::Contested(entries)
+        };
+        ns
     } else if envelope.assertion_type == AssertionType::GroupGenesis {
         genesis_initial_state(envelope, hash)?
     } else {
@@ -1007,7 +1128,7 @@ fn compute_next_governance_state(
 
     // A slot-collision fork or under-determination never overrides a detected
     // contradiction (all are hard-stops; the contradiction is the precise one).
-    if contested_new.is_none() {
+    if !matches!(disposition, RaceDisposition::Contested(_)) {
         if let Some(ref fs) = fork_opt {
             ns.fork_status = fs.clone();
         }
@@ -1127,7 +1248,7 @@ pub fn evaluate(
 
     // Authorization at position, with the mutual-expulsion carve-out: the second
     // half of A⊗B is a hard-stop, not a plain rejection.
-    let contested_new: Option<ContestedEntry> = match check_authorization(&current_state, env) {
+    let disposition: RaceDisposition = match check_authorization(&current_state, env) {
         Ok(()) => {
             if matches!(
                 env.assertion_type,
@@ -1139,18 +1260,24 @@ pub fn evaluate(
             ) {
                 detect_authorized_contested(ctx.governance_log, env, &hash)
             } else {
-                None
+                RaceDisposition::None
             }
         }
         Err(e) => {
-            let entry = if env.assertion_type == AssertionType::MembershipRemove {
+            // The carve-out is for the BAN pair only (§7.3.2's A⊗B is mutual
+            // expulsion — group authority against group authority). A
+            // departure-kind removal failing authorization is the boring
+            // §7.5.1 case, and a malformed one refuses on its own error.
+            let entry = if env.assertion_type == AssertionType::MembershipRemove
+                && matches!(removal_kind(env), Ok(RemovalKind::Ban))
+            {
                 detect_mutual_expulsion(ctx.governance_log, env, &hash)
                     .map(|partner| mutual_expulsion_entry(env, &hash, partner))
             } else {
                 None
             };
             match entry {
-                Some(en) => Some(en),
+                Some(en) => RaceDisposition::Contested(en),
                 None => return Err(e),
             }
         }
@@ -1180,7 +1307,9 @@ pub fn evaluate(
     }
 
     // k-of-n threshold (V5′): distinct approver personae, counted by lineage.
-    if is_governance(&env.assertion_type) {
+    // A self-departure is exempt — the exit floor (Part 1 §2.5): a quorum on
+    // leaving would let the group configure away the right to leave.
+    if is_governance(&env.assertion_type) && !is_self_departure(env) {
         if let Some(subject) = act_subject(env) {
             let required = threshold_for(&env.assertion_type, &current_state.rules);
             if required > 1 {
@@ -1234,7 +1363,7 @@ pub fn evaluate(
         env,
         hash,
         slot.target_seq,
-        contested_new,
+        &disposition,
         fork_opt,
     )?;
     metrics.fact_folded();

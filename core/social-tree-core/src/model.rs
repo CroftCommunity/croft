@@ -476,10 +476,16 @@ pub struct MembershipAddPayload {
     pub role: Role,
 }
 
-/// Removes a principal from a group.
+/// Removes a principal from a group's hot roster. Wire: subject(32) ‖
+/// kind(1) — the §7.6.4 artifact distinction: 0x00 = departure (voluntary,
+/// eviction, migration; standing intact), 0x01 = ban (the quorum-stamped
+/// standing ceiling). Kindless payloads are refused by the fold.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MembershipRemovePayload {
+    /// The principal removed.
     pub subject: PrincipalId,
+    /// The §7.6.4 removal-kind byte (0x00 departure, 0x01 ban).
+    pub kind: u8,
 }
 
 /// Grants a principal a new role within a group.

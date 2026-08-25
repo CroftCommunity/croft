@@ -135,7 +135,11 @@ fn add_payload(subject: u8, role: u8) -> Vec<u8> {
 }
 
 fn remove_payload(subject: u8) -> Vec<u8> {
-    PrincipalId::new([subject; 32]).as_bytes().to_vec()
+    // Every removal in these pins is a BAN (§7.6.4 kind 0x01): mutual
+    // expulsion and ban-vs-readd are standing contests by construction.
+    let mut p = PrincipalId::new([subject; 32]).as_bytes().to_vec();
+    p.push(0x01);
+    p
 }
 
 fn resolution_payload(a: Hash, b: Hash) -> Vec<u8> {
