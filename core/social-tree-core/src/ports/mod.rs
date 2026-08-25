@@ -396,3 +396,6 @@ pub mod mocks {
 
 #[cfg(feature = "ed25519")]
 pub mod ed25519;
+
+/// The key-layer port (ADR-0003): artifact carrier, never a decision.
+pub mod keylayer;

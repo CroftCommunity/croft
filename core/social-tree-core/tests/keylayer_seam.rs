@@ -102,7 +102,10 @@ fn the_seam_deposits_exactly_the_fact_the_decision_minted() {
     let claims = kl
         .stage_commit(&wire_for(joiner, token))
         .expect("well-formed commit stages");
-    assert_eq!(claims.joiner_lineage, joiner, "claims are data from the wire");
+    assert_eq!(
+        claims.joiner_lineage, joiner,
+        "claims are data from the wire"
+    );
 
     // The core decides; the port had no say.
     let issuance = [IssuanceFact {
@@ -194,9 +197,9 @@ fn an_approval_for_an_unstaged_commit_does_not_merge() {
     let approval = evaluate_admission(&claims, &ctx).unwrap();
 
     let mut other_kl = MemKeyLayer::new();
-    let err = other_kl
-        .merge_admission(approval)
-        .expect_err("an approval names an event; without the staged commit there is nothing to merge");
+    let err = other_kl.merge_admission(approval).expect_err(
+        "an approval names an event; without the staged commit there is nothing to merge",
+    );
     assert!(matches!(err, KeyLayerError::UnknownCommit(_)));
     assert!(other_kl.deposited.is_empty());
 }
