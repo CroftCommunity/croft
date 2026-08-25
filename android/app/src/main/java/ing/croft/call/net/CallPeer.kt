@@ -80,6 +80,15 @@ class CallPeer(
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state
 
+    /** The endpoint's HOME RELAY url, polled while bound — null when the
+     *  relay attach has not succeeded (E130: under enforce a refused camp
+     *  must not read as camped). Poll, not watchHomeRelay(): the ffi's
+     *  callbacks need a Tokio reactor this process does not run (the
+     *  conn.watchPaths() lesson, runbook 2026-08-17). */
+    private val _homeRelay = MutableStateFlow<String?>(null)
+    val homeRelay: StateFlow<String?> = _homeRelay
+    private var relayPoll: Job? = null
+
     private var endpoint: Endpoint? = null
     private var pathPoll: Job? = null
 
@@ -206,6 +215,17 @@ class CallPeer(
                 identity.saveSecretKey(ep.secretKey().toBytes())
                 endpoint = ep
                 _state.value = State.Ready(ep.id().toString())
+                relayPoll?.cancel()
+                relayPoll = scope.launch(Dispatchers.IO) {
+                    while (endpoint === ep) {
+                        val url = try { ep.addr().relayUrl() } catch (t: Throwable) { null }
+                        if (_homeRelay.value != url) {
+                            Log.i(TAG, "home relay: ${url ?: "NOT ATTACHED"}")
+                            _homeRelay.value = url
+                        }
+                        delay(3_000)
+                    }
+                }
                 acceptLoop(ep)
             } catch (t: Throwable) {
                 _state.value = State.Failed("bind failed: ${t.message}")
@@ -289,6 +309,9 @@ class CallPeer(
         activeConn = null
         pathPoll?.cancel()
         pathPoll = null
+        relayPoll?.cancel()
+        relayPoll = null
+        _homeRelay.value = null
         scope.launch(Dispatchers.IO) {
             try { ep.shutdown() } catch (_: Throwable) {}
             _state.value = State.Idle

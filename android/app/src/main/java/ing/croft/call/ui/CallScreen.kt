@@ -35,6 +35,7 @@ fun CallScreen(vm: MainViewModel) {
     val callabilityState by vm.callabilityState.collectAsState()
     val authStatus by vm.authStatus.collectAsState()
     val campStatus by vm.campStatus.collectAsState()
+    val homeRelay by vm.peer.homeRelay.collectAsState()
     var handleInput by remember { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
 
@@ -154,14 +155,16 @@ fun CallScreen(vm: MainViewModel) {
                 val label = when (val s = state) {
                     State.Idle -> "line closed"
                     State.Binding -> "binding endpoint…"
-                    is State.Ready -> "ready, camped on relay"
+                    // E130: the camped claim comes from the polled home-relay
+                    // truth, never from Ready alone.
+                    is State.Ready -> ing.croft.call.net.CampPresence.line(homeRelay)
                     is State.Dialing -> "dialing…"
                     is State.Connected ->
                         "connected (${s.direction}, ${s.path})" + (s.peerHello?.let { "  $it" } ?: "")
                     is State.Failed -> s.message
                     // E129: how the call ended, in the mapper's words — and
                     // still camped, still callable.
-                    is State.Ended -> "${s.message} — ready, camped on relay"
+                    is State.Ended -> "${s.message} — ${ing.croft.call.net.CampPresence.line(homeRelay)}"
                 }
                 Text(label, style = MaterialTheme.typography.bodySmall)
             }

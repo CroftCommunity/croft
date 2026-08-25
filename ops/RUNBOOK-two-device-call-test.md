@@ -442,3 +442,34 @@ refresh race, worth observing cleanly next time); the identity-proof
 CAMP on a device where the account HAS published the endpoint is proven
 (the Samsung); production enforce flip remains owner-gated on the
 croft-admit activation prerequisites.
+
+## §13 — the next phone session: v0.5.0 on devices + the production BAKE (prepared 2026-08-24)
+
+Production is already baking (croft-stack `ec267f3` converged): the
+relay runs the **v0.2.0 candidate** in OPEN mode with the PRODUCTION
+admit key; croft-admit + ciss-admit are ACTIVE on the box (loopback);
+`admit.croft.ing` DNS is the one owner-console step left (A
+15.204.81.133 / AAAA 2604:2dc0:222::431 — currently parked at
+Porkbun; the admit vhost's cert issues itself once it resolves).
+
+1. **Owner: promote `v0.5.0-rc.1` → v0.5.0 Latest** (ops/RELEASING.md),
+   then install on BOTH phones (production defaults — no gradle
+   overrides this time; the client's ADMIT_BASE needs `admit.croft.ing`
+   resolving first).
+2. **The bake validation (M4d(c), at last)**: sign the Samsung in as the
+   callee; expect the camp mint against the PRODUCTION admit and
+   `admitted … sponsorship=…` in the PRODUCTION relay journal — calls
+   work exactly as v0.4.0, now attributed. Dial from the Pixel: dial
+   mint + attribution for the caller too.
+3. **E130(a) device verification**: the honest camped line is polled
+   from `endpoint.addr().relayUrl()` (landed under tests; the poll
+   pattern is proven but the REFUSED-attach semantics of relayUrl()
+   are javap-verified only). Point one phone at staging 8444 signed-out:
+   the line must read "ready — NOT camped on relay; calls cannot reach
+   this device" while staging refuses, and flip to camped after sign-in.
+4. **E130(b) while there**: observe the caller-side camp refusal
+   cleanly (the race no longer masks it): a signed-in account with NO
+   published endpoint record for the device should show the
+   `endpoint_unbound` words from the camp mint and still dial fine.
+5. After a few days of clean bake journal, the flip is one word —
+   owner-gated, out of this runbook.
