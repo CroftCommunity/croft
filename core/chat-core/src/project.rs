@@ -202,3 +202,53 @@ mod tests {
         assert_eq!(project(&model).draft, "typing…");
     }
 }
+
+#[cfg(test)]
+mod p6_tests {
+    use super::project;
+    use crate::model::{MemberRow, MessageLine, Model, Standing};
+    use social_tree_core::model::PrincipalId;
+
+    fn pid(seed: u8) -> PrincipalId {
+        PrincipalId::new([seed; 32])
+    }
+
+    /// **A muted author's lines render marked, never silently dropped** —
+    /// hiding the fact of a message would be lying by omission; the shell
+    /// collapses marked lines.
+    #[test]
+    fn muted_authors_lines_are_marked_not_dropped() {
+        let mut model = Model::default();
+        model.muted.insert(pid(0xB));
+        model.timeline = vec![
+            MessageLine { lamport: 1, author: "a".into(), author_principal: Some(pid(0xA)), body: "keep".into() },
+            MessageLine { lamport: 2, author: "b".into(), author_principal: Some(pid(0xB)), body: "muted".into() },
+        ];
+        let view = project(&model);
+        assert_eq!(view.timeline.lines.len(), 2, "nothing dropped");
+        assert!(!view.timeline.lines[0].muted);
+        assert!(view.timeline.lines[1].muted, "the muted author's line is marked");
+    }
+
+    /// **The members pane projects standing as words the product committed
+    /// to** — "pending resolution" for CONTESTED (E108), "admission
+    /// voided" for the ceiling (E116) — plus the mute marker on the row.
+    #[test]
+    fn members_pane_carries_standing_and_mute() {
+        let mut model = Model::default();
+        model.muted.insert(pid(0xB));
+        model.members = vec![
+            MemberRow { principal: pid(0xA), role: "owner".into(), standing: Standing::Seated },
+            MemberRow { principal: pid(0xB), role: "member".into(), standing: Standing::PendingResolution },
+            MemberRow { principal: pid(0xC), role: "member".into(), standing: Standing::Voided },
+        ];
+        let view = project(&model);
+        let rows = &view.members.rows;
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].standing_label, "");
+        assert_eq!(rows[1].standing_label, "membership pending resolution");
+        assert_eq!(rows[2].standing_label, "admission voided");
+        assert!(rows[1].muted, "the mute marker rides the row");
+        assert!(!rows[0].muted);
+    }
+}
