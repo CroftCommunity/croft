@@ -77,6 +77,17 @@ build, never reuse.
 
 ## Current
 
+- `v0.5.0-rc.1` — Phase 11 M4: call-time admission, client side complete
+  (mint-at-dial, camp-at-attach with the pass as the cache, the three
+  call-endings with words, the refresh-rotation race fix). Cut 2026-08-24
+  from the same-day §12 enforce rehearsal: every rung green on hardware —
+  signed-out camp refused, self-minted camping pass admitted with
+  sponsorship attribution, the first call with both sides holding passes
+  on an enforcing relay, the endings' words verbatim on both screens,
+  sign-out refused again (runbook §12). On promote → `v0.5.0`. Note: §12
+  ran a local debug build of this commit; promotion wants the published
+  candidate APK itself through the two-device test (the production-flip
+  bake, walk step 5).
 - `v0.4.0` (Latest) — Phase 11 M2+M3: identity proof (atproto OAuth
   sign-in → `provenDid`) and the derived callability line on the callee
   card. Promoted 2026-08-18 from `v0.4.0-rc.1`, which was cut 2026-08-17

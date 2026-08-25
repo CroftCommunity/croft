@@ -10,17 +10,36 @@ to the environment and why*.
 
 ## [Unreleased]
 
-Phase 11 **M4 in progress** (plan: `plans/2026-08-20-1-plan-m4-call-time-admission.md`).
-M4a + M4b landed 2026-08-20; M4c (mint-at-dial, `authToken` on the wire) is next.
-
-M4c (mint-at-dial) and M4d's first device run landed 2026-08-21: the
-whole lifecycle — real mint from a phone, minted-token dial, live
-revocation refusing with words, restore-and-recover — validated on real
-devices (runbook §11). Remaining before promotion: the enforce rung
-(needs a TLS staging relay or admit activation, shared with O1), the
-identity-proof mint on-device, attribution, the three call-endings.
+Phase 11 **M4 — the client side is complete and device-validated**
+(plan: `plans/2026-08-20-1-plan-m4-call-time-admission.md`). M4a + M4b
+landed 2026-08-20; M4c (mint-at-dial) and M4d's first device runs landed
+2026-08-21 (runbook §11: real mint from a phone, minted-token dial, live
+revocation refused with words, identity-proof mint on-device). M4e
+(camp-at-attach) landed under tests 2026-08-23, the three call-endings
+(E129) the same day, and the **§12 enforce rehearsal ran 2026-08-24 with
+every rung green on hardware**: the signed-out camp refused, sign-in →
+self-minted camping pass → admitted with attribution, the first call
+with both sides holding passes on an enforcing relay, the endings'
+words verbatim on both screens, and the sign-out negative. versionCode 5,
+versionName 0.5.0. Remaining M4 distance is operational (croft-admit
+activation, the production enforce flip — croft-stack `TODO.md`) plus
+the §12 finds (E130: optimistic-Ready honesty, caller-side camp
+posture).
 
 ### Added (M4, unreleased)
+- **M4e camp-at-attach: the callee mints its own pass.** `CampAdmission` +
+  `Admit.campToken` + the ViewModel trigger at attach: the pass is cached
+  by the wire's `expiresIn` (the JWT stays opaque, decision D3), expiry
+  re-mints, and a refusal camps tokenless WITH words — the relay stays the
+  gate. The camp journey covers the full arc: OAuth session →
+  method-bound proof → mint → cache → expiry re-mint → revocation →
+  outage.
+- **The three call-endings (E129), each with words.** The app holds the
+  live `Connection` and a `closed()`-watcher ends the state honestly —
+  hang up ("you ended the call"), the remote end, and error each land on
+  screen; before it, a remote ending left the UI stuck at Connected.
+  Ended keeps the endpoint bound: still camped, still callable. The
+  endings' words were read verbatim on both phones in §12.
 - `DialAdmission` + mint-at-dial in `dialCallee`: refusals never dial and
   say why; an admit outage dials tokenless with a note (the relay is the
   gate); v1 callees dial exactly as before. `CallPeer.rebindWithToken`
@@ -45,6 +64,16 @@ identity-proof mint on-device, attribution, the three call-endings.
   `getServiceAuth` requires an RPC permission the bare scope lacks, and
   bsky.social does not yet advertise granular `rpc:` scopes (plan O2,
   resolved from PDS source). Existing sessions must re-sign-in to mint.
+
+### Fixed (M4, unreleased)
+- **The refresh-token race the §12 run earned.** The foreground
+  best-effort refresh and the camp mint's before-mint refresh raced the
+  SINGLE-USE refresh token; the entryway answered 400 invalid_grant
+  ("refresh token rotated concurrently") and the loser's mint died.
+  Found on hardware, reproduced RED in the workflow harness (the fixture
+  now enforces single-use rotation exactly like the entryway), fixed by
+  serializing `freshAccessToken` behind a mutex with a double-check so
+  the loser rides the winner's fresh pair.
 
 ### Added
 - Repo skeleton: shared-core/per-platform-shell layout (`core/`, `shell/`,
