@@ -77,17 +77,28 @@ fn clean_context(issuance: &[IssuanceFact]) -> AdmissionContext<'_> {
 fn clean_cross_check_mints_the_approval_carrying_the_fact() {
     let joiner = lineage(0xA1);
     let t = token(0x11);
-    let issuance = [IssuanceFact { token: t, lineage: joiner, revoked: false }];
+    let issuance = [IssuanceFact {
+        token: t,
+        lineage: joiner,
+        revoked: false,
+    }];
     let ctx = clean_context(&issuance);
 
-    let approval = evaluate_admission(&claims_for(joiner, t), &ctx)
-        .expect("a clean cross-check admits");
+    let approval =
+        evaluate_admission(&claims_for(joiner, t), &ctx).expect("a clean cross-check admits");
 
     let fact = approval.fact();
-    assert_eq!(fact.event, Hash::new([0xC0; 32]), "the event IS the commit's content address");
+    assert_eq!(
+        fact.event,
+        Hash::new([0xC0; 32]),
+        "the event IS the commit's content address"
+    );
     assert_eq!(fact.merged_lineage, joiner);
     assert_eq!(fact.redeemed_token, t);
-    assert_eq!(fact.acceptor_frontier, 41, "the frontier commitment rides the fact");
+    assert_eq!(
+        fact.acceptor_frontier, 41,
+        "the frontier commitment rides the fact"
+    );
 }
 
 /// **Pin 2 — holding bytes is not holding a fact (S24 arm d).**
@@ -115,7 +126,11 @@ fn a_token_with_no_issuance_fact_is_refused() {
 fn a_revoked_issuance_is_refused() {
     let joiner = lineage(0xA1);
     let t = token(0x11);
-    let issuance = [IssuanceFact { token: t, lineage: joiner, revoked: true }];
+    let issuance = [IssuanceFact {
+        token: t,
+        lineage: joiner,
+        revoked: true,
+    }];
     let ctx = clean_context(&issuance);
 
     let refusal = evaluate_admission(&claims_for(joiner, t), &ctx)
@@ -134,11 +149,15 @@ fn anothers_token_is_refused_as_lineage_mismatch() {
     let issued_to = lineage(0xA1);
     let bearer = lineage(0xB2);
     let t = token(0x11);
-    let issuance = [IssuanceFact { token: t, lineage: issued_to, revoked: false }];
+    let issuance = [IssuanceFact {
+        token: t,
+        lineage: issued_to,
+        revoked: false,
+    }];
     let ctx = clean_context(&issuance);
 
-    let refusal = evaluate_admission(&claims_for(bearer, t), &ctx)
-        .expect_err("possession is not personhood");
+    let refusal =
+        evaluate_admission(&claims_for(bearer, t), &ctx).expect_err("possession is not personhood");
     assert_eq!(refusal, AdmissionRefusal::LineageMismatch { issued_to });
 }
 
@@ -152,7 +171,11 @@ fn anothers_token_is_refused_as_lineage_mismatch() {
 fn a_banned_subject_is_refused_on_standing() {
     let joiner = lineage(0xA1);
     let t = token(0x11);
-    let issuance = [IssuanceFact { token: t, lineage: joiner, revoked: false }];
+    let issuance = [IssuanceFact {
+        token: t,
+        lineage: joiner,
+        revoked: false,
+    }];
     let ctx = AdmissionContext {
         subject_standing: SubjectStanding::Excluded,
         ..clean_context(&issuance)
@@ -174,7 +197,11 @@ fn a_banned_subject_is_refused_on_standing() {
 fn a_contested_subject_is_refused_without_a_verdict() {
     let joiner = lineage(0xA1);
     let t = token(0x11);
-    let issuance = [IssuanceFact { token: t, lineage: joiner, revoked: false }];
+    let issuance = [IssuanceFact {
+        token: t,
+        lineage: joiner,
+        revoked: false,
+    }];
     let ctx = AdmissionContext {
         subject_standing: SubjectStanding::Contested,
         ..clean_context(&issuance)
@@ -195,7 +222,11 @@ fn a_contested_subject_is_refused_without_a_verdict() {
 fn an_uncorroborated_evaluator_stalls_and_admits_exactly_at_k() {
     let joiner = lineage(0xA1);
     let t = token(0x11);
-    let issuance = [IssuanceFact { token: t, lineage: joiner, revoked: false }];
+    let issuance = [IssuanceFact {
+        token: t,
+        lineage: joiner,
+        revoked: false,
+    }];
 
     // member_count = 5 → k = 3. At freshness 2: stalled, fail closed.
     let stalled_ctx = AdmissionContext {
