@@ -13,9 +13,12 @@ pub mod project;
 pub mod update;
 pub mod view;
 
-pub use model::{ChannelRef, Effect, GroupRef, Intent, MessageLine, Model, Snapshot};
+pub use model::{
+    ChannelRef, Effect, GroupRef, Intent, MemberRow, MessageLine, Model, Snapshot, Standing,
+};
 pub use project::project;
 pub use update::update;
 pub use view::{
-    ChannelNode, ChatView, GraphTreeView, GroupNode, TimelineLineView, TimelineView, TreeRow,
+    ChannelNode, ChatView, GraphTreeView, GroupNode, MemberRowView, MembersPaneView,
+    TimelineLineView, TimelineView, TreeRow,
 };
