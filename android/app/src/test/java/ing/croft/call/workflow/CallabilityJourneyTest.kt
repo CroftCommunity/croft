@@ -44,13 +44,37 @@ class CallabilityJourneyTest {
         )
     }
 
-    private suspend fun callability(fx: FixtureExchange, provenDid: String?) =
-        Callability.resolve(
-            Rewired(UrlHttp, fx.base),
-            principal = "callee.example",
-            context = CallerContext(provenDid = provenDid),
-            now = 1_700_000_000_000L,
-        )
+    private suspend fun callability(
+        fx: FixtureExchange,
+        provenDid: String?,
+        secret: String? = null,
+    ) = Callability.resolve(
+        Rewired(UrlHttp, fx.base),
+        principal = "callee.example",
+        context = CallerContext(provenDid = provenDid, secret = secret),
+        now = 1_700_000_000_000L,
+    )
+
+    /** E127: a just-redeemed ticket holder must derive Callable from the
+     *  RETAINED secret alone — signed out, no identity. Observed on-device
+     *  as MayNotPermit because the lookup never carried the secret. */
+    @Test
+    fun `a retained ticket secret alone derives Callable — no identity needed`() = runBlocking {
+        fixture().use { fx ->
+            fx.putGrant(
+                calleeDid, "party",
+                JSONObject().put(
+                    "matcher",
+                    JSONObject()
+                        .put("type", "ticket")
+                        .put("secretHash", ing.croft.call.caps.Tickets.sha256Hex("open sesame")),
+                ),
+            )
+            val state = callability(fx, provenDid = null, secret = "open sesame")
+            val callable = state as Callability.State.Callable
+            org.junit.Assert.assertEquals("party", callable.grant)
+        }
+    }
 
     @Test
     fun `signed in and listed - callable, and the mint agrees`() = runBlocking {

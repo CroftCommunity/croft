@@ -55,10 +55,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val callability = CallabilityStatus(UrlHttp)
     val callabilityState: StateFlow<ing.croft.call.caps.Callability.State?> = callability.state
 
-    private fun resolveCallability(principal: String) {
+    private fun resolveCallability(principal: String, secret: String? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val r = callability.lookup(principal, provenDid = auth.provenDid.value)
+                // E127: a just-redeemed ticket carries its secret into the
+                // derivation, so the callee card says Callable instead of
+                // MayNotPermit for the very grant that was just redeemed.
+                val r = callability.lookup(principal, provenDid = auth.provenDid.value, secret = secret)
                 Log.i(
                     "CroftCall",
                     "callability for $principal: ${r.state}" + if (r.fromCache) " (cached)" else "",
@@ -153,7 +156,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val r = Redeem.redeemTicket(UrlHttp, link, now = System.currentTimeMillis())
                 Log.i("CroftCall", "redeemed ${r.grant} for ${r.did}: device=${r.device}")
-                resolveCallability(r.did)
+                resolveCallability(r.did, secret = r.secret)
                 _callee.value = Callee(
                     endpointId = r.endpointId,
                     relayUrl = r.homeRelay.ifEmpty { null },
