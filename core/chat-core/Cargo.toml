@@ -1,0 +1,13 @@
+# The chat pond (E117 P5): group-chat-core moved onto the core — a pond
+# beside call-core and feed-core per ADR-0002's symmetry. Pure: depends on
+# social-tree-core for substrate types and nothing else (the vestigial
+# tracing dep did not make the move; zero uses).
+[package]
+name = "chat-core"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "The Croft chat pond: Intent/Effect/update/project over the social tree"
+
+[dependencies]
+social-tree-core = { path = "../social-tree-core", default-features = false }

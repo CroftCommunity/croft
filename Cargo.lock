@@ -157,6 +157,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "chat-core"
+version = "0.1.0"
+dependencies = [
+ "social-tree-core",
+]
+
+[[package]]
 name = "cipher"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
