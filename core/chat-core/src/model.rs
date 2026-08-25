@@ -4,7 +4,9 @@
 //! it has read from the `Session` (via [`Intent::Refresh`]) and performs the
 //! emitted [`Effect`]s against the `Session`.
 
-use social_tree_core::model::{GroupId, TypedId};
+use std::collections::BTreeSet;
+
+use social_tree_core::model::{GroupId, PrincipalId, TypedId};
 
 /// A group as shown in the left-pane tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,6 +31,31 @@ pub struct ChannelRef {
     pub name: String,
 }
 
+/// A member's standing as the fold holds it — the panel renders these as
+/// the words the product committed to, and never a cleaner list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Standing {
+    /// Seated: an ordinary member.
+    Seated,
+    /// The subject of an open contradiction (E108's CONTESTED): rendered
+    /// "membership pending resolution".
+    PendingResolution,
+    /// Under the standing ceiling (§7.6.4 ban): rendered "admission voided"
+    /// (E116's legibility obligation).
+    Voided,
+}
+
+/// One row of the truthful membership panel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemberRow {
+    /// The member's principal.
+    pub principal: PrincipalId,
+    /// Role label as the read surface reports it.
+    pub role: String,
+    /// Standing, as data.
+    pub standing: Standing,
+}
+
 /// One rendered message line in the timeline.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MessageLine {
@@ -36,6 +63,9 @@ pub struct MessageLine {
     pub lamport: u64,
     /// Author label.
     pub author: String,
+    /// The author's principal, when known — what the personal mute (E134)
+    /// keys on; `None` for optimistic local lines.
+    pub author_principal: Option<PrincipalId>,
     /// Message body.
     pub body: String,
 }
@@ -65,6 +95,12 @@ pub struct Model {
     /// flagged). The shell shows this as a blocking banner and does not present a
     /// silent winner (the §7.6 hard-stop).
     pub fork: Option<String>,
+    /// The selected group's membership panel — the fold's truth, standing
+    /// included.
+    pub members: Vec<MemberRow>,
+    /// Personal mute set (E134): an annotation on the edge, cross-group by
+    /// construction, local truth — never folded, never sent.
+    pub muted: BTreeSet<PrincipalId>,
 }
 
 /// A read-only snapshot the shell pushes into the model on refresh.
@@ -82,6 +118,8 @@ pub struct Snapshot {
     pub timeline: Vec<MessageLine>,
     /// Fork status of `group` (`Some` when contradicted).
     pub fork: Option<String>,
+    /// The membership panel rows for `group`.
+    pub members: Vec<MemberRow>,
 }
 
 /// Things the user (or shell) asks the core to do.
@@ -99,6 +137,10 @@ pub enum Intent {
     SendMessage,
     /// Adopt fresh data read from the session.
     Refresh(Snapshot),
+    /// Flip the personal mute for a principal (E134: local truth).
+    ToggleMute(PrincipalId),
+    /// Seed the mute set from what the shell persisted (startup).
+    SetMuted(Vec<PrincipalId>),
 }
 
 /// Side effects the shell performs against the `Session`.
@@ -120,4 +162,7 @@ pub enum Effect {
         /// Channel to load (`None` = group-level).
         channel: Option<TypedId>,
     },
+    /// Persist the mute set (the shell owns durability; the pond owns the
+    /// decision). Sorted, so persistence is deterministic.
+    PersistMuted(Vec<PrincipalId>),
 }

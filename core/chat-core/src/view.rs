@@ -3,7 +3,7 @@
 //! These are what a renderer (the ratatui shell, or a test backend) draws — no
 //! ratatui types here, so the projection is testable without a terminal.
 
-use social_tree_core::model::{GroupId, TypedId};
+use social_tree_core::model::{GroupId, PrincipalId, TypedId};
 
 /// The whole rendered chat surface.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,6 +17,29 @@ pub struct ChatView {
     /// Set when the selected group is forked — the shell renders a blocking
     /// banner and refuses to present a silent winner.
     pub fork: Option<String>,
+    /// The truthful membership panel for the selected group.
+    pub members: MembersPaneView,
+}
+
+/// The membership panel: the fold's roster with standing spelled out.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MembersPaneView {
+    /// Rows in roster order.
+    pub rows: Vec<MemberRowView>,
+}
+
+/// One rendered member row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemberRowView {
+    /// The member's principal (the shell shortens for display).
+    pub principal: PrincipalId,
+    /// Role label.
+    pub role: String,
+    /// Standing, in the words the product committed to: empty for seated,
+    /// "membership pending resolution" (E108), "admission voided" (E116).
+    pub standing_label: String,
+    /// Whether this session's user has personally muted the member (E134).
+    pub muted: bool,
 }
 
 /// Left-pane tree: a flat, render-and-navigate-ready row list. Channels of the
@@ -76,4 +99,7 @@ pub struct TimelineLineView {
     pub body: String,
     /// True while the line is an unconfirmed optimistic local send.
     pub pending: bool,
+    /// True when the author is personally muted — the line renders MARKED
+    /// (the shell collapses it), never silently dropped.
+    pub muted: bool,
 }

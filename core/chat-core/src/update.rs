@@ -56,6 +56,7 @@ pub fn update(mut model: Model, intent: Intent) -> (Model, Vec<Effect>) {
                     model.timeline.push(MessageLine {
                         lamport: MessageLine::OPTIMISTIC,
                         author: "me".to_string(),
+                        author_principal: None,
                         body: body.clone(),
                     });
                     let channel = model.selected_channel;
@@ -73,6 +74,17 @@ pub fn update(mut model: Model, intent: Intent) -> (Model, Vec<Effect>) {
                 _ => (model, vec![]),
             }
         }
+        Intent::ToggleMute(principal) => {
+            if !model.muted.remove(&principal) {
+                model.muted.insert(principal);
+            }
+            let persisted: Vec<_> = model.muted.iter().copied().collect();
+            (model, vec![Effect::PersistMuted(persisted)])
+        }
+        Intent::SetMuted(muted) => {
+            model.muted = muted.into_iter().collect();
+            (model, vec![])
+        }
         Intent::Refresh(snapshot) => {
             model.groups = snapshot.groups;
             model.channels = snapshot.channels;
@@ -80,6 +92,7 @@ pub fn update(mut model: Model, intent: Intent) -> (Model, Vec<Effect>) {
             // the selected group (a contradiction must not be silently dropped).
             if snapshot.group == model.selected_group {
                 model.fork = snapshot.fork;
+                model.members = snapshot.members;
             }
             // Only adopt the timeline if the snapshot is for the selected
             // group *and* channel; a stale/mismatched snapshot is dropped.
@@ -162,6 +175,7 @@ mod tests {
             timeline: vec![MessageLine {
                 lamport: 1,
                 author: "x".into(),
+                author_principal: None,
                 body: "old".into(),
             }],
             ..Model::default()
@@ -188,6 +202,7 @@ mod tests {
             timeline: vec![MessageLine {
                 lamport: 1,
                 author: "keep".into(),
+                author_principal: None,
                 body: "keep".into(),
             }],
             ..Model::default()
@@ -205,9 +220,11 @@ mod tests {
             timeline: vec![MessageLine {
                 lamport: 2,
                 author: "wrong".into(),
+                author_principal: None,
                 body: "wrong".into(),
             }],
             fork: None,
+            members: vec![],
         };
         let (model, effects) = update(model, Intent::Refresh(snapshot));
         assert!(effects.is_empty());
@@ -230,9 +247,11 @@ mod tests {
             timeline: vec![MessageLine {
                 lamport: 7,
                 author: "a".into(),
+                author_principal: None,
                 body: "new".into(),
             }],
             fork: None,
+            members: vec![],
         };
         let (model, _) = update(model, Intent::Refresh(snapshot));
         assert_eq!(model.timeline.len(), 1);
@@ -253,6 +272,7 @@ mod tests {
             timeline: vec![MessageLine {
                 lamport: 1,
                 author: "x".into(),
+                author_principal: None,
                 body: "old".into(),
             }],
             ..Model::default()
@@ -362,9 +382,21 @@ mod p6_tests {
             ..Model::default()
         };
         let rows = vec![
-            MemberRow { principal: pid(0xA), role: "owner".into(), standing: Standing::Seated },
-            MemberRow { principal: pid(0xB), role: "member".into(), standing: Standing::PendingResolution },
-            MemberRow { principal: pid(0xC), role: "member".into(), standing: Standing::Voided },
+            MemberRow {
+                principal: pid(0xA),
+                role: "owner".into(),
+                standing: Standing::Seated,
+            },
+            MemberRow {
+                principal: pid(0xB),
+                role: "member".into(),
+                standing: Standing::PendingResolution,
+            },
+            MemberRow {
+                principal: pid(0xC),
+                role: "member".into(),
+                standing: Standing::Voided,
+            },
         ];
         let snapshot = Snapshot {
             group: Some(gid(1)),
@@ -401,10 +433,7 @@ mod p6_tests {
     /// **The startup seed: the shell hands back what it persisted.**
     #[test]
     fn set_muted_seeds_without_effects() {
-        let (model, fx) = update(
-            Model::default(),
-            Intent::SetMuted(vec![pid(1), pid(2)]),
-        );
+        let (model, fx) = update(Model::default(), Intent::SetMuted(vec![pid(1), pid(2)]));
         assert!(model.muted.contains(&pid(1)) && model.muted.contains(&pid(2)));
         assert!(fx.is_empty(), "seeding persists nothing");
     }

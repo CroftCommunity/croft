@@ -1,8 +1,9 @@
 //! `project(&Model) -> ChatView` — the total, deterministic model→view map.
 
-use crate::model::{MessageLine, Model};
+use crate::model::{MessageLine, Model, Standing};
 use crate::view::{
-    ChannelNode, ChatView, GraphTreeView, GroupNode, TimelineLineView, TimelineView, TreeRow,
+    ChannelNode, ChatView, GraphTreeView, GroupNode, MemberRowView, MembersPaneView,
+    TimelineLineView, TimelineView, TreeRow,
 };
 
 /// Project the model into the renderable view. Total and order-preserving:
@@ -37,6 +38,22 @@ pub fn project(model: &Model) -> ChatView {
             author: m.author.clone(),
             body: m.body.clone(),
             pending: m.lamport == MessageLine::OPTIMISTIC,
+            muted: m.author_principal.is_some_and(|p| model.muted.contains(&p)),
+        })
+        .collect();
+
+    let member_rows = model
+        .members
+        .iter()
+        .map(|m| MemberRowView {
+            principal: m.principal,
+            role: m.role.clone(),
+            standing_label: match m.standing {
+                Standing::Seated => String::new(),
+                Standing::PendingResolution => "membership pending resolution".to_string(),
+                Standing::Voided => "admission voided".to_string(),
+            },
+            muted: model.muted.contains(&m.principal),
         })
         .collect();
 
@@ -45,6 +62,7 @@ pub fn project(model: &Model) -> ChatView {
         timeline: TimelineView { lines },
         draft: model.draft.clone(),
         fork: model.fork.clone(),
+        members: MembersPaneView { rows: member_rows },
     }
 }
 
@@ -65,16 +83,19 @@ mod tests {
                 MessageLine {
                     lamport: 1,
                     author: "a".into(),
+                    author_principal: None,
                     body: "first".into(),
                 },
                 MessageLine {
                     lamport: 2,
                     author: "b".into(),
+                    author_principal: None,
                     body: "second".into(),
                 },
                 MessageLine {
                     lamport: 3,
                     author: "a".into(),
+                    author_principal: None,
                     body: "third".into(),
                 },
             ],
@@ -98,11 +119,13 @@ mod tests {
                 MessageLine {
                     lamport: 1,
                     author: "a".into(),
+                    author_principal: None,
                     body: "confirmed".into(),
                 },
                 MessageLine {
                     lamport: MessageLine::OPTIMISTIC,
                     author: "me".into(),
+                    author_principal: None,
                     body: "sending".into(),
                 },
             ],
@@ -221,13 +244,26 @@ mod p6_tests {
         let mut model = Model::default();
         model.muted.insert(pid(0xB));
         model.timeline = vec![
-            MessageLine { lamport: 1, author: "a".into(), author_principal: Some(pid(0xA)), body: "keep".into() },
-            MessageLine { lamport: 2, author: "b".into(), author_principal: Some(pid(0xB)), body: "muted".into() },
+            MessageLine {
+                lamport: 1,
+                author: "a".into(),
+                author_principal: Some(pid(0xA)),
+                body: "keep".into(),
+            },
+            MessageLine {
+                lamport: 2,
+                author: "b".into(),
+                author_principal: Some(pid(0xB)),
+                body: "muted".into(),
+            },
         ];
         let view = project(&model);
         assert_eq!(view.timeline.lines.len(), 2, "nothing dropped");
         assert!(!view.timeline.lines[0].muted);
-        assert!(view.timeline.lines[1].muted, "the muted author's line is marked");
+        assert!(
+            view.timeline.lines[1].muted,
+            "the muted author's line is marked"
+        );
     }
 
     /// **The members pane projects standing as words the product committed
@@ -238,9 +274,21 @@ mod p6_tests {
         let mut model = Model::default();
         model.muted.insert(pid(0xB));
         model.members = vec![
-            MemberRow { principal: pid(0xA), role: "owner".into(), standing: Standing::Seated },
-            MemberRow { principal: pid(0xB), role: "member".into(), standing: Standing::PendingResolution },
-            MemberRow { principal: pid(0xC), role: "member".into(), standing: Standing::Voided },
+            MemberRow {
+                principal: pid(0xA),
+                role: "owner".into(),
+                standing: Standing::Seated,
+            },
+            MemberRow {
+                principal: pid(0xB),
+                role: "member".into(),
+                standing: Standing::PendingResolution,
+            },
+            MemberRow {
+                principal: pid(0xC),
+                role: "member".into(),
+                standing: Standing::Voided,
+            },
         ];
         let view = project(&model);
         let rows = &view.members.rows;
