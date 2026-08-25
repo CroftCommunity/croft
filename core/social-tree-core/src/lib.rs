@@ -3,7 +3,7 @@
 //! The Drystone social-tree substrate: groups, membership, standing — the
 //! backbone the per-pond feature cores (`call-core`, `feed-core`, the coming
 //! `chat-core`) stand on. **This crate is not a pond**: ponds consume it
-//! (docs/ADR-0002-core-layering.md).
+//! (docs/adr/0002-core-layering.md).
 //!
 //! Pure by contract: no storage, no I/O, no async, no clock — enforced
 //! mechanically (clippy.toml disallowed-methods, the wasm32 CI arm, and a
