@@ -81,6 +81,15 @@ impl KeyLayer for MemKeyLayer {
         self.deposited.push(fact);
         Ok(MergedEpoch { epoch: self.epoch })
     }
+
+    fn add_with_welcome(
+        &mut self,
+        _approval: social_tree_core::admission::InviteApproval,
+    ) -> Result<social_tree_core::ports::keylayer::InviteArtifacts, KeyLayerError> {
+        Err(KeyLayerError::Process(
+            "this fixture serves the token-return path".to_string(),
+        ))
+    }
 }
 
 fn wire_for(joiner: PrincipalId, token: TokenId) -> Vec<u8> {

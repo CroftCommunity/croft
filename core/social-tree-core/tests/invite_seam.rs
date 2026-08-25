@@ -131,7 +131,10 @@ fn the_folded_decision_enacts_and_the_seat_matches_the_slip() {
 
     let mut kl = MemInviteLayer::new();
     let artifacts = kl.add_with_welcome(approval).expect("the enactment runs");
-    assert!(!artifacts.welcome.is_empty(), "a Welcome exists for the invitee");
+    assert!(
+        !artifacts.welcome.is_empty(),
+        "a Welcome exists for the invitee"
+    );
     assert_eq!(
         kl.seated,
         vec![pid(0x24)],

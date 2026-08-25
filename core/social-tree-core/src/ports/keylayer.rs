@@ -77,4 +77,29 @@ pub trait KeyLayer {
     /// staged here; [`KeyLayerError::Process`] when the key machinery
     /// fails the merge.
     fn merge_admission(&mut self, approval: MergeApproval) -> Result<MergedEpoch, KeyLayerError>;
+
+    /// Enact a folded invite decision: build the Add-commit and Welcome that
+    /// seat the approved invitee. The port's other membership-mutating
+    /// operation, and it too demands a slip only the core mints —
+    /// [`authorize_invite_enactment`](crate::admission::authorize_invite_enactment)
+    /// requires the `MembershipAdd` decision already folded, so MLS seating
+    /// follows the fold, never precedes it.
+    ///
+    /// # Errors
+    /// [`KeyLayerError::Process`] when the key machinery fails the commit.
+    fn add_with_welcome(
+        &mut self,
+        approval: crate::admission::InviteApproval,
+    ) -> Result<InviteArtifacts, KeyLayerError>;
+}
+
+/// The invite enactment's artifacts: the Add-commit for incumbents and the
+/// Welcome for the invitee (MLS-native, key-bound, single-use — the push
+/// artifact of §11.7's pull/push split).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InviteArtifacts {
+    /// The Add-commit's wire bytes, processed by every incumbent.
+    pub commit_wire: Vec<u8>,
+    /// The Welcome, delivered to the invitee's store.
+    pub welcome: Vec<u8>,
 }

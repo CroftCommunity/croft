@@ -251,3 +251,64 @@ pub fn issuance_view(log: &[(Hash, crate::model::AssertionEnvelope)]) -> Vec<Iss
     }
     facts
 }
+
+/// Why an invite enactment is refused. The refusal is about the DECISION
+/// layer: the enactment waits for the fold, or the fold is contested.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum InviteRefusal {
+    /// The fold has not seated this invitee: the governance decision has not
+    /// happened (or has not reached this node) — the enactment waits.
+    #[error("no folded MembershipAdd decision seats {invitee:?}; the enactment waits")]
+    NotDecided {
+        /// The invitee whose decision is missing.
+        invitee: PrincipalId,
+    },
+    /// The invitee's standing slot is CONTESTED: no enactment through an
+    /// open contradiction (E108's rule, on this path too).
+    #[error("{invitee:?}'s standing is contested; no enactment through an open contradiction")]
+    Contested {
+        /// The contested invitee.
+        invitee: PrincipalId,
+    },
+}
+
+/// The invite path's permission slip: the one value the KeyLayer's
+/// `add_with_welcome` accepts, constructible only here — and minted only
+/// when the fold has already seated the invitee. MLS seating follows the
+/// fold, never precedes it (S21's govern step, unskippable by
+/// construction).
+#[derive(Debug)]
+pub struct InviteApproval {
+    invitee: PrincipalId,
+}
+
+impl InviteApproval {
+    /// The principal this slip seats.
+    #[must_use]
+    pub fn invitee(&self) -> &PrincipalId {
+        &self.invitee
+    }
+}
+
+/// Mint the invite-enactment slip: the folded `MembershipAdd` decision is
+/// the authorization, read from the group state at the enacting node's
+/// fold.
+///
+/// # Errors
+/// [`InviteRefusal::NotDecided`] when the fold has not seated the invitee;
+/// [`InviteRefusal::Contested`] when the invitee's slot is an open
+/// contradiction.
+pub fn authorize_invite_enactment(
+    invitee: &PrincipalId,
+    state: &crate::model::GroupState,
+) -> Result<InviteApproval, InviteRefusal> {
+    match state.membership(invitee) {
+        crate::model::MembershipView::Member(_) => Ok(InviteApproval { invitee: *invitee }),
+        crate::model::MembershipView::Contested(_) => {
+            Err(InviteRefusal::Contested { invitee: *invitee })
+        }
+        crate::model::MembershipView::NotMember => {
+            Err(InviteRefusal::NotDecided { invitee: *invitee })
+        }
+    }
+}

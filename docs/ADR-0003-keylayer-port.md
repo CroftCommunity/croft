@@ -70,6 +70,15 @@ The orchestration is the shell's, per ADR-0001: parse (port) → decide (core)
 never holds a `&mut dyn KeyLayer`; it only ever sees claims and emits
 approvals.
 
+**Generalized during the build (2026-08-24): every membership-mutating port
+operation demands a core-minted slip.** The token-return path's
+`merge_admission` takes the `MergeApproval` above; the invite path's
+`add_with_welcome` takes an `InviteApproval` that
+`authorize_invite_enactment` mints only when the fold has already seated
+the invitee — the MLS Add-commit + Welcome is the *enactment* of the folded
+`MembershipAdd` decision (S21's propose → govern → commit → Welcome), so
+MLS seating follows the fold, never precedes it, on both paths.
+
 ## Decision 3 — MLS state lives adapter-side, entirely
 
 The core holds governance-derived data only: issuance facts, membership
