@@ -27,7 +27,7 @@ mod common;
 use common::{add_payload, env, genesis_payload_with, remove_payload, MemStore};
 use social_tree_core::admission::{issuance_view, TokenId};
 use social_tree_core::model::{
-    envelope_hash, AssertionType, ForkStatus, GroupId, Hash, MembershipView, PrincipalId,
+    envelope_hash, AssertionType, ForkStatus, GroupId, MembershipView, PrincipalId, Role,
 };
 
 const GROUP: [u8; 32] = [0xC7; 32];
@@ -186,7 +186,10 @@ fn an_admission_fact_reopens_a_departed_members_span() {
             remove_payload(0x24, 0x00), // departure — migration to cold
         ))
         .expect("D departs");
-    assert_eq!(store.state(&group()).membership(&pid(0x24)), MembershipView::NotMember);
+    assert_eq!(
+        store.state(&group()).membership(&pid(0x24)),
+        MembershipView::NotMember
+    );
 
     store
         .ingest(&env(
@@ -202,7 +205,7 @@ fn an_admission_fact_reopens_a_departed_members_span() {
     let state = store.state(&group());
     assert_eq!(
         state.membership(&pid(0x24)),
-        MembershipView::Member,
+        MembershipView::Member(Role::Member),
         "the span re-opened: D participates at the current epoch"
     );
     assert!(matches!(state.fork_status, ForkStatus::Clean));
@@ -309,7 +312,7 @@ fn a_readmission_quorum_clears_the_ceiling() {
     let state = store.state(&group());
     assert_eq!(
         state.membership(&pid(0x24)),
-        MembershipView::Member,
+        MembershipView::Member(Role::Member),
         "the quorum re-seats D"
     );
 }

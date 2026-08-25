@@ -214,3 +214,40 @@ pub fn evaluate_admission(
         },
     })
 }
+
+/// Derive the issuance facts from the governance log — the chain is the
+/// admission context's source, so nothing arrives out-of-band: every
+/// `TokenIssuance` becomes an [`IssuanceFact`], and a `TokenRevocation`
+/// naming its token flips `revoked` without erasing it (§11.7: revocation
+/// is a chain fact the policy check consults, needing no key-deletion
+/// race).
+#[must_use]
+pub fn issuance_view(log: &[(Hash, crate::model::AssertionEnvelope)]) -> Vec<IssuanceFact> {
+    use crate::model::AssertionType;
+    let mut facts: Vec<IssuanceFact> = Vec::new();
+    for (_, e) in log {
+        match e.assertion_type {
+            AssertionType::TokenIssuance if e.payload.len() >= 64 => {
+                let mut t = [0u8; 32];
+                t.copy_from_slice(&e.payload[..32]);
+                let mut l = [0u8; 32];
+                l.copy_from_slice(&e.payload[32..64]);
+                facts.push(IssuanceFact {
+                    token: TokenId::new(t),
+                    lineage: PrincipalId::new(l),
+                    revoked: false,
+                });
+            }
+            AssertionType::TokenRevocation if e.payload.len() >= 32 => {
+                let mut t = [0u8; 32];
+                t.copy_from_slice(&e.payload[..32]);
+                let revoked_token = TokenId::new(t);
+                for f in facts.iter_mut().filter(|f| f.token == revoked_token) {
+                    f.revoked = true;
+                }
+            }
+            _ => {}
+        }
+    }
+    facts
+}

@@ -279,6 +279,28 @@ fn check_authorization(state: &GroupState, env: &AssertionEnvelope) -> Result<()
             }
         }
 
+        // §11.7: issuance rides the invite machinery — the same seat that may
+        // add members may mint and revoke their re-entry tokens.
+        AssertionType::TokenIssuance | AssertionType::TokenRevocation => {
+            match author_role_in(&state.members, author) {
+                Some(r) if role_ge_admin(r) => Ok(()),
+                _ => Err(FoldError::AuthorizationFailed(format!(
+                    "{:?} requires Owner or Admin; author {:?} is not",
+                    env.assertion_type, author
+                ))),
+            }
+        }
+
+        // The acceptor is the merging MEMBER (§11.7): the returner mints
+        // nothing, a stranger mints nothing. Any member seat may merge.
+        AssertionType::Admission => match author_role_in(&state.members, author) {
+            Some(r) if role_ge_member(r) => Ok(()),
+            _ => Err(FoldError::AuthorizationFailed(format!(
+                "Admission is deposited by a merging member; author {:?} is not one",
+                author
+            ))),
+        },
+
         AssertionType::RuleChange => {
             if env.payload.len() < 5 {
                 return Err(FoldError::MalformedEnvelope(
@@ -388,6 +410,9 @@ pub fn is_governance(t: &AssertionType) -> bool {
             | AssertionType::RoleRevoke
             | AssertionType::RuleChange
             | AssertionType::Resolution
+            | AssertionType::TokenIssuance
+            | AssertionType::TokenRevocation
+            | AssertionType::Admission
     )
 }
 
@@ -474,6 +499,7 @@ fn genesis_initial_state(env: &AssertionEnvelope, hash: Hash) -> Result<GroupSta
             resolution_threshold: 2,
         },
         fork_status: ForkStatus::Clean,
+        banned: Vec::new(),
     })
 }
 
@@ -491,6 +517,7 @@ fn apply_governance(
         members: state.members.clone(),
         rules: state.rules.clone(),
         fork_status: state.fork_status.clone(),
+        banned: state.banned.clone(),
     };
 
     match env.assertion_type {
@@ -525,18 +552,25 @@ fn apply_governance(
             } else {
                 next.members.push((invitee, role, env.lamport));
             }
+            // A readmission is a governance DECISION: it clears the §7.6.4
+            // standing ceiling. (An admission fact — an enactment record —
+            // never does.)
+            next.banned.retain(|p| *p != invitee);
         }
 
         AssertionType::MembershipRemove => {
             // Both kinds leave the hot roster; the §7.6.4 distinction is
-            // evidentiary (standing/provenance), read by detection and by the
-            // admission machinery — validated here so a malformed kind never
-            // folds.
-            removal_kind(env)?;
+            // evidentiary (standing/provenance): only a BAN stamps the
+            // standing ceiling, which is what an admission fact respects.
+            let kind = removal_kind(env)?;
             let mut pid_bytes = [0u8; 32];
             pid_bytes.copy_from_slice(&env.payload[..32]);
             let subject = PrincipalId::new(pid_bytes);
             next.members.retain(|(p, _, _)| *p != subject);
+            if kind == RemovalKind::Ban && !next.banned.contains(&subject) {
+                next.banned.push(subject);
+                next.banned.sort();
+            }
         }
 
         AssertionType::RoleGrant => {
@@ -592,6 +626,48 @@ fn apply_governance(
                 RuleKey::RoleChange => next.rules.role_change_threshold = new_value,
                 RuleKey::RuleChange => next.rules.rule_change_threshold = new_value,
                 RuleKey::Resolution => next.rules.resolution_threshold = new_value,
+            }
+        }
+
+        AssertionType::TokenIssuance => {
+            // Chain data only: the fact lives in the log and derived views
+            // (admission::issuance_view) read it from there. Validated so a
+            // malformed issuance never folds.
+            if env.payload.len() < 64 {
+                return Err(FoldError::MalformedEnvelope(
+                    "TokenIssuance payload too short (token ‖ lineage)".to_string(),
+                ));
+            }
+        }
+
+        AssertionType::TokenRevocation => {
+            // Chain data only; the names-an-issuance check runs in the shared
+            // transition, which holds the log.
+            if env.payload.len() < 32 {
+                return Err(FoldError::MalformedEnvelope(
+                    "TokenRevocation payload too short (token)".to_string(),
+                ));
+            }
+        }
+
+        AssertionType::Admission => {
+            // The span-opening enactment record (§11.7's comparator
+            // placement): seats the merged lineage as a Member — UNLESS the
+            // standing ceiling covers it, in which case the fact still folds
+            // (the window was real, the record says so) and the seat is not
+            // held: silently-but-visibly, never CONTESTED, and only a
+            // readmission DECISION clears the ceiling.
+            if env.payload.len() < 104 {
+                return Err(FoldError::MalformedEnvelope(
+                    "Admission payload too short (event ‖ lineage ‖ token ‖ frontier)".to_string(),
+                ));
+            }
+            let mut pid_bytes = [0u8; 32];
+            pid_bytes.copy_from_slice(&env.payload[32..64]);
+            let merged = PrincipalId::new(pid_bytes);
+            if !next.banned.contains(&merged) && !next.members.iter().any(|(p, _, _)| *p == merged)
+            {
+                next.members.push((merged, Role::Member, env.lamport));
             }
         }
 
@@ -1043,6 +1119,22 @@ fn compute_next_governance_state(
     disposition: &RaceDisposition,
     fork_opt: Option<ForkStatus>,
 ) -> Result<GroupState, FoldError> {
+    // A revocation names an issuance fact; naming nothing is either a replay
+    // artifact or a forged ledger move, and both must surface (the
+    // Resolution-names-no-pair posture).
+    if envelope.assertion_type == AssertionType::TokenRevocation {
+        let token = &envelope.payload[..32.min(envelope.payload.len())];
+        let issued = log.iter().any(|(_, e)| {
+            e.assertion_type == AssertionType::TokenIssuance
+                && e.payload.len() >= 32
+                && &e.payload[..32] == token
+        });
+        if !issued {
+            return Err(FoldError::AuthorizationFailed(
+                "TokenRevocation names no issuance fact on the chain".to_string(),
+            ));
+        }
+    }
     let mut ns = if envelope.assertion_type == AssertionType::Resolution {
         // §7.3.2: a Resolution closes exactly one open pair. Naming a pair that is not
         // open is refused loudly — a resolution of nothing is either a replay artifact
@@ -1221,6 +1313,7 @@ pub fn empty_state() -> GroupState {
             resolution_threshold: 2,
         },
         fork_status: ForkStatus::Clean,
+        banned: Vec::new(),
     }
 }
 

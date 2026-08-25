@@ -231,6 +231,20 @@ pub enum AssertionType {
     /// default 2; never silently single-author). Approvals name
     /// `(Resolution, H(payload))`, the RuleChange-style content-hash subject.
     Resolution = 0x000C,
+    /// A governance-issued re-entry token's issuance: the chain fact that
+    /// token T was issued to lineage L (§11.7 — holding the PSK bytes is not
+    /// holding this fact). Payload: token_id(32) ‖ lineage(32).
+    TokenIssuance = 0x000D,
+    /// Revokes an issuance (§11.7): a chain fact the policy check consults —
+    /// no key-deletion race, the bytes are untouched. Payload: token_id(32).
+    /// Refused if it names no issuance fact on the chain.
+    TokenRevocation = 0x000E,
+    /// The admission fact (§11.7): the R6-shaped acceptance record the
+    /// merging member deposits — an EVENT record that opens a membership
+    /// span, never a slot-competing membership addition (the comparator
+    /// placement). Payload: event(32) ‖ merged_lineage(32) ‖
+    /// redeemed_token(32) ‖ acceptor_frontier(8).
+    Admission = 0x000F,
 }
 
 impl AssertionType {
@@ -254,6 +268,9 @@ impl AssertionType {
             0x000A => Some(AssertionType::Vouch),
             0x000B => Some(AssertionType::Approval),
             0x000C => Some(AssertionType::Resolution),
+            0x000D => Some(AssertionType::TokenIssuance),
+            0x000E => Some(AssertionType::TokenRevocation),
+            0x000F => Some(AssertionType::Admission),
             _ => None,
         }
     }
@@ -934,12 +951,12 @@ mod tests {
 
     #[test]
     fn assertion_type_from_u16_round_trip() {
-        for disc in 1u16..=12u16 {
-            let at = AssertionType::from_u16(disc).expect("should decode 0x0001..=0x000C");
+        for disc in 1u16..=15u16 {
+            let at = AssertionType::from_u16(disc).expect("should decode 0x0001..=0x000F");
             assert_eq!(at as u16, disc);
         }
         assert!(AssertionType::from_u16(0x0000).is_none());
-        assert!(AssertionType::from_u16(0x000D).is_none());
+        assert!(AssertionType::from_u16(0x0010).is_none());
     }
 
     // -----------------------------------------------------------------------
@@ -1067,7 +1084,7 @@ pub enum ForkStatus {
 }
 
 /// The GroupState wire schema version this build reads and writes.
-pub const GROUP_STATE_WIRE_VERSION: u8 = 2;
+pub const GROUP_STATE_WIRE_VERSION: u8 = 3;
 
 /// Projected governance state for a group.
 ///
@@ -1101,6 +1118,11 @@ pub struct GroupState {
     pub members: Vec<(PrincipalId, Role, u64)>, // (principal, role, since_lamport)
     pub rules: GroupRules,
     pub fork_status: ForkStatus,
+    /// The standing-ceiling set (§7.6.4): lineages under an un-superseded
+    /// BAN. Carried in state so replay applies an admission fact at its
+    /// position without reaching outside the fold; cleared only by a
+    /// readmission DECISION (MembershipAdd), never by an enactment record.
+    pub banned: Vec<PrincipalId>,
 }
 
 impl GroupState {
@@ -1175,6 +1197,10 @@ impl GroupState {
                 }
             }
         }
+        buf.extend_from_slice(&(self.banned.len() as u32).to_be_bytes());
+        for p in &self.banned {
+            buf.extend_from_slice(p.as_bytes());
+        }
         buf
     }
 
@@ -1245,7 +1271,11 @@ impl GroupState {
         let fork_status = match fork_byte {
             0x00 => ForkStatus::Clean,
             0x02 => ForkStatus::UnderDetermined,
-            0x01 => ForkStatus::ForkedFrom(Hash::new(take32(b, off)?)),
+            0x01 => {
+                let h = Hash::new(take32(b, off)?);
+                off += 32;
+                ForkStatus::ForkedFrom(h)
+            }
             0x03 => {
                 let n = u32::from_be_bytes(
                     b.get(off..off + 4)
@@ -1299,6 +1329,21 @@ impl GroupState {
             }
         };
 
+        let banned_n = u32::from_be_bytes(
+            b.get(off..off + 4)
+                .ok_or_else(|| {
+                    FoldError::MalformedState("GroupState: truncated banned count".to_string())
+                })?
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        off += 4;
+        let mut banned = Vec::with_capacity(banned_n);
+        for _ in 0..banned_n {
+            banned.push(PrincipalId::new(take32(b, off)?));
+            off += 32;
+        }
+
         Ok(GroupState {
             version,
             computed_at_gov_head,
@@ -1312,6 +1357,7 @@ impl GroupState {
                 resolution_threshold,
             },
             fork_status,
+            banned,
         })
     }
 }
