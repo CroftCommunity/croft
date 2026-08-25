@@ -22,8 +22,8 @@ use std::sync::{Arc, RwLock};
 use ed25519_dalek::{Signature, Signer as DalekSigner, SigningKey, VerifyingKey};
 
 use super::{
-    CredentialError, CredentialResolver, DeviceId, LamportSource, PrincipalId, Signer,
-    VerifyError, Verifier,
+    CredentialError, CredentialResolver, DeviceId, LamportSource, PrincipalId, Signer, Verifier,
+    VerifyError,
 };
 
 /// Signs assertions with an identity's ed25519 key.
@@ -46,13 +46,17 @@ impl Ed25519Signer {
     /// the mock signer's `from_seed`, on real crypto.
     #[must_use]
     pub fn from_seed(seed: [u8; 32]) -> Self {
-        Self { signing_key: SigningKey::from_bytes(&seed) }
+        Self {
+            signing_key: SigningKey::from_bytes(&seed),
+        }
     }
 }
 
 impl Signer for Ed25519Signer {
     fn sign(&self, message: &[u8]) -> Vec<u8> {
-        DalekSigner::sign(&self.signing_key, message).to_bytes().to_vec()
+        DalekSigner::sign(&self.signing_key, message)
+            .to_bytes()
+            .to_vec()
     }
 
     fn device_id(&self) -> DeviceId {
@@ -82,10 +86,8 @@ impl Verifier for Ed25519Verifier {
         let signature = Signature::from_bytes(&sig_bytes);
         verifying_key
             .verify_strict(message, &signature)
-            .map_err(|_| {
-                VerifyError::InvalidSignature {
-                    device_id: *device_id,
-                }
+            .map_err(|_| VerifyError::InvalidSignature {
+                device_id: *device_id,
             })
     }
 }
@@ -123,19 +125,13 @@ impl RegistryCredentialResolver {
 }
 
 impl CredentialResolver for RegistryCredentialResolver {
-    fn resolve(
-        &self,
-        device: &DeviceId,
-        principal: &PrincipalId,
-    ) -> Result<(), CredentialError> {
+    fn resolve(&self, device: &DeviceId, principal: &PrincipalId) -> Result<(), CredentialError> {
         let guard = self
             .registry
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         match guard.get(&device.0) {
-            Some(principals) if principals.contains(&principal.0) => {
-                Ok(())
-            }
+            Some(principals) if principals.contains(&principal.0) => Ok(()),
             _ => Err(CredentialError::NotFound {
                 device: *device,
                 principal: *principal,

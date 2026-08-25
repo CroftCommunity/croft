@@ -101,12 +101,19 @@ impl_id_newtype!(GroupId);
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum KindTag {
+    /// A group.
     Group = 0x01,
+    /// A principal (persona/lineage).
     Principal = 0x02,
+    /// A device (client) of a principal.
     Device = 0x03,
+    /// A chat artifact.
     ArtifactChat = 0x04,
+    /// A note artifact.
     ArtifactNote = 0x05,
+    /// A link artifact.
     ArtifactLink = 0x06,
+    /// A game artifact.
     ArtifactGame = 0x07,
 }
 
@@ -190,15 +197,25 @@ impl fmt::Display for TypedId {
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AssertionType {
+    /// The group's genesis fact: mints the charter and the first member.
     GroupGenesis = 0x0001,
+    /// Adds a member (invitee principal ‖ role byte).
     MembershipAdd = 0x0002,
+    /// Removes a member (a ban is a removal with standing consequences).
     MembershipRemove = 0x0003,
+    /// Grants a role to a member.
     RoleGrant = 0x0004,
+    /// Revokes a member's role.
     RoleRevoke = 0x0005,
+    /// Changes a charter rule (threshold-gated per `GroupRules`).
     RuleChange = 0x0006,
+    /// Attaches an artifact to the group.
     AttachmentAdd = 0x0007,
+    /// References an artifact from the dataplane.
     ArtifactRef = 0x0008,
+    /// A dataplane message.
     Message = 0x0009,
+    /// A vouch: a recorded human judgment about a principal.
     Vouch = 0x000A,
     /// An approval of a governance act, for k-of-n threshold enforcement (V5′).
     /// Payload: approved act_type (2 bytes BE) ‖ subject principal (32 bytes) — it
@@ -1202,7 +1219,7 @@ impl GroupState {
             let off = 65 + i * 41;
             let mut pid_bytes = [0u8; 32];
             pid_bytes.copy_from_slice(&b[off..off + 32]);
-            let role = u8_to_role(b[off + 32]).map_err(|_| {
+            let role = u8_to_role(b[off + 32]).ok_or_else(|| {
                 FoldError::MalformedState(format!("GroupState: unknown role byte {}", b[off + 32]))
             })?;
             let since = u64::from_be_bytes(b[off + 33..off + 41].try_into().unwrap());
@@ -1303,13 +1320,15 @@ pub fn role_to_u8(r: &Role) -> u8 {
     }
 }
 
-/// Decode a wire byte to a [`Role`]; `Err` on an unknown byte.
-pub fn u8_to_role(v: u8) -> Result<Role, ()> {
+/// Decode a wire byte to a [`Role`]; `None` for an unknown byte (the
+/// [`KindTag::from_u8`] idiom — the caller names the refusal).
+#[must_use]
+pub fn u8_to_role(v: u8) -> Option<Role> {
     match v {
-        0 => Ok(Role::Owner),
-        1 => Ok(Role::Admin),
-        2 => Ok(Role::Member),
-        3 => Ok(Role::Observer),
-        _ => Err(()),
+        0 => Some(Role::Owner),
+        1 => Some(Role::Admin),
+        2 => Some(Role::Member),
+        3 => Some(Role::Observer),
+        _ => None,
     }
 }
