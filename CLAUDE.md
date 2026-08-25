@@ -166,3 +166,11 @@ the callability resolver (M2), and OAuth identity proof (M3, v0.4.0) are
 the edges. What remains is call-time `evaluateGrant` as an effect + relay
 enforcement (M4, with croft-stack). Build against v2, never the
 single-record shape.
+
+## Concurrent sessions (workspace norm)
+
+Multiple agent sessions share the `CroftC/` workspace. Do multi-turn work in a dedicated
+worktree — `git -C croft worktree add ../worktrees/croft/<slug> -b claude/<slug>` — never in
+this checkout (peer sessions stage with `git add -A`; loose files get swept into unrelated
+commits). Contested surfaces here — claim in `CroftC/.coordination/claims/` before
+touching: **landing on `main`**, the contract consumption surface (`docs/CONTRACT.md` — connect owns the canonical contract). Full protocol and the reasons behind it: `CroftC/.claude/COORDINATION.md`.
