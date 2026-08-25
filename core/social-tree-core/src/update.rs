@@ -182,9 +182,10 @@ fn role_ge_member(r: &Role) -> bool {
 /// The §7.6.4 removal kind carried in a `MembershipRemove` payload's byte 32.
 /// One primitive, distinct artifacts — and the distinction MUST be preserved
 /// (it is the only thing that lets a third party read a departure's
-/// provenance).
+/// provenance). Public so write-path adapters SAY the kind rather than
+/// hardcoding wire bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RemovalKind {
+pub enum RemovalKind {
     /// Voluntary exit, liveness eviction, or dormancy migration — standing
     /// intact; deposits no group-authority stamp on the subject's standing.
     Departure,
@@ -210,6 +211,18 @@ fn removal_kind(env: &AssertionEnvelope) -> Result<RemovalKind, FoldError> {
         b => Err(FoldError::MalformedEnvelope(format!(
             "MembershipRemove: unknown removal-kind byte {b}"
         ))),
+    }
+}
+
+impl RemovalKind {
+    /// The wire byte this kind encodes as (WIRE-REGISTER: MembershipRemove
+    /// payload = subject(32) ‖ kind(1)).
+    #[must_use]
+    pub fn to_wire_byte(self) -> u8 {
+        match self {
+            RemovalKind::Departure => 0x00,
+            RemovalKind::Ban => 0x01,
+        }
     }
 }
 
