@@ -4,7 +4,7 @@ The Drystone social-tree substrate — groups, membership, standing, the
 governance fold and its projections — as a pure crate: no storage, no I/O, no
 async, no clock. The foundation the per-pond feature cores (`call-core`,
 `feed-core`, the coming `chat-core`) stand on; **not a pond itself**
-(../../docs/ADR-0002-core-layering.md).
+(../../docs/adr/0002-core-layering.md).
 
 Extracted at E117 Phase 2 from the discovery corpus's mutation-vetted
 `local_storage_projection` experiment, which remains the redb **adapter** and

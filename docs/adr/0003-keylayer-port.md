@@ -1,4 +1,5 @@
 # ADR-0003 — The key layer is a port that carries artifacts and never answers "admit?"
+**Tags:** mls, keys, ports, admission
 
 **Status:** accepted (2026-08-24 — the P4 build validated the shape; both
 admission paths run end-to-end at loopback on the openmls realization).

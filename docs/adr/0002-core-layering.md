@@ -1,4 +1,5 @@
 # ADR-0002 — The core layer has a foundation, and the foundation is not a pond
+**Tags:** architecture, layering, rust, ponds
 
 **Status:** accepted (2026-08-23); amended 2026-08-24 (the tree frame).
 **Context:** E117 Phase 2 lands the first real crate in `core/`; the layering

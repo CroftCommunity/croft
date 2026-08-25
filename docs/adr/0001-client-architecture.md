@@ -1,4 +1,5 @@
 # ADR-0001 — Shared functional core + per-platform shells
+**Tags:** architecture, client, rust, shells
 
 **Status:** Adopted 2026-08-11. **Not decided here** — restated from
 `discovery/alpha/thinking/app/client-architecture-adr.md`, Accepted 2026-06-22.

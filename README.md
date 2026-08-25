@@ -44,7 +44,7 @@ Effects are **data**, never function calls. A core emits an effect request; its
 shell performs it and feeds the result back as a new intent. That is what keeps
 the core pure, synchronous, testable, and WASM-clean.
 
-The full reasoning is `docs/ADR-0001-client-architecture.md`. It is adopted, not
+The full reasoning is `docs/adr/0001-client-architecture.md`. It is adopted, not
 invented here — the decision was made in `discovery` on 2026-06-22 and
 demonstrated in code across three platforms before this repo existed.
 

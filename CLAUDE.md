@@ -55,7 +55,7 @@ describe anything else here as working until it has been run.
 
 ## Read before writing code
 
-1. `docs/ADR-0001-client-architecture.md` — the shape, and why. Adopted from
+1. `docs/adr/0001-client-architecture.md` — the shape, and why. Adopted from
    `discovery`, where it was Accepted 2026-06-22 and demonstrated in code first.
 2. `docs/PLATFORM-POSTURE.md` — **before writing any user-facing claim about
    background, offline, or P2P.** The constraints there are platform policy, not
