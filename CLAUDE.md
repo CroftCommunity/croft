@@ -34,9 +34,18 @@ call-endings landed under tests 2026-08-23 (E129)**: the app holds the
 live Connection, a closed()-watcher ends the state honestly (before it,
 a remote ending left the UI stuck at Connected), Hang up closes with
 "you ended the call", and Ended keeps the endpoint bound — still
-camped, still callable. Remaining: the on-device enforce rehearsal
-(phones at the staging listener, runbook §12), which also validates the
-endings on hardware. Do not
+camped, still callable. **The §12 enforce rehearsal RAN
+2026-08-24, all rungs green** (runbook §12 results): refusal on
+hardware, the self-minted camping pass admitted with attribution, the
+first fully-enforced call (both sides holding passes), the endings'
+words verbatim on both screens, and the sign-out negative. The run's
+find — a refresh-token race between the foreground refresh and the camp
+mint — was reproduced in the harness and fixed the same session
+(single-use rotation in the fixture, `freshAccessToken` serialized).
+M4's remaining distance is operational: croft-admit activation and the
+production enforce flip (owner-gated, croft-stack `TODO.md`), plus the
+small closures (optimistic-Ready honesty, caller-side camp posture,
+E125–E128). Do not
 describe anything else here as working until it has been run.
 
 ## Read before writing code

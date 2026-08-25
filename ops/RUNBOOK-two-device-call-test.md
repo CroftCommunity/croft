@@ -344,9 +344,9 @@ ES256K proof against the caller's DID document, admitted via
 `registeredCallers`, and `minted cap=m3registered` → connected direct.
 Both proof paths (possession and identity) are now device-validated.
 
-## §12 — the ENFORCE rehearsal against the staging listener (prepared 2026-08-23, not yet run)
+## §12 — the ENFORCE rehearsal against the staging listener (RUN 2026-08-24 — ALL RUNGS GREEN; results at the end)
 
-Everything below is staged; the run needs the owner and the phones.
+Everything below was staged 2026-08-23; the run record follows the recipe.
 
 **What exists already:** `croft-relay-staging` is LIVE on the production
 box — `https://relay.croft.ing:8444`, `admission = "enforce"`, real
@@ -384,3 +384,61 @@ camp tokenless with words on screen; the pass re-mints at expiry margin.
    `endpoint_unbound` with its words.
 5. Point both phones back at production 8443 before ending the session
    (polluted discovery records — the §11 lesson).
+
+
+### §12 results — 2026-08-24, both phones, all rungs green
+
+The rehearsal ran exactly as sketched (LAN admit on 8401 with the
+staging key, both phones on `-PcroftRelayUrl=https://relay.croft.ing:8444`):
+
+1. **The refusal, on hardware**: the Samsung signed-out camp was denied
+   at the staging relay — `denied endpoint_id=14af214d8c reason="no_token"`
+   on every auto-retry. The first real phone ever refused by our
+   enforcement. (Finding: the app's line status still said "ready,
+   camped on relay" — the optimistic-Ready honesty gap, filed below.)
+2. **The recovery**: sign-in as the callee (Playwright over DevTools,
+   §5 recipe; consent authorized), and the camp-mint chain fired
+   unprompted — admit `camp minted budget=Bytes(262144)` → relay
+   `admitted endpoint_id=14af214d8c sponsorship=BudgetBytes(262144)`.
+   The first phone to camp on an enforcing Croft relay with its own
+   self-minted pass; "ready, camped on relay" became TRUE.
+3. **The enforced call**: the Pixel (caller, signed in) redeemed the
+   live `m1ticket` link, and Connect ran mint-at-dial: the Pixel's own
+   earlier token-less attach had been `denied … no_token`, then
+   `minted cap=m1ticket` at the admit → `admitted endpoint_id=631277dda5`
+   → **connected** — the first call carried with BOTH sides holding
+   passes on an enforcing relay.
+4. **The endings, on hardware** (E129's first device outing): Hang up on
+   the Pixel → "you ended the call — ready, camped on relay"; the
+   Samsung → "call ended: closed by peer: hangup (code 0) — ready,
+   camped on relay" — the pass-through-the-transport's-words design,
+   verbatim. Both sides returned to camped and callable; no force-stop
+   anywhere in the session.
+5. **The sign-out negative**: Sign out on the Samsung + relaunch → the
+   relay refuses its camp again (`denied … no_token`). Reachability dies
+   at the relay when the identity goes away, exactly the O1 model.
+   (The unpublish-endpoint negative was NOT run on-device — it needs
+   live record surgery on the test account; its refusal path is
+   journey-covered (`endpoint_unbound`) and was left for a future run.)
+6. Both phones rebuilt onto production defaults; LAN admit stopped.
+
+**The run's find — a real concurrency bug, fixed the same session**: two
+coroutines raced `freshAccessToken()` on the Pixel (the foreground
+best-effort refresh vs the camp mint's) and rotated the SINGLE-USE
+refresh token concurrently — the entryway answered
+`400 invalid_grant "refresh token rotated concurrently"` and the camp
+mint failed (the session survived; the winner's pair persisted).
+`FixtureExchange`'s token endpoint now enforces single-use rotation like
+the real entryway, the session journey reproduces the race verbatim
+(RED observed), and `AuthManager.freshAccessToken` is serialized behind
+a Mutex with a double-check — the loser rides the winner's fresh pair.
+
+**Still open after this run**: the optimistic-Ready honesty gap (the
+app cannot see its own relay-attach refusal; related to the silent
+native logging, E128); the caller-side camp under enforce (the caller
+account publishes no endpoint record for the Pixel, so its camp mint
+would refuse `endpoint_unbound` by design — masked this run by the
+refresh race, worth observing cleanly next time); the identity-proof
+CAMP on a device where the account HAS published the endpoint is proven
+(the Samsung); production enforce flip remains owner-gated on the
+croft-admit activation prerequisites.

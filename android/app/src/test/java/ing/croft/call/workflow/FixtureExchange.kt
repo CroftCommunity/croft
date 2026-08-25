@@ -70,6 +70,12 @@ class FixtureExchange : AutoCloseable {
 
     private var tokenSerial = 0
 
+    /** The one currently-valid refresh token — SINGLE-USE, like the real
+     *  entryway: presenting a rotated-away token answers 400 invalid_grant
+     *  ("refresh token rotated concurrently" — observed live, device run
+     *  2026-08-24, when two coroutines raced freshAccessToken). */
+    private var currentRefreshToken: String? = null
+
     private val server = MockWebServer().apply {
         dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = route(request)
@@ -199,7 +205,16 @@ class FixtureExchange : AutoCloseable {
         val did = accounts.keys.firstOrNull() ?: "did:plc:nobody"
         return when (fields["grant_type"]) {
             "authorization_code", "refresh_token" -> {
+                if (fields["grant_type"] == "refresh_token" &&
+                    fields["refresh_token"] != currentRefreshToken
+                ) {
+                    return json(
+                        400,
+                        """{"error":"invalid_grant","error_description":"refresh token rotated concurrently"}""",
+                    )
+                }
                 tokenSerial += 1
+                currentRefreshToken = "fx-rt-$tokenSerial"
                 json(
                     200,
                     JSONObject()

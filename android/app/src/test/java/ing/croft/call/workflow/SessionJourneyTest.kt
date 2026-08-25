@@ -5,6 +5,9 @@ import androidx.test.core.app.ApplicationProvider
 import ing.croft.call.identity.AuthManager
 import ing.croft.call.net.UrlHttp
 import ing.croft.call.net.UrlHttpForm
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -70,6 +73,20 @@ class SessionJourneyTest {
                 assertEquals("fx-at-2", auth.freshAccessToken())
                 now += 10_000
                 assertEquals("fx-at-2", auth.freshAccessToken())
+
+                // The device-run find (2026-08-24): TWO coroutines hitting a
+                // stale session at once — foreground refresh vs the camp
+                // mint's — must produce ONE rotation, not a concurrent pair
+                // (the refresh token is single-use; the fixture now refuses a
+                // reused one exactly as the live entryway did).
+                now += 1_900_000
+                val (ta, tb) = coroutineScope {
+                    val a = async(Dispatchers.IO) { auth.freshAccessToken() }
+                    val b = async(Dispatchers.IO) { auth.freshAccessToken() }
+                    a.await() to b.await()
+                }
+                assertEquals("concurrent refreshes must converge", ta, tb)
+                assertEquals("fx-at-3", ta)
             }
         }
     }

@@ -3,6 +3,8 @@ package ing.croft.call.identity
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import ing.croft.call.caps.Http
@@ -119,11 +121,16 @@ class AuthManager(
      * process death after a refresh never strands a spent token as the
      * stored one. Call on-foreground and before every mint.
      */
-    suspend fun freshAccessToken(): String {
+    suspend fun freshAccessToken(): String = refreshGate.withLock {
+        // Double-checked under the gate: the refresh token is SINGLE-USE, so
+        // two coroutines hitting a stale session at once (the foreground
+        // refresh vs the camp mint's — observed live, device run 2026-08-24:
+        // 400 invalid_grant "refresh token rotated concurrently") must
+        // serialize; the loser re-reads and rides the winner's fresh pair.
         val access = prefs.getString(K_ACCESS, null)
             ?: throw IllegalStateException("not signed in")
         val expiresAt = prefs.getLong(K_EXPIRES_AT, 0)
-        if (nowMs() < expiresAt - EXPIRY_MARGIN_MS) return access
+        if (nowMs() < expiresAt - EXPIRY_MARGIN_MS) return@withLock access
 
         Log.i(TAG, "access token stale; refreshing")
         val tokens = OAuthFlow.refresh(
@@ -137,8 +144,10 @@ class AuthManager(
             .putLong(K_EXPIRES_AT, nowMs() + tokens.expiresInSeconds * 1000)
             .apply()
         Log.i(TAG, "session refreshed")
-        return tokens.accessToken
+        return@withLock tokens.accessToken
     }
+
+    private val refreshGate = Mutex()
 
     /**
      * A service-auth JWT proving this session's DID (M4c) — minted at the

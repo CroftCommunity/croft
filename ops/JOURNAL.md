@@ -455,3 +455,21 @@ remains on this rung is the on-device rehearsal: phones pointed at
 `-PcroftRelayUrl=https://relay.croft.ing:8444` with a LAN admit holding
 `CROFT_STAGING_MINT_KEY` — and the app's camp-mint flow (the client does
 not yet call `/campToken` at attach).
+
+## 2026-08-24 — §12 enforce rehearsal: all rungs green on hardware
+
+**What:** ran runbook §12 end to end — LAN admit (staging mint key,
+0.0.0.0:8401), both phones on the staging enforce listener (8444).
+
+**Outcome:** refusal → sign-in → self-minted camping pass → admitted
+with attribution → enforced call (both sides carrying passes) →
+hang-up with honest words both sides → sign-out refused again. Full
+results in RUNBOOK §12. Phones returned to production defaults; LAN
+admit stopped; staging listener left running (it is the standing
+rehearsal rung).
+
+**Find, fixed same session:** the foreground token refresh and the camp
+mint's refresh raced the single-use refresh token
+(`invalid_grant: refresh token rotated concurrently`, live entryway).
+Fixture upgraded to single-use rotation, race reproduced RED in the
+session journey, `freshAccessToken` serialized behind a Mutex.
