@@ -1,6 +1,9 @@
 # Plan — the enforcement scenario matrix: every MUST-ADMIT and MUST-REFUSE, named and pinned
 
-**Status: DRAFT (matrix compiled from source; gap analysis honest; wiring not started)**
+**Status: SERVER HALF LANDED (croft-stack `444aec4`, 2026-08-26). The canonical
+server matrix is `croft-stack/docs/ENFORCEMENT-SCENARIOS.md`, gated by
+`tests/enforcement_matrix.bats` in `make check`. Remaining here: the croft
+client-posture rows + their harness meta-gate (next phase).**
 
 ## Problem Statement
 
@@ -109,3 +112,17 @@ scenario silently reads as covered).
 
 - 2026-08-26 croftc-b4: v1 draft. Rows from source taxonomies; every
   uncertainty marked `(verify)` rather than asserted. Not yet reviewed.
+
+- 2026-08-26 croftc-b4 (landing pass): **v1's gap analysis was wrong, and the
+  way it was wrong is the lesson.** C4 (wrong-key) and B5 (cap_mismatch) were
+  already pinned (`phase2_token.rs::wrong_issuer_key_denies`,
+  `mint.rs::an_unlisted_did_is_refused_even_with_a_valid_proof`) — the draft
+  compiled gaps from remembered test names instead of reading the test files.
+  Reading them found the deny surface nearly complete (all sixteen refusal
+  reasons asserted, plus rows the draft never listed: IdMismatch, no_cap,
+  quota_exhausted, replay, burn-on-success). The one real server gap was C6
+  (tier-era claims), landed RED-first with the serde-default hazard stated.
+  The missing artifact was the MAP + the drift gate, both now in croft-stack.
+  Next phase (this repo): the client-posture rows against the workflow
+  harness journeys + a matching meta-gate wired into `make gate`, and the
+  E130 rows once that lands.
