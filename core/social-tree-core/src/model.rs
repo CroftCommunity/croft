@@ -442,10 +442,16 @@ pub struct GroupRules {
     pub rule_change_threshold: u32,
     /// Quorum for closing an open contradiction pair (§7.3.2 resolution fact).
     /// Not carried in the genesis payload: minted at the product default (**2**) and
-    /// dialed thereafter by governed `RuleChange` like every other threshold — the
-    /// charter-dial species (E111/E121). Whether the spec hard-floors it at 2 rides
-    /// the §7.3.2 filing; the fold treats it as charter data.
+    /// dialed thereafter by governed `RuleChange`. No protocol floor (owner decision
+    /// 2026-08-25): a below-2 setting is a declared charter attribute; a contested
+    /// subject's signature never counts toward it.
     pub resolution_threshold: u32,
+    /// Quorum for re-adding a lineage under the §7.6.4 standing ceiling — its OWN
+    /// dial (owner decision 2026-08-25): the invite dial was designed for strangers
+    /// and says nothing about undoing a ban. Minted at **1** (the permissive
+    /// reference posture — easy group, easy mercy); "two to un-ban" is one governed
+    /// `RuleChange` away (rule key 5). Never-banned invitees stay on the add dial.
+    pub readmission_threshold: u32,
 }
 
 /// Key discriminant for a mutable group rule.
@@ -456,6 +462,8 @@ pub enum RuleKey {
     RoleChange,
     RuleChange,
     Resolution,
+    /// The readmission-under-ceiling dial (wire byte 5).
+    Readmission,
 }
 
 /// The numeric value stored for a mutable group rule.
@@ -1084,7 +1092,7 @@ pub enum ForkStatus {
 }
 
 /// The GroupState wire schema version this build reads and writes.
-pub const GROUP_STATE_WIRE_VERSION: u8 = 3;
+pub const GROUP_STATE_WIRE_VERSION: u8 = 4;
 
 /// Projected governance state for a group.
 ///
@@ -1167,6 +1175,7 @@ impl GroupState {
         buf.extend_from_slice(&self.rules.role_change_threshold.to_be_bytes());
         buf.extend_from_slice(&self.rules.rule_change_threshold.to_be_bytes());
         buf.extend_from_slice(&self.rules.resolution_threshold.to_be_bytes());
+        buf.extend_from_slice(&self.rules.readmission_threshold.to_be_bytes());
         buf.extend_from_slice(&member_count.to_be_bytes());
         for (pid, role, since) in &self.members {
             buf.extend_from_slice(pid.as_bytes());
@@ -1217,8 +1226,8 @@ impl GroupState {
                 b[0], GROUP_STATE_WIRE_VERSION
             )));
         }
-        // Minimum: 1 + 32 + 8 + 20 + 4 + 1 = 66
-        if b.len() < 66 {
+        // Minimum: 1 + 32 + 8 + 24 + 4 + 1 = 70
+        if b.len() < 70 {
             return Err(FoldError::MalformedState(format!(
                 "GroupState: too short ({} bytes)",
                 b.len()
@@ -1234,10 +1243,11 @@ impl GroupState {
         let role_change_threshold = u32::from_be_bytes(b[49..53].try_into().unwrap());
         let rule_change_threshold = u32::from_be_bytes(b[53..57].try_into().unwrap());
         let resolution_threshold = u32::from_be_bytes(b[57..61].try_into().unwrap());
-        let member_count = u32::from_be_bytes(b[61..65].try_into().unwrap()) as usize;
+        let readmission_threshold = u32::from_be_bytes(b[61..65].try_into().unwrap());
+        let member_count = u32::from_be_bytes(b[65..69].try_into().unwrap()) as usize;
 
         // Each member is 32 + 1 + 8 = 41 bytes.
-        let members_end = 65 + member_count * 41;
+        let members_end = 69 + member_count * 41;
         if b.len() < members_end + 1 {
             return Err(FoldError::MalformedState(format!(
                 "GroupState: need {} bytes for {} members + fork byte, have {}",
@@ -1248,7 +1258,7 @@ impl GroupState {
         }
         let mut members = Vec::with_capacity(member_count);
         for i in 0..member_count {
-            let off = 65 + i * 41;
+            let off = 69 + i * 41;
             let mut pid_bytes = [0u8; 32];
             pid_bytes.copy_from_slice(&b[off..off + 32]);
             let role = u8_to_role(b[off + 32]).ok_or_else(|| {
@@ -1355,6 +1365,7 @@ impl GroupState {
                 role_change_threshold,
                 rule_change_threshold,
                 resolution_threshold,
+                readmission_threshold,
             },
             fork_status,
             banned,

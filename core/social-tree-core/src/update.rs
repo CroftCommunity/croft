@@ -143,6 +143,7 @@ pub fn required_threshold_for_rule_change(rules: &GroupRules, key: &RuleKey) -> 
         RuleKey::RoleChange => rules.role_change_threshold,
         RuleKey::RuleChange => rules.rule_change_threshold,
         RuleKey::Resolution => rules.resolution_threshold,
+        RuleKey::Readmission => rules.readmission_threshold,
     }
 }
 
@@ -153,6 +154,7 @@ fn decode_rule_key(v: u8) -> Result<RuleKey, ()> {
         2 => Ok(RuleKey::RoleChange),
         3 => Ok(RuleKey::RuleChange),
         4 => Ok(RuleKey::Resolution),
+        5 => Ok(RuleKey::Readmission),
         _ => Err(()),
     }
 }
@@ -438,6 +440,9 @@ fn threshold_for(t: &AssertionType, rules: &GroupRules) -> u32 {
         AssertionType::RoleGrant | AssertionType::RoleRevoke => rules.role_change_threshold,
         AssertionType::RuleChange => rules.rule_change_threshold,
         AssertionType::Resolution => rules.resolution_threshold,
+        // Issue like adding, revoke like removing (owner decision 2026-08-25).
+        AssertionType::TokenIssuance => rules.add_member_threshold,
+        AssertionType::TokenRevocation => rules.remove_member_threshold,
         _ => 1,
     }
 }
@@ -459,6 +464,27 @@ pub fn rule_change_approval_subject(payload: &[u8]) -> [u8; 32] {
 /// threshold subject (genesis, data-plane, `Approval` itself).
 fn act_subject(env: &AssertionEnvelope) -> Option<PrincipalId> {
     match env.assertion_type {
+        // A TokenRevocation's approval subject is the token id's 32 bytes
+        // (a content subject, like the rule-change hash); an issuance's is
+        // the lineage it mints to (payload bytes 32..64 — handled below by
+        // reading the FIRST 32 for revocation and the lineage half for
+        // issuance).
+        AssertionType::TokenRevocation => {
+            if env.payload.len() < 32 {
+                return None;
+            }
+            let mut b = [0u8; 32];
+            b.copy_from_slice(&env.payload[..32]);
+            Some(PrincipalId::new(b))
+        }
+        AssertionType::TokenIssuance => {
+            if env.payload.len() < 64 {
+                return None;
+            }
+            let mut b = [0u8; 32];
+            b.copy_from_slice(&env.payload[32..64]);
+            Some(PrincipalId::new(b))
+        }
         AssertionType::MembershipAdd
         | AssertionType::MembershipRemove
         | AssertionType::RoleGrant
@@ -510,6 +536,8 @@ fn genesis_initial_state(env: &AssertionEnvelope, hash: Hash) -> Result<GroupSta
             // 2026-08-21 — "two, so no one gets a one-signature verdict") and dialed
             // thereafter by governed RuleChange like every other threshold.
             resolution_threshold: 2,
+            // Minted permissive (owner decision 2026-08-25): easy group, easy mercy.
+            readmission_threshold: 1,
         },
         fork_status: ForkStatus::Clean,
         banned: Vec::new(),
@@ -639,6 +667,7 @@ fn apply_governance(
                 RuleKey::RoleChange => next.rules.role_change_threshold = new_value,
                 RuleKey::RuleChange => next.rules.rule_change_threshold = new_value,
                 RuleKey::Resolution => next.rules.resolution_threshold = new_value,
+                RuleKey::Readmission => next.rules.readmission_threshold = new_value,
             }
         }
 
@@ -1324,6 +1353,7 @@ pub fn empty_state() -> GroupState {
             role_change_threshold: 1,
             rule_change_threshold: 1,
             resolution_threshold: 2,
+            readmission_threshold: 1,
         },
         fork_status: ForkStatus::Clean,
         banned: Vec::new(),
@@ -1417,13 +1447,41 @@ pub fn evaluate(
     // leaving would let the group configure away the right to leave.
     if is_governance(&env.assertion_type) && !is_self_departure(env) {
         if let Some(subject) = act_subject(env) {
-            let required = threshold_for(&env.assertion_type, &current_state.rules);
+            let mut required = threshold_for(&env.assertion_type, &current_state.rules);
+            // The readmission dial (owner decision 2026-08-25): re-adding a
+            // lineage under the §7.6.4 standing ceiling is gated by its own
+            // threshold — the invite dial was designed for strangers and
+            // says nothing about undoing a ban. Never-banned invitees stay
+            // on the add dial.
+            if env.assertion_type == AssertionType::MembershipAdd
+                && current_state.banned.contains(&subject)
+            {
+                required = current_state.rules.readmission_threshold;
+            }
             if required > 1 {
                 let mut approvers = vec![env.author_principal];
                 let want_type = env.assertion_type.to_u16();
                 for ant in &ctx.antecedent_envelopes {
                     if approval_matches(ant, want_type, &subject) {
                         approvers.push(ant.author_principal);
+                    }
+                }
+                // Signs-but-never-counts (owner decision 2026-08-25): a
+                // persona named by the open pair a Resolution closes may
+                // sign — legible consent — but contributes zero toward the
+                // threshold; the quorum is carried by others.
+                if env.assertion_type == AssertionType::Resolution && env.payload.len() >= 64 {
+                    let mut a = [0u8; 32];
+                    a.copy_from_slice(&env.payload[..32]);
+                    let mut b = [0u8; 32];
+                    b.copy_from_slice(&env.payload[32..64]);
+                    let pair = (Hash::new(a), Hash::new(b));
+                    if let Some(entry) = current_state
+                        .contested_entries()
+                        .iter()
+                        .find(|e| e.pair == pair)
+                    {
+                        approvers.retain(|p| !entry.subjects.contains(p));
                     }
                 }
                 let have = count_personae_by_lineage(&approvers);

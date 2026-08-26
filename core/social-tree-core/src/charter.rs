@@ -33,6 +33,9 @@ impl Charter {
                 role_change_threshold: 1,
                 rule_change_threshold: 1,
                 resolution_threshold: 2,
+                // Easy mercy (owner decision 2026-08-25): the close-circle
+                // posture un-bans as permissively as it invites.
+                readmission_threshold: 1,
             },
         }
     }
