@@ -5,4 +5,4 @@
 # key layer lives outside the core so the core's lean arms never pull it).
 [workspace]
 resolver = "2"
-members = ["core/social-tree-core", "core/chat-core", "ports/keylayer-openmls", "ffi"]
+members = ["core/social-tree-core", "core/chat-core", "ports/keylayer-openmls", "ports/store-redb", "ffi"]
