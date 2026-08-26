@@ -69,7 +69,7 @@ Every remaining unknown below is toolchain- or dependency-shaped and resolvable 
 probe. **Pass 3 resolved the cheap half during planning** (§ Verified assumptions,
 Pass 3 block) — what survives here is what genuinely needs code run against it.
 
-- [ ] **D1: Does OUR uniffi round-trip work end to end?**
+- [x] **D1: Does OUR uniffi round-trip work end to end?** — **RESOLVED GREEN 2026-08-26.**
   - **Standing on (Pass 3, verified):** the android app *already ships and loads a
     uniffi-generated Rust cdylib* — `computer.iroh:iroh` is uniffi-bound, JNA
     5.14.0 is already a declared dependency ("uniffi requires JNA >= 5.12",
@@ -82,7 +82,7 @@ Pass 3 block) — what survives here is what genuinely needs code run against it
   - **Success criteria:** The JVM test calls Rust and asserts the returned value.
   - **Disposition:** `promote` — the spike crate becomes S0's scaffold; TDD applies
     when S0 builds the real surface on it (S0 is the named follow-up phase).
-- [ ] **D2: What does persistent MLS state require on openmls =0.8.1?**
+- [x] **D2: What does persistent MLS state require on openmls =0.8.1?** — **RESOLVED 2026-08-26; strategy named, and S2 is three seams not one.**
   - **Probe:** Read `openmls_traits` v0.5's storage/provider traits and
     `openmls_rust_crypto` v0.5.1's keystore. Determine the sanctioned persistence
     path: implement the storage trait over a file/redb backend, vs serialize the
@@ -91,7 +91,7 @@ Pass 3 block) — what survives here is what genuinely needs code run against it
   - **Success criteria:** A named strategy with the trait surface listed, sized
     (hours vs days), recorded in this plan before S2 starts.
   - **Disposition:** `throwaway` (notes into this doc; implementation is S2's).
-- [ ] **D3: Does our cdylib cross-compile and load on arm64?**
+- [x] **D3: Does our cdylib cross-compile and load on arm64?** — **RESOLVED GREEN 2026-08-26 on the emulator.**
   - **Resolved during Pass 3 (no longer open):** the rust targets
     `aarch64-linux-android` + `armv7-linux-androideabi` are installed and pinned in
     `rust-toolchain.toml`; the NDK is declared in `env/toolchain.yml`
@@ -105,14 +105,16 @@ Pass 3 block) — what survives here is what genuinely needs code run against it
     arm64 emulator (`make emulator`, then the instrumentation/scratch load).
   - **Success criteria:** the emulator loads our `.so` and returns a value.
   - **Disposition:** `promote` — the build script generalizes into S0's build step.
-- [ ] **D4: What does promoting the corpus redb adapter cost?**
+- [x] **D4: What does promoting the corpus redb adapter cost?** — **RESOLVED
+  2026-08-26, and it surfaced the one thing that changes S0's shape (see §
+  Phase 0 findings, D4).**
   - **Probe:** Read `discovery/alpha/experiments/local_storage_projection`'s store
     code; list what is croft-shaped (the Store realization over redb) vs
     corpus-only (projection/edge code that stays).
   - **Success criteria:** A file-level lift list; the promote decision is already
     made (Q6), so this sizes and scopes it rather than deciding it.
   - **Disposition:** `throwaway` (feeds S0).
-- [ ] **D5: What does the apple spike need? (new — Q4 promoted the spike into S5)**
+- [x] **D5: What does the apple spike need? (new — Q4 promoted the spike into S5)** — **RESOLVED GREEN 2026-08-26; macOS is the target.**
   - **Standing on (Pass 3, verified):** Xcode 26.3 and Swift 6.2.4 are installed;
     `aarch64-apple-darwin` is an installed rust target, but **no iOS target is**
     (`aarch64-apple-ios` / `aarch64-apple-ios-sim` absent) and `rust-toolchain.toml`
@@ -130,6 +132,198 @@ are adjusted here if any probe contradicts them (Phase 0 is the only phase allow
 restructure later phases). **Checkpoint:** report findings to the owner before S0
 starts — a Phase 0 that changes the plan materially is a decision point, not a
 formality.
+
+## Phase 0 findings (executed 2026-08-26)
+
+Spike code lives at `ffi/` (crate `croft-ffi`, disposition `promote`, marked
+non-production in its own header). Throwaway harnesses stayed in the session
+scratchpad and are not in the repo.
+
+### D1 — the uniffi round-trip: GREEN, both directions, refusals included
+
+`ffi/` exports one function over a real core type (`PrincipalId`) plus a typed
+refusal. All three rungs ran:
+
+- Rust-side: 2 tests green (`cargo test -p croft-ffi`), including the boundary
+  cases 0/31/33 bytes.
+- Bindgen: Kotlin generated from the built cdylib — the surface comes out as
+  `principalHex(bytes: ByteArray): String` throwing
+  `FfiException.BadPrincipalLength(got: UInt)`.
+- JVM execution: **5/5 green.** Kotlin → Rust → Kotlin, and every wrong-length
+  input arrived as a *typed Kotlin exception carrying its length*, not a null.
+  The fail-loud property survives the FFI, which was the half worth proving.
+
+Pins and mechanics for S0: **uniffi `=0.31.1`** (already in this machine's cargo
+cache); its Kotlin templates use `com.sun.jna.internal.Cleaner`, satisfied by the
+**JNA 5.14.0 already on the android classpath**. The bindgen bin needs
+`required-features = ["cli"]` or a plain `cargo test -p croft-ffi` fails on
+`uniffi_bindgen_main` — found the hard way, fixed in the manifest.
+
+**One trap worth carrying into S0:** JNA's *desktop* dispatch library is a separate
+artifact from the android one. The android `.aar` in the gradle cache carries only
+`jni/<abi>/libjnidispatch.so`; a desktop JVM test needs the real
+`net.java.dev.jna:jna:5.14.0` jar (its `darwin-aarch64/libjnidispatch.jnilib`),
+and the cached 5.6.0 jar is x86_64/i386 only — pre-Apple-Silicon. On a machine
+without that jar the JVM test fails with `UnsatisfiedLinkError` while the android
+path is perfectly fine. S0's gradle config must declare the plain jar for its JVM
+test source set, not rely on the app's `@aar` dependency.
+
+### D2 — openmls persistence: strategy named, and it is THREE seams not one
+
+The trait is `openmls_traits::storage::StorageProvider<const VERSION: u16>`
+(`openmls_traits-0.5.0/src/storage.rs:29`) — **53 required methods**, one
+associated `Error` type, not sealed. The shape is *mechanical*, not MLS-semantic:
+every method serializes an opaque `T` under an opaque key (bounds reduce to
+`Serialize`/`DeserializeOwned`, `storage.rs:593`/`:598`). The implementor never
+inspects an MLS value.
+
+`openmls_rust_crypto` 0.5.1 delegates to `openmls_memory_storage` 0.5.0, whose
+store is `pub values: RwLock<HashMap<Vec<u8>, Vec<u8>>>` (`lib.rs:16-18`) — the
+map is **public**, so a snapshot/restore is reachable with no feature flag.
+
+**Recommended for the first landing: (b) snapshot/restore — hours**, not (a) a
+53-method redb impl — a day. But the cost (b) accepts is real and must be designed
+for: **a snapshot that lags a merged commit is a correctness hazard** (decryption
+failure / fork), not a lost session, so the save points must be chosen deliberately
+around every mutating openmls call.
+
+**The finding that resizes S2:** persistence is not one seam but three.
+(i) the provider's storage map — solved by (a) or (b);
+(ii) `group: Option<MlsGroup>` — recoverable via `MlsGroup::load` given a
+*persisted `GroupId`* plus `SignatureKeyPair::read`, because the trait has **no
+enumeration API** — nothing lists the groups, so croft must persist the id itself;
+(iii) `pending_key_packages` / `staged` / `staged_commits`
+(`ports/keylayer-openmls/src/lib.rs:62-64`) are **croft-local, not openmls
+storage**, and no storage strategy restores them — whether they must survive a
+restart is a product decision, and S2 must make it explicitly.
+
+Traps: `CURRENT_VERSION = 1` is baked into every stored key, so a future openmls
+bump makes every key a silent miss (`Ok(None)` = "group fails to load") with no
+migration machinery in 0.5.0 — any snapshot file needs its own version header that
+fails loud. `OpenMlsRustCrypto` has private fields and only `Default`, so restore
+must go through `provider.storage().values` after construction. And all secret
+material — signature keys, epoch secrets, PSKs — sits as plain serde_json in that
+map, so **encryption at rest is required of either strategy**, equally.
+
+Named but unread: openmls 0.8.1 declares an optional `sqlite-provider` feature
+pulling `openmls_sqlite_storage 0.2.0` — an upstream-sanctioned durable provider.
+It is not vendored locally and was not read; if viable it dominates both options.
+**That is a follow-up probe for S2, not a claim.**
+
+### D3 — the android cross-compile and emulator load: GREEN
+
+Correction to a Pass 3 claim: the SDK root is **`/opt/homebrew/share/android-commandlinetools`**
+(what `env/bootstrap.sh` installs via Homebrew cask), not `~/Library/Android/sdk`.
+Read the wrong one at first and wrongly concluded the NDK was absent. Everything is
+present: NDK `29.0.14206865`, `emulator`, the `arm64-v8a` system image, and the
+`croft-dev` AVD.
+
+The `env/build-iroh-android.sh` recipe applied to our crate **works unchanged**:
+`libcroft_ffi.so` builds for `aarch64-linux-android` (API 26) and is a valid
+`ELF 64-bit LSB shared object, ARM aarch64` exporting
+`uniffi_croft_ffi_fn_func_principal_hex`.
+
+**On the arm64 emulator (`croft-dev`, android-35 google_apis): ALL GREEN.** A
+small NDK-built C loader pushed to `/data/local/tmp` `dlopen`ed our `.so`,
+`dlsym`ed the uniffi symbol, and called across the C ABI: a 32-byte principal came
+back as its 64-character hex, and a 31-byte input was refused with a non-zero
+`RustCallStatus`. Deliberately no JVM in that path — it isolates "does this cdylib
+work on android arm64" from every gradle and JNA question, and the answer is yes.
+
+A framing detail that cost a debugging round and will cost S0 one too if unwritten:
+**a returned `String` is the raw UTF-8 in the `RustBuffer` with its length in
+`RustBuffer.len` — there is no inner i32 length prefix.** The i32 prefix framing
+belongs to `Vec<u8>` *arguments*. Assuming symmetry produces an empty string and a
+green-looking status.
+
+**D3 also caught a live defect in the repo's own env layer, unrelated to P7 but
+worth fixing on the way past.** `make emulator` fails on a machine bootstrapped
+the documented way:
+
+```
+env/emulator.sh: line 30: emulator: command not found
+```
+
+`env/emulator.sh:12` defaults the SDK to `$HOME/Library/Android/sdk` and honours
+only `ANDROID_SDK_ROOT`, while `env/bootstrap.sh:73` installs the Homebrew cask to
+`/opt/homebrew/share/android-commandlinetools` and `env/verify.sh:104-106` probes
+**both** candidates plus `ANDROID_HOME`. So verify passes, bootstrap succeeds, and
+the emulator target is broken unless the operator happens to have
+`ANDROID_SDK_ROOT` exported. The fix is one line — give `emulator.sh` the same
+candidate-probe `verify.sh` already has. Recorded here rather than fixed silently:
+it is an `env/` change, and this plan's write-set discipline says name it first.
+`ANDROID_SDK_ROOT=/opt/homebrew/share/android-commandlinetools make emulator`
+works today as the manual workaround.
+
+### D4 — the redb lift: sized, and it found the one thing that changes S0
+
+The lift itself is smaller than expected and the sizing is clean. But the probe
+surfaced a structural fact the plan assumed away, and it needs an owner decision
+before S0 starts.
+
+**There is no storage port trait in the core.** `core/social-tree-core/src/ports/mod.rs`
+defines exactly five traits — `Verifier`, `Signer`, `CredentialResolver`,
+`LamportSource`, `BlobPresence` — and none of them is storage. A full sweep of
+croft's tree finds no `Store`, `Log`, or `Repository` trait anywhere. The corpus
+correspondingly implements **zero** core port traits in production code: `Db`,
+`DerivedFold`, and `LocalStore` are bare structs the corpus calls directly.
+
+So `ports/store-redb` would be **a port crate with no port** — unlike
+`ports/keylayer-openmls`, which at least implements `KeyLayer`. Two ways through,
+and the choice moves the estimate by days (see § Open decision, Phase 0).
+
+The inventory, either way. **Promote** (2,578 production lines + 2,302 inline test
+lines): `src/tables.rs` (redb `Db`, 10 table definitions, key/wire codecs,
+`DbError`), `src/fold_derived.rs` (`DerivedFold<V,C>` — `ingest`,
+`read_group_state`, `governance_log`, `rebuild` — this *is* the Store
+realization), `src/governance.rs` (forks, checkpoints, Merkle root, compaction),
+plus `src/tests_stage7.rs` (1,624 lines) and its `proptest-regressions/` seeds,
+which must travel or the saved failure seeds are lost. **Leave:** `src/surface.rs`
+(2,832 lines — view models and the `LocalStore` command API, and the sole user of
+tokio, tracing, blake3 and `SystemTime::now`), and the C-series experiment tests.
+`surface.rs` has no clean split line — every read function both opens a redb table
+and assembles a view struct — so the recommendation is to leave it in the corpus
+and let it depend on the promoted crate.
+
+**Dependencies for the new crate:** `social-tree-core` (path), `redb`,
+`thiserror`; dev `proptest`, `tempfile`. Dropping `surface.rs` drops tokio
+entirely. `serde`/`serde_cbor` are declared in the corpus but **entirely unused** —
+vestigial, same as the dep chat-core already shed. **Core drift is zero**:
+`git rev-list --count 9f7d0c6..HEAD -- core/social-tree-core` returns 0, so the
+pinned rev *is* croft HEAD's core and the path-dep swap needs no adaptation.
+
+**Frictions to price in:** `Db::create_in_memory` is `#[cfg(test)]`, which is
+invisible across crate boundaries — the core already hit and documented this exact
+footgun (`ports/mod.rs:118-120`). The 10 table constants are **triplicated**, and
+the canonical copies in `tables.rs` are dead — the live ones are re-declared by
+string literal in three other files, so a typo is a silent wrong-table bug.
+Fourteen `unwrap()`/`expect()` sit in production paths that rust-enforcer will
+flag, and one is a real defect: `fold_derived.rs:258` panics on redb table init
+inside `DerivedFold::new` — a fallible constructor that doesn't say so. Four corpus
+crates depend on the code; the cheapest path is leaving `local_storage_projection`
+as a re-export shim, the pattern its own `traits.rs`/`types.rs` already use.
+
+**Size:** ~a day for the mechanical promotion (files move, imports rewrite
+mechanically because the corpus modules are already one-line re-exports, 58 tests
+re-earn green). Multi-day if the storage trait is designed and landed first.
+
+### D5 — the apple spike: GREEN, and the platform-neutrality claim now has evidence
+
+The same `#[uniffi::export]` produced a **Swift** surface —
+`public func principalHex(bytes: Data) throws -> String` with
+`enum FfiError: Swift.Error { case BadPrincipalLength(got: UInt32) }` — compiled
+against the same cdylib and ran **5/5 green** on macOS
+(`aarch64-apple-darwin`, Xcode 26.3 / Swift 6.2.4), refusals arriving as typed
+Swift errors exactly as they did in Kotlin.
+
+This is the answer Q4 bought: the FFI surface is **not** Kotlin-shaped. Each
+language got its own idiom — `ByteArray` in Kotlin, `Data` in Swift — from one
+Rust declaration. S5's spike target should be **macOS**: it runs on the installed
+toolchain with no signing story and no new rust target, where iOS would require
+adding `aarch64-apple-ios*` to `rust-toolchain.toml` *and* `env/toolchain.yml`
+together. Compiling Swift against the modulemap needs
+`-Xcc -fmodule-map-file=<generated>.modulemap`, which is not obvious from the
+generated output.
 
 ### S0 — the uniffi surface: the core crosses the FFI line
 
@@ -762,3 +956,67 @@ in a fresh context) against croft main `a51457f`.
 
 **Confirmed ready:** yes — all seven questions closed by the owner, no BLOCKING items
 outstanding. Execution starts at Phase 0, whose findings return to the owner before S0.
+
+## Open decision from Phase 0 (owner) — the storage port question
+
+Phase 0 resolved every probe green, and produced exactly one decision the plan
+cannot make for itself. It gates S0 only; S1–S5 are unaffected.
+
+**The question:** `ports/store-redb` has no trait to implement, because the core
+has no storage port. Which shape does the first landing take?
+
+1. **Trait first (the ADR-0003 pattern).** Design and land a storage port trait in
+   `core/social-tree-core/src/ports/` RED-first, then make the promoted
+   `DerivedFold` implement it. Consistent with how `keylayer-openmls` relates to
+   `KeyLayer`, and it keeps "ports/ holds realizations of core ports" true. The
+   design work is real: `DerivedFold<V, C>` is generic over `Verifier` and
+   `CredentialResolver`, and the trait has to decide whether those stay generic
+   parameters or move behind it. **Multi-day.**
+2. **Promote as a plain crate, trait later.** Land `ports/store-redb` as a
+   concrete crate with no trait, get the bindings and the android surface moving,
+   and design the port when a second storage realization actually asks for one.
+   **~a day.** The cost is an explicit deviation from ADR-0003's stated pattern,
+   which should be recorded as such rather than discovered later.
+
+**My recommendation: (2), with the deviation recorded in the S0 landing note and
+an explicit follow-up item for the trait.** The reasoning is that a port trait
+earns its shape from having more than one implementor, and today there is exactly
+one — inventing the abstraction now means guessing at the `<V, C>` question with
+no second case to check the guess against. The plan's own bet is that the FFI seam
+is the risk and the rest is not; spending the first days of S0 on a storage
+abstraction inverts that. But this is a house-pattern deviation and the house
+pattern is the owner's.
+
+*Not blocking S1–S5.* S3 in particular is order-independent and could start while
+this is decided.
+
+### Phase 0: Discovery — 2026-08-26
+**Executed:** all five probes, D1–D5. Four green, one (D4) green as a probe but it
+surfaced a structural gap (§ Open decision).
+**Found:**
+- D1 green end to end: Kotlin → Rust → Kotlin, refusals arriving as typed Kotlin
+  exceptions. uniffi `=0.31.1` pinned; JNA 5.14.0 already on the classpath.
+- D3 green on the arm64 emulator via a JVM-free dlopen/dlsym loader.
+- D5 green on macOS: the same export produced an idiomatic Swift surface, so the
+  platform-neutrality claim S0 rests on is now evidence rather than assertion.
+- D2: `StorageProvider<VERSION>`, 53 mechanical methods; snapshot/restore
+  recommended (hours) over a full impl (a day) — but **persistence is three seams**,
+  and the croft-local staged/pending maps are restored by neither.
+- D4: **the core has no storage port trait**, so `ports/store-redb` would be a port
+  crate with no port. Owner decision recorded in § Open decision.
+**Corrections to the plan's own prior claims:**
+- Pass 3 said the NDK was absent. Wrong — it read `~/Library/Android/sdk`; the real
+  root is `/opt/homebrew/share/android-commandlinetools`, where NDK
+  `29.0.14206865`, the emulator, the arm64-v8a image and the `croft-dev` AVD all
+  exist. The lesson is the one the repo already teaches about `rustup which`:
+  resolve the path, don't assume it.
+- Pass 3 said "no AVD exists" — it does.
+**Defect found in passing (not P7's, recorded not fixed):** `make emulator` is
+broken on a machine bootstrapped the documented way — `env/emulator.sh:12` honours
+only `ANDROID_SDK_ROOT` and defaults to `~/Library/Android/sdk`, while
+`env/verify.sh:104-106` probes both candidates. One-line fix; workaround is to
+export `ANDROID_SDK_ROOT`.
+**Changed:** Phase 0 marked complete with findings recorded; no phase restructured.
+S2's sizing gains the three-seams finding; S5's apple target settles on macOS.
+**Confirmed:** the plan's central bet held — the FFI seam was the risk worth
+probing, and it came back green on three platforms in one day.
