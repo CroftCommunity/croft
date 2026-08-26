@@ -473,3 +473,29 @@ mint's refresh raced the single-use refresh token
 (`invalid_grant: refresh token rotated concurrently`, live entryway).
 Fixture upgraded to single-use rotation, race reproduced RED in the
 session journey, `freshAccessToken` serialized behind a Mutex.
+
+## 2026-08-26 — `make emulator` had never run on a machine with an SDK
+
+**What:** P7 Phase 0 (probe D3) needed the arm64 emulator. `make emulator`
+failed with `env/emulator.sh: line 30: emulator: command not found`.
+
+**Cause:** `env/emulator.sh` resolved the SDK as
+`${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}` — the Android Studio default
+only. But `env/bootstrap.sh` installs the Homebrew cask to
+`/opt/homebrew/share/android-commandlinetools`, and `env/verify.sh` already
+probed *both* candidates plus `ANDROID_HOME`. So verify passed and bootstrap
+succeeded while the emulator target was broken — the failure mode this repo
+names elsewhere: two sources of truth, one of them silently wrong. This machine
+also carries a stub `~/Library/Android/sdk` holding platform-tools and no SDK
+proper, which is why a bare directory check would not have been enough; the
+`cmdline-tools` marker is what distinguishes them.
+
+**Outcome:** `emulator.sh` now uses verify.sh's discovery rule verbatim.
+Verified by running it with `ANDROID_SDK_ROOT` and `ANDROID_HOME` both unset —
+the case that previously failed — and it reached `==> croft-dev ready`. The
+script's header no longer claims to be untested, because it has now been run.
+
+**Also true, and worth recording:** the NDK (`29.0.14206865`), the emulator, the
+`arm64-v8a` system image and the `croft-dev` AVD were all present the whole
+time. An earlier planning pass concluded the NDK was absent because it inspected
+`~/Library/Android/sdk` — the stub. Resolve the path, do not assume it.
