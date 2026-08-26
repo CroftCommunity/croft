@@ -29,30 +29,83 @@ fn pid(seed: u8) -> PrincipalId {
 }
 
 /// O(0x20, dev 0x10) owner; A(0x21, dev 0x11) admin; C(0x23, dev 0x13) admin;
-/// D(0x24, dev 0x14) member.
+/// D(0x24, dev 0x14) admin (an Admin so D's consent-signature folds past the
+/// ordinary role gate — the pin is about COUNTING, not the role gate).
 fn boot(store: &mut MemStore, thresholds: [u32; 4]) {
     store
-        .ingest(&env(0x10, 0x20, AssertionType::GroupGenesis, 1, vec![], genesis_payload_with(thresholds)))
+        .ingest(&env(
+            0x10,
+            0x20,
+            AssertionType::GroupGenesis,
+            1,
+            vec![],
+            genesis_payload_with(thresholds),
+        ))
         .expect("genesis");
     store
-        .ingest(&env(0x10, 0x20, AssertionType::MembershipAdd, 2, vec![], add_payload(0x21, 1)))
+        .ingest(&env(
+            0x10,
+            0x20,
+            AssertionType::MembershipAdd,
+            2,
+            vec![],
+            add_payload(0x21, 1),
+        ))
         .expect("add admin A");
     store
-        .ingest(&env(0x10, 0x20, AssertionType::MembershipAdd, 3, vec![], add_payload(0x23, 1)))
+        .ingest(&env(
+            0x10,
+            0x20,
+            AssertionType::MembershipAdd,
+            3,
+            vec![],
+            add_payload(0x23, 1),
+        ))
         .expect("add admin C");
     store
-        .ingest(&env(0x10, 0x20, AssertionType::MembershipAdd, 4, vec![], add_payload(0x24, 2)))
-        .expect("add member D");
+        .ingest(&env(
+            0x10,
+            0x20,
+            AssertionType::MembershipAdd,
+            4,
+            vec![],
+            add_payload(0x24, 1),
+        ))
+        .expect("add admin D");
 }
 
 /// Open a contested pair on D: C bans D racing O's re-add.
 fn contest_d(store: &mut MemStore) {
-    let add_d = env(0x10, 0x20, AssertionType::MembershipAdd, 4, vec![], add_payload(0x24, 2));
-    let ban = env(0x13, 0x23, AssertionType::MembershipRemove, 12, vec![envelope_hash(&add_d)], remove_payload(0x24, 0x01));
-    let readd = env(0x10, 0x20, AssertionType::MembershipAdd, 12, vec![envelope_hash(&add_d)], add_payload(0x24, 2));
+    let add_d = env(
+        0x10,
+        0x20,
+        AssertionType::MembershipAdd,
+        4,
+        vec![],
+        add_payload(0x24, 1),
+    );
+    let ban = env(
+        0x13,
+        0x23,
+        AssertionType::MembershipRemove,
+        12,
+        vec![envelope_hash(&add_d)],
+        remove_payload(0x24, 0x01),
+    );
+    let readd = env(
+        0x10,
+        0x20,
+        AssertionType::MembershipAdd,
+        12,
+        vec![envelope_hash(&add_d)],
+        add_payload(0x24, 1),
+    );
     store.ingest(&ban).expect("ban folds");
     store.ingest(&readd).expect("hard-stop half folds");
-    assert!(matches!(store.state(&group()).fork_status, ForkStatus::Contested(_)));
+    assert!(matches!(
+        store.state(&group()).fork_status,
+        ForkStatus::Contested(_)
+    ));
 }
 
 fn resolution_payload(store: &MemStore) -> Vec<u8> {
@@ -66,7 +119,9 @@ fn resolution_payload(store: &MemStore) -> Vec<u8> {
 }
 
 fn resolution_subject(payload: &[u8]) -> PrincipalId {
-    PrincipalId::new(social_tree_core::update::rule_change_approval_subject(payload))
+    PrincipalId::new(social_tree_core::update::rule_change_approval_subject(
+        payload,
+    ))
 }
 
 /// **Pin 1 — the contested subject's signature never counts.** Resolution
@@ -124,7 +179,10 @@ fn a_contested_subjects_approval_does_not_count() {
         payload,
     );
     store.ingest(&resolved).expect("O + A resolves");
-    assert!(matches!(store.state(&group()).fork_status, ForkStatus::Clean));
+    assert!(matches!(
+        store.state(&group()).fork_status,
+        ForkStatus::Clean
+    ));
 }
 
 /// **Pin 2 — the readmission dial gates un-banning, not inviting.** Dial
@@ -137,7 +195,8 @@ fn the_readmission_dial_gates_the_ceiling_not_the_invite() {
     let mut store = MemStore::default();
     boot(&mut store, [1, 2, 1, 1]);
 
-    // Ban D (threshold 2: O + C via approval).
+    // Ban D (threshold 2: O + C via approval). D was seated as an Admin in
+    // boot; the ban and readmissions below use the same role byte.
     let subject_d = pid(0x24);
     let c_approval = env(
         0x13,
@@ -149,17 +208,34 @@ fn the_readmission_dial_gates_the_ceiling_not_the_invite() {
     );
     store.ingest(&c_approval).expect("C approves the ban");
     store
-        .ingest(&env(0x10, 0x20, AssertionType::MembershipRemove, 11, vec![envelope_hash(&c_approval)], remove_payload(0x24, 0x01)))
+        .ingest(&env(
+            0x10,
+            0x20,
+            AssertionType::MembershipRemove,
+            11,
+            vec![envelope_hash(&c_approval)],
+            remove_payload(0x24, 0x01),
+        ))
         .expect("ban at quorum");
-    assert_eq!(store.state(&group()).membership(&subject_d), MembershipView::NotMember);
+    assert_eq!(
+        store.state(&group()).membership(&subject_d),
+        MembershipView::NotMember
+    );
 
     // Minted default 1: the solo re-add seats — permissive by design.
     store
-        .ingest(&env(0x13, 0x23, AssertionType::MembershipAdd, 12, vec![], add_payload(0x24, 2)))
+        .ingest(&env(
+            0x13,
+            0x23,
+            AssertionType::MembershipAdd,
+            12,
+            vec![],
+            add_payload(0x24, 1),
+        ))
         .expect("easy mercy at the minted default");
     assert_eq!(
         store.state(&group()).membership(&subject_d),
-        MembershipView::Member(Role::Member)
+        MembershipView::Member(Role::Admin)
     );
 
     // Re-ban, then dial readmission to 2 (rule_key 5).
@@ -173,23 +249,51 @@ fn the_readmission_dial_gates_the_ceiling_not_the_invite() {
     );
     store.ingest(&c_approval2).expect("C approves ban 2");
     store
-        .ingest(&env(0x10, 0x20, AssertionType::MembershipRemove, 14, vec![envelope_hash(&c_approval2)], remove_payload(0x24, 0x01)))
+        .ingest(&env(
+            0x10,
+            0x20,
+            AssertionType::MembershipRemove,
+            14,
+            vec![envelope_hash(&c_approval2)],
+            remove_payload(0x24, 0x01),
+        ))
         .expect("ban 2");
     let mut dial = vec![5u8]; // RuleKey::Readmission
     dial.extend_from_slice(&2u32.to_be_bytes());
     store
-        .ingest(&env(0x10, 0x20, AssertionType::RuleChange, 15, vec![], dial))
+        .ingest(&env(
+            0x10,
+            0x20,
+            AssertionType::RuleChange,
+            15,
+            vec![],
+            dial,
+        ))
         .expect("dial readmission to 2");
 
     // Solo re-add now refused on the READMISSION threshold.
     let err = store
-        .ingest(&env(0x13, 0x23, AssertionType::MembershipAdd, 16, vec![], add_payload(0x24, 2)))
+        .ingest(&env(
+            0x13,
+            0x23,
+            AssertionType::MembershipAdd,
+            16,
+            vec![],
+            add_payload(0x24, 1),
+        ))
         .expect_err("two to un-ban now");
     assert!(err.contains("threshold"), "{err}");
 
     // A never-banned stranger still enters on the ADD threshold (1).
     store
-        .ingest(&env(0x13, 0x23, AssertionType::MembershipAdd, 17, vec![], add_payload(0x66, 2)))
+        .ingest(&env(
+            0x13,
+            0x23,
+            AssertionType::MembershipAdd,
+            17,
+            vec![],
+            add_payload(0x66, 2),
+        ))
         .expect("inviting strangers is unchanged");
 
     // With A's approval, the readmission carries.
@@ -202,12 +306,39 @@ fn the_readmission_dial_gates_the_ceiling_not_the_invite() {
         approval_payload(AssertionType::MembershipAdd, subject_d),
     );
     store.ingest(&a_approval).expect("A approves readmission");
+    // The readmission ANTECEDES both bans — a sequential decision that
+    // clears the ceiling, not a concurrent race (which would correctly
+    // hard-stop). Sparse test antecedents must cover the full removal
+    // history the way a real client's frontier reference does.
+    let ban1_hash = envelope_hash(&env(
+        0x10,
+        0x20,
+        AssertionType::MembershipRemove,
+        11,
+        vec![envelope_hash(&c_approval)],
+        remove_payload(0x24, 0x01),
+    ));
+    let ban2_hash = envelope_hash(&env(
+        0x10,
+        0x20,
+        AssertionType::MembershipRemove,
+        14,
+        vec![envelope_hash(&c_approval2)],
+        remove_payload(0x24, 0x01),
+    ));
     store
-        .ingest(&env(0x13, 0x23, AssertionType::MembershipAdd, 19, vec![envelope_hash(&a_approval)], add_payload(0x24, 2)))
+        .ingest(&env(
+            0x13,
+            0x23,
+            AssertionType::MembershipAdd,
+            19,
+            vec![envelope_hash(&a_approval), ban2_hash, ban1_hash],
+            add_payload(0x24, 1),
+        ))
         .expect("two to un-ban satisfied");
     assert_eq!(
         store.state(&group()).membership(&subject_d),
-        MembershipView::Member(Role::Member),
+        MembershipView::Member(Role::Admin),
         "seated and the ceiling cleared"
     );
 }
@@ -218,14 +349,37 @@ fn the_readmission_dial_gates_the_ceiling_not_the_invite() {
 #[test]
 fn token_weights_follow_their_acts() {
     let mut store = MemStore::default();
-    boot(&mut store, [2, 2, 1, 1]); // add 2, remove 2
+    boot(&mut store, [1, 1, 1, 1]);
+    // Harden the add and remove dials to 2 (rule keys 0 and 1) AFTER the
+    // cast is seated — the weights under test are the hardened ones.
+    for (key, lamport) in [(0u8, 5u64), (1u8, 6u64)] {
+        let mut dial = vec![key];
+        dial.extend_from_slice(&2u32.to_be_bytes());
+        store
+            .ingest(&env(
+                0x10,
+                0x20,
+                AssertionType::RuleChange,
+                lamport,
+                vec![],
+                dial,
+            ))
+            .expect("dial to 2");
+    }
 
     let mut issuance = [0x77u8; 32].to_vec();
     issuance.extend_from_slice(pid(0x24).as_bytes());
 
     // Solo issuance: refused at the ADD weight.
     let err = store
-        .ingest(&env(0x10, 0x20, AssertionType::TokenIssuance, 10, vec![], issuance.clone()))
+        .ingest(&env(
+            0x10,
+            0x20,
+            AssertionType::TokenIssuance,
+            10,
+            vec![],
+            issuance.clone(),
+        ))
         .expect_err("issuance carries the add weight");
     assert!(err.contains("threshold"), "{err}");
 
@@ -240,12 +394,26 @@ fn token_weights_follow_their_acts() {
     );
     store.ingest(&a_ok).expect("A approves issuance");
     store
-        .ingest(&env(0x10, 0x20, AssertionType::TokenIssuance, 12, vec![envelope_hash(&a_ok)], issuance))
+        .ingest(&env(
+            0x10,
+            0x20,
+            AssertionType::TokenIssuance,
+            12,
+            vec![envelope_hash(&a_ok)],
+            issuance,
+        ))
         .expect("issuance at quorum");
 
     // Solo revocation: refused at the REMOVE weight.
     let err = store
-        .ingest(&env(0x10, 0x20, AssertionType::TokenRevocation, 13, vec![], [0x77u8; 32].to_vec()))
+        .ingest(&env(
+            0x10,
+            0x20,
+            AssertionType::TokenRevocation,
+            13,
+            vec![],
+            [0x77u8; 32].to_vec(),
+        ))
         .expect_err("revocation carries the remove weight");
     assert!(err.contains("threshold"), "{err}");
 
@@ -260,6 +428,13 @@ fn token_weights_follow_their_acts() {
     );
     store.ingest(&a_ok2).expect("A approves revocation");
     store
-        .ingest(&env(0x10, 0x20, AssertionType::TokenRevocation, 15, vec![envelope_hash(&a_ok2)], [0x77u8; 32].to_vec()))
+        .ingest(&env(
+            0x10,
+            0x20,
+            AssertionType::TokenRevocation,
+            15,
+            vec![envelope_hash(&a_ok2)],
+            [0x77u8; 32].to_vec(),
+        ))
         .expect("revocation at quorum");
 }
