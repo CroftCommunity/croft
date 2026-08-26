@@ -473,3 +473,40 @@ Porkbun; the admit vhost's cert issues itself once it resolves).
    `endpoint_unbound` words from the camp mint and still dial fine.
 5. After a few days of clean bake journal, the flip is one word —
    owner-gated, out of this runbook.
+
+### §13 results — 2026-08-26 ~02:20–02:35Z (steps 2+4 RAN; 1 and 3 remain)
+
+Driven over adb + Playwright-over-DevTools (owner present; both phones on
+USB). Deviation from step 1: the phones run **v0.5.0-rc.1 in-place** — the
+promote to v0.5.0 Latest has NOT happened yet, owner's call pending.
+
+- **The callee's production camp mint (step 2): DONE.** Samsung signed in
+  as the callee account (Chrome this time — same `chrome_devtools_remote`
+  socket), and the camp mint against the PRODUCTION admit succeeded
+  **silently** — no client log, no admit journal line; the proof is the
+  relay's attributed close: `usage endpoint_id=14af214d8c …`. The §12
+  endpoint record at rkey `self` still matched the device exactly.
+- **Step 4 observed for free**: the Pixel kept its §12 caller session
+  through the in-place install, camped `endpoint_unbound` with the words
+  on screen AND in the admit journal (02:23:14Z `WARN camp refused
+  reason="endpoint_unbound"`), and still dialed fine.
+- **The first attributed production call**: deep link
+  (`grant=m3registered`, no secret) → "callable via grant m3registered"
+  resolved from live records → Connect → mint-at-dial (silent success) →
+  connected, upgraded to LAN-direct; Hang up landed "call ended: closed
+  by peer: hangup (code 0) — ready, camped on relay" verbatim on the
+  callee. Caller attribution flushed at connection close:
+  `usage endpoint_id=631277dda5` (81 s, ~13 KB relayed).
+- **Finding — the bake is journal-invisible at the current filter**: the
+  relay's `admitted sponsorship=…` line is `debug!`
+  (croft-relay-bin/src/main.rs:135) and production runs
+  `relay_log_filter: "info,usage=debug"`, so §13's stated evidence line
+  never appears in the production journal. The bake reads from
+  **attributed `usage` lines** instead (they carry the endpoint id), or
+  the filter gains the admission module at debug (croft-stack
+  group_vars). Corollary: a SUCCESSFUL mint is silent at every layer —
+  client, admit, relay-until-close. Do not read silence as failure.
+
+Both phones left camped: Samsung holding its pass, Pixel tokenless with
+the honest words (the designed caller posture). Remaining: step 1 (the
+promote), step 3 (E130(a) against staging 8444), and the bake days.
