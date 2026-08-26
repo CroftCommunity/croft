@@ -21,12 +21,36 @@ every rung green on hardware**: the signed-out camp refused, sign-in →
 self-minted camping pass → admitted with attribution, the first call
 with both sides holding passes on an enforcing relay, the endings'
 words verbatim on both screens, and the sign-out negative. versionCode 5,
-versionName 0.5.0. Remaining M4 distance is operational (croft-admit
-activation, the production enforce flip — croft-stack `TODO.md`) plus
-the §12 finds (E130: optimistic-Ready honesty, caller-side camp
-posture).
+versionName 0.5.0 — published as **v0.5.0-rc.1** 2026-08-24.
+
+Then the operational distance closed almost entirely (2026-08-25/26):
+croft-admit + its private store ACTIVATED on the box, production relay
+promoted to the v0.2.0 candidate in OPEN mode verifying the REAL admit
+key — **the bake is live** — and `admit.croft.ing` answered its first
+phones. **§13 steps 2 + 4 RAN 2026-08-26** with the published rc.1 APK
+on both devices (runbook §13 results): the callee's first PRODUCTION
+camp mint (silent success — the relay's attributed `usage` line is the
+instrument), the `endpoint_unbound` caller posture with its words in
+both places, and the first attributed production call, ended with
+E129's words verbatim. Remaining: the bake days, then the owner's
+one-word enforce flip (croft-stack `TODO.md`), plus E135(b) —
+caller-side camp posture (filed as "E130" in this repo's earlier notes;
+the roadmap renumbered it when openprices claimed E130).
 
 ### Added (M4, unreleased)
+- **The camped line is polled truth (E135(a), was "E130(a)").** The
+  screen's camped claim now derives from `endpoint.addr().relayUrl()` —
+  a refused attach reads "NOT camped on relay; calls cannot reach this
+  device", never a comfortable lie. Landed under tests 2026-08-25;
+  device semantics are §13 step 3 (staging), still to run.
+- **The enforcement scenario matrix, client half**
+  (`docs/ENFORCEMENT-SCENARIOS.md` + `EnforcementMatrixTest` riding
+  `testDebugUnitTest`): ~30 posture rows — what must dial, camp, degrade
+  tokenless WITH words, and what the screen must say — each pinned to a
+  named test, gated against drift (a missing pin or a GAP row fails the
+  build; the doc is a declared test input so a doc-only edit re-runs the
+  gate). The server half, where refusal bites, is croft-stack
+  `docs/ENFORCEMENT-SCENARIOS.md`.
 - **M4e camp-at-attach: the callee mints its own pass.** `CampAdmission` +
   `Admit.campToken` + the ViewModel trigger at attach: the pass is cached
   by the wire's `expiresIn` (the JWT stays opaque, decision D3), expiry

@@ -84,10 +84,14 @@ build, never reuse.
   signed-out camp refused, self-minted camping pass admitted with
   sponsorship attribution, the first call with both sides holding passes
   on an enforcing relay, the endings' words verbatim on both screens,
-  sign-out refused again (runbook §12). On promote → `v0.5.0`. Note: §12
-  ran a local debug build of this commit; promotion wants the published
-  candidate APK itself through the two-device test (the production-flip
-  bake, walk step 5).
+  sign-out refused again (runbook §12). On promote → `v0.5.0`. The
+  validation gate note ("§12 ran a local debug build; promotion wants
+  the published APK through the two-device test") was SATISFIED
+  2026-08-26: §13 steps 2+4 ran with THIS published APK on both phones
+  against production — first attributed camp mint, first attributed
+  call, E129 endings verbatim (runbook §13 results). **Promotion to
+  v0.5.0 is unblocked; the promote itself is the owner's call** (§13
+  step 1).
 - `v0.4.0` (Latest) — Phase 11 M2+M3: identity proof (atproto OAuth
   sign-in → `provenDid`) and the derived callability line on the callee
   card. Promoted 2026-08-18 from `v0.4.0-rc.1`, which was cut 2026-08-17

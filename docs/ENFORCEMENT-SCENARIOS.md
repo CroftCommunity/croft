@@ -63,7 +63,7 @@ House truths the rows encode:
 | Expired policy | MUST SAY hidden AND the mint revokes — both layers | PIN:CallabilityJourneyTest.kt::`an expired policy hides the grant from callability AND revokes at mint` |
 | Callability yes, mint no | THE GATE WINS | PIN:CallabilityJourneyTest.kt::`callability can say yes and the mint still says no - the gate wins` · PIN:CallabilityJourneyTest.kt::`an unlisted caller is refused at the gate whatever it presents` |
 
-## Screen honesty (E130 — the poll is the truth) and the session
+## Screen honesty (E135, was "E130" — the poll is the truth) and the session
 
 | Scenario | Outcome | Pinned by |
 |---|---|---|
@@ -77,5 +77,5 @@ House truths the rows encode:
 Same as the server half: a new refusal note or posture in `DialAdmission` /
 `CampAdmission` without a row here means the matrix lies — add the row and its
 test in the same commit. A renamed test fails the pin walk; rename the pin,
-never weaken the gate. E130(b) (caller-side camp posture) joins the screen
+never weaken the gate. E135(b) (caller-side camp posture; the roadmap renumbered "E130" when openprices claimed it) joins the screen
 table when it lands.

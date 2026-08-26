@@ -54,10 +54,19 @@ words verbatim on both screens, and the sign-out negative. The run's
 find — a refresh-token race between the foreground refresh and the camp
 mint — was reproduced in the harness and fixed the same session
 (single-use rotation in the fixture, `freshAccessToken` serialized).
-M4's remaining distance is operational: croft-admit activation and the
-production enforce flip (owner-gated, croft-stack `TODO.md`), plus the
-small closures (optimistic-Ready honesty, caller-side camp posture,
-E125–E128). Do not
+The operational distance then closed (2026-08-25/26): **v0.5.0-rc.1 is
+published and on both phones**, croft-admit is ACTIVE on the box,
+production relay runs the v0.2.0 candidate in OPEN mode verifying the
+real admit key — **the bake is live** — and §13 steps 2+4 RAN: the
+first PRODUCTION camp mint (silent success; the relay's attributed
+`usage` line is the instrument — silence is not failure), the
+`endpoint_unbound` caller posture live, the first attributed production
+call. E135(a) (screen honesty, was "E130(a)") landed under tests; the
+**enforcement scenario matrix** is landed and gated in BOTH repos
+(`docs/ENFORCEMENT-SCENARIOS.md` here + croft-stack's, each walked by a
+test). Remaining: the bake days → the owner's one-word enforce flip
+(croft-stack `TODO.md`); §13 steps 1 (rc promote) + 3 (staging honesty
+check); E135(b) caller-side camp posture; E125–E128. Do not
 describe anything else here as working until it has been run.
 
 ## Read before writing code
