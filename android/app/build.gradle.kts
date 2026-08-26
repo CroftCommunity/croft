@@ -62,6 +62,13 @@ tasks.withType<Test>().configureEach {
             languageVersion.set(JavaLanguageVersion.of(21))
         }
     )
+    // EnforcementMatrixTest reads the repo-root matrix doc; without declaring
+    // it an input, a doc-only edit leaves the test task up-to-date and the
+    // gate silently passes stale (found live: a planted bogus PIN produced a
+    // green run from cache).
+    inputs.file(rootProject.file("../docs/ENFORCEMENT-SCENARIOS.md"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+        .optional()
 }
 
 dependencies {
