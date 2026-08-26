@@ -1,0 +1,37 @@
+# D1 SPIKE — Phase 0 discovery, NOT production code.
+#
+# Disposition `promote` (plan 2026-08-25-1 § Phase 0 D1): this crate becomes S0's
+# scaffold, and S0 wraps it in real tests before anything ships. Until then nothing
+# here is vetted — it exists to answer one question: does OUR crate cross uniffi?
+[package]
+name = "croft-ffi"
+version = "0.0.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "D1 spike: the uniffi surface over the croft core (Phase 0 discovery)"
+publish = false
+
+[lib]
+# cdylib is what JNA loads; the rlib keeps the crate testable from Rust.
+crate-type = ["cdylib", "lib"]
+name = "croft_ffi"
+
+[dependencies]
+# 0.31.1 is what this machine already has cached, and its Kotlin templates use
+# `com.sun.jna.internal.Cleaner` — satisfied by the JNA 5.14.0 already on the
+# android classpath (android/app/build.gradle.kts).
+uniffi = "=0.31.1"
+thiserror = "1"
+social-tree-core = { path = "../core/social-tree-core" }
+
+[[bin]]
+# The bindgen CLI, per uniffi's recommended layout. Gated: `uniffi_bindgen_main`
+# only exists under uniffi's `cli` feature, so an ungated bin breaks a plain
+# `cargo test -p croft-ffi` (observed during D1).
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["cli"]
+
+[features]
+default = []
+cli = ["uniffi/cli"]
