@@ -11,3 +11,14 @@
 /// over them. Every table this crate touches is declared here and nowhere
 /// else — see [`tables::STATE_BLOB_PRESENCE`] for what the alternative cost.
 pub mod tables;
+
+/// The derived fold: ingests signed assertions into folded group state,
+/// writing the authoritative and derived tables in one transaction.
+pub mod fold_derived;
+
+/// Governance over the fold: forks and their deterministic tiebreak,
+/// checkpoints, the Merkle root, and compaction.
+pub mod governance;
+
+#[cfg(test)]
+mod tests_stage7;
