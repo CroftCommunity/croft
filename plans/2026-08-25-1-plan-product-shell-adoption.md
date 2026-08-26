@@ -337,7 +337,11 @@ dir; redb is pure Rust and crosses no FFI). The redb adapter does not exist in c
 today — it lives in the discovery corpus (`local_storage_projection`); **Q6 decided
 (owner, 2026-08-26): promote it** into `ports/store-redb`, D4 sizing the lift and
 separating what is croft-shaped (the Store realization) from what stays corpus-only
-(projection/edge code). The effect-composition rule (ADR-0002) becomes concrete here:
+(projection/edge code). **P0-1 (owner, 2026-08-26): it lands as a concrete crate
+with no core trait** — redb covers every target platform including wasm through its
+own `StorageBackend` seam, so a core storage trait would have one implementor and no
+second on the roadmap. The landing note must record this as a deliberate ADR-0003
+deviation with its revisit trigger (§ Phase 0 decisions, P0-1). The effect-composition rule (ADR-0002) becomes concrete here:
 **one substrate instance per shell, owned by the shell, ports beside it** — the uniffi
 object graph is exactly that sentence.
 
@@ -464,6 +468,13 @@ fabric admission's territory and out of scope.
 (`openmls_rust_crypto` =0.5.1) — persistence is work this phase BUILDS, on the
 strategy D2 named. "The openmls provider persists under the app dir" is the done
 state, not the starting state.
+
+**P0-2 and P0-3 decided (owner, 2026-08-26)** — persistence is openmls's
+`StorageProvider` implemented over redb (after an hour's probe of the upstream
+sqlite provider), the store gets a version header that fails loud, encryption at
+rest is decided explicitly rather than assumed, and of the croft-local maps only
+`pending_key_packages` persists — plus the `GroupId`, without which nothing can be
+reloaded at all. Full reasoning and consequences: § Phase 0 decisions.
 
 **Q2 decided (owner, 2026-08-26): iroh-gossip device-to-device.** The transport is the
 machinery P6 already converged the whole arc over at loopback; no relay contact at
@@ -957,7 +968,99 @@ in a fresh context) against croft main `a51457f`.
 **Confirmed ready:** yes — all seven questions closed by the owner, no BLOCKING items
 outstanding. Execution starts at Phase 0, whose findings return to the owner before S0.
 
-## Open decision from Phase 0 (owner) — the storage port question
+## Phase 0 decisions (owner, 2026-08-26) — all three closed
+
+| # | Question | Decision | Governs |
+|---|---|---|---|
+| P0-1 | `ports/store-redb` has no core trait to implement | **Promote plain, no trait** — recorded as a reasoned ADR-0003 deviation | S0 |
+| P0-2 | How MLS state survives a restart | **Implement openmls's `StorageProvider` over redb**, after a short probe of the upstream sqlite provider | S2 |
+| P0-3 | Fate of in-flight keylayer state on restart | **Persist only what came from outside** (pending key packages); replay the rest | S2 |
+
+### P0-1 — promote plain, and why that is not just expedience
+
+The owner asked the question that settles it: *is another storage layer expected
+across our platforms?* Probed, not assumed — and the answer is no, at croft's layer.
+
+**redb compiles for `wasm32-unknown-unknown`** (verified 2026-08-26), and it carries
+**its own pluggable `StorageBackend` trait** — a byte-range read/write seam — with
+`FileBackend` and `InMemoryBackend` both shipped and
+`Database::create_with_backend(impl StorageBackend)` public. So the platform
+variation one would expect (phones and desktop use files, a browser cannot) lands
+*inside redb, at redb's seam*, not at a croft port trait. One storage realization
+covers android, macOS, iOS and web.
+
+A core storage trait would therefore have exactly one implementor with no second on
+the roadmap, and a trait earns its shape from having more than one. So
+`ports/store-redb` lands as a concrete crate. **This is a deliberate deviation from
+ADR-0003's "ports/ holds realizations of core ports" pattern and S0's landing note
+must say so in those words** — including the revisit trigger: if a storage backend
+ever appears that redb's own seam cannot absorb, that is when the core trait gets
+designed.
+
+*Honest limit of the evidence:* compilation for wasm was proven, not runtime. The
+web path will need `InMemoryBackend` or an IndexedDB-backed `StorageBackend`, and
+confirming that is S5's business.
+
+*Found while probing this, and it will cost someone an afternoon otherwise:*
+`/opt/homebrew/bin/rustc` shadows rustup on PATH and has no wasm std, so a bare
+`cargo check --target wasm32-unknown-unknown` fails with "can't find crate for
+`core`" even on the pinned toolchain with the target installed. CI is unaffected.
+`env/build-iroh-android.sh` already guards this by exporting `RUSTC` explicitly;
+**any wasm or cross-target invocation must do the same** — this is the same trap
+`rust-toolchain.toml` exists for, one layer down.
+
+### P0-2 — the openmls storage trait over redb, sqlite probed first
+
+Pass 3's recommendation was snapshot/restore on the hours-vs-a-day sizing. **The
+owner overrode it, and the override is correct.** A few hours is noise for
+load-bearing state, and what the extra hours buy is the removal of a *standing
+invariant*: the snapshot approach requires every contributor, forever, to snapshot
+after every mutating openmls call, where the penalty for forgetting is not a lost
+session but a corrupted group — decryption failure or a fork. That invariant would
+live in people's heads, which is precisely what this codebase refuses elsewhere.
+P0-1 also puts redb in croft already, so the engine is at hand.
+
+Two consequences S2 owns, both flagged at decision time rather than discovered:
+
+1. **Version migration becomes a real obligation.** openmls bakes its storage
+   version into every key (`CURRENT_VERSION = 1`) with no migration machinery in
+   0.5.0. Once the data is genuinely durable it can no longer be treated as a cache
+   to delete — an openmls upgrade means a migration croft owns, and the store needs
+   a version header that fails loud rather than presenting an empty store.
+2. **Encryption at rest is a design step, not a wrapper.** Signature keys and epoch
+   secrets sit in that store as plain serialized values. A single snapshot blob
+   could have been encrypted wholesale; per-key storage means either encrypting each
+   value or encrypting *underneath* redb at its `StorageBackend` seam. The latter is
+   the cleaner answer and is available — decide it explicitly in S2.
+
+**Before writing the 53 methods, spend an hour on openmls 0.8.1's optional
+`sqlite-provider` feature** (`openmls_sqlite_storage 0.2.0`). It was not vendored
+locally and has not been read. If it works against the Android NDK targets it
+plausibly dominates both options, because upstream owns the format *and* its
+migrations. A short probe, not a phase — and a real answer either way.
+
+### P0-3 — persist what was received, replay what was derived
+
+The keylayer holds three croft-local maps that openmls storage does not cover
+(`ports/keylayer-openmls/src/lib.rs:60-63`): `pending_key_packages`, `staged`
+(admission claims awaiting a decision), and `staged_commits`. They are work in
+flight at the moment the app dies.
+
+The decision splits them on provenance, which is the honest line:
+
+- **`pending_key_packages` persist.** A key package was handed over by another
+  person and cannot be regenerated locally. Dropping it silently costs the *joiner*
+  a second deposit for a failure on our side.
+- **`staged` and `staged_commits` do not.** They are derived from the log, and
+  replay is already how convergence works — the fold is the source of truth, so
+  rebuilding them is the same operation the system performs anyway.
+
+S2 must also persist the **`GroupId`** itself: openmls's storage trait has **no
+enumeration API**, so nothing lists the groups and `MlsGroup::load` cannot be called
+without an id held elsewhere. That is the third seam D2 named, and it is not
+optional.
+
+## Superseded: the open decision as Phase 0 filed it
 
 Phase 0 resolved every probe green, and produced exactly one decision the plan
 cannot make for itself. It gates S0 only; S1–S5 are unaffected.
