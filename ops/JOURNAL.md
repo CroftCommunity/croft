@@ -614,3 +614,48 @@ job it was added for on its very first run. The uncomfortable part is that S0's
 own commit message claimed both new crates were "deny-clean today rather than
 aspirationally so" — true of this machine, and not true of the gate. Claims
 about a gate belong to the gate.
+
+## 2026-08-27 — the social surface runs on the emulator (P7 S1)
+
+**What:** `:social`, a new dev-only android module, installed and driven on the
+arm64 emulator: found a group, selected it, typed, sent, and read the message
+back off the timeline — all through the real uniffi bindings over a real redb
+store on the device.
+
+**Observed, not inferred** (`adb logcat -s croft.social`):
+
+```
+state: groups=1 selected=0 timeline=0 members=0 draft=''
+state: groups=1 selected=1 timeline=0 members=1 draft=''
+state: groups=1 selected=1 timeline=0 members=1 draft='hello from a real device'
+state: groups=1 selected=1 timeline=1 members=1 draft=''
+```
+
+and on screen: the group row bold, `e8b36870  owner` in the membership panel
+with **no** standing label (seated carries no words), and
+`e8b36870: hello from a real device` in the timeline.
+
+**The absence proof, which is the point of the module.** The calling app's APK
+contains **zero** entries matching `ing/croft/social` or `libcroft_ffi`, and its
+native libraries are exactly what they were before this phase
+(`libiroh_ffi.so` plus JNA's dispatch libs). The social code is not in `:app`'s
+dependency graph, so no configuration mistake can put it there. 164 calling-app
+unit tests green and untouched; 15 social tests green; nothing skipped.
+
+**One `env/` change, and it moves an artifact out of the calling app.**
+`build-croft-ffi-android.sh` now installs `libcroft_ffi.so` into
+`android/social/src/main/jniLibs/` rather than `android/app/src/main/jniLibs/`.
+S0 put it in the calling app because that was the only android module; leaving
+it there would have quietly undone S1's whole guarantee by shipping 2MB of a
+library nothing in the calling app calls. `libiroh_ffi.so` stays where it is,
+because that one is genuinely called.
+
+**Half an hour lost to a wrong hypothesis, recorded because the lesson is
+cheap.** Tapping a group row appeared to do nothing — no state change, no
+refusal, no log. I formed three theories about Compose recomposition and
+`ByteArray` equality before instrumenting. The instrumentation showed the
+handler was never invoked at all: `uiautomator dump` gave the row's real bounds
+as `[32,65][1048,191]` and my taps at y=97 and y=127 had been landing outside
+it. The code was correct the whole time. **Dump the bounds before theorising
+about the code** — `adb shell uiautomator dump` is one command and would have
+answered it immediately.

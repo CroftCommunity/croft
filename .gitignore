@@ -24,10 +24,12 @@ node_modules/
 /.build/
 mutants.out/
 
-# The croft-ffi native library, as `env/build-croft-ffi-android.sh` installs it.
-# Untracked deliberately for now: nothing in the app calls it yet, so committing
-# it would put 2MB into the APK to be carried and never invoked. It gets
-# committed the moment S1 links the android shell against it — which is also
-# when it starts being worth reviewing when it changes. (libiroh_ffi.so IS
-# committed, because the app does call it.)
-android/app/src/main/jniLibs/*/libcroft_ffi.so
+# The croft-ffi native library, as `env/build-croft-ffi-android.sh` installs it
+# into the SOCIAL module (S1 moved it there — the calling app must not carry a
+# library nothing in it calls).
+#
+# Still untracked, and now for a better reason than in S0: it is a 2MB build
+# output of code in this same repo, reproducible with one command, and a binary
+# in git is a binary nobody reviews. `make ffi-android` regenerates it.
+# `libiroh_ffi.so` IS committed because its source is not here.
+android/social/src/main/jniLibs/*/libcroft_ffi.so
