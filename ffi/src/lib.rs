@@ -388,6 +388,48 @@ impl ChatSession {
     pub fn principal(&self) -> Vec<u8> {
         self.lock().principal().as_bytes().to_vec()
     }
+
+    // -- S2: sealed chat ---------------------------------------------------
+
+    /// Whether a real MLS group is seated.
+    pub fn has_mls_group(&self) -> bool {
+        self.lock().has_mls_group()
+    }
+
+    /// The seated group's MLS epoch, if there is one.
+    pub fn mls_epoch(&self) -> Option<u64> {
+        self.lock().mls_epoch()
+    }
+
+    /// This device's key package, for someone else to invite it with.
+    pub fn mls_key_package(&self) -> Result<Vec<u8>, FfiError> {
+        Ok(self.lock().mls_key_package()?)
+    }
+
+    /// Invite the holder of `key_package`, returning the Welcome to deliver.
+    ///
+    /// Delivery is the shell's business, not this crate's — S2 rides
+    /// iroh-gossip device-to-device, and keeping the artifact apart from its
+    /// transport is what lets the transport change without touching any of
+    /// this.
+    pub fn invite(&self, key_package: Vec<u8>) -> Result<Vec<u8>, FfiError> {
+        Ok(self.lock().invite(&key_package)?)
+    }
+
+    /// Seat this device from a Welcome.
+    pub fn accept_invite(&self, welcome: Vec<u8>) -> Result<(), FfiError> {
+        Ok(self.lock().accept_invite(&welcome)?)
+    }
+
+    /// Seal bytes for the seated group.
+    pub fn seal(&self, plaintext: Vec<u8>) -> Result<Vec<u8>, FfiError> {
+        Ok(self.lock().seal(&plaintext)?)
+    }
+
+    /// Open a sealed message from the seated group.
+    pub fn open_sealed(&self, wire: Vec<u8>) -> Result<Vec<u8>, FfiError> {
+        Ok(self.lock().open_sealed(&wire)?)
+    }
 }
 
 impl ChatSession {

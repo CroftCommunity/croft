@@ -341,3 +341,123 @@ fn every_refusal_carries_its_sentence_across_the_boundary() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// S2: sealed chat. The core crosses the FFI already; now the KEY LAYER does.
+// ---------------------------------------------------------------------------
+//
+// The honest claim S2 reaches is "sealed at AEAD grade on this device, and it
+// survives the app closing". Transport between two devices is the tier above,
+// and these tests deliberately do not pretend to reach it: they seal on one
+// substrate and open on another, in-process, which is what a JVM-grade test
+// can actually prove.
+
+#[test]
+fn a_session_seats_a_real_mls_group_when_it_founds_one() {
+    // Before S2 a group was a governance fact with no crypto behind it. The
+    // difference is not visible in the timeline, which is exactly why it needs
+    // asserting somewhere: an unsealed group and a sealed one look identical
+    // to a reader of the projection.
+    let (_dir, mut session) = open_temp();
+    session.create_group("sealed").expect("create");
+    assert!(
+        session.has_mls_group(),
+        "founding a group must seat real MLS, not just fold a genesis assertion",
+    );
+}
+
+#[test]
+fn a_sealed_message_is_not_the_plaintext() {
+    let (_dir, mut session) = open_temp();
+    session.create_group("g").expect("create");
+    let sealed = session.seal(b"the quick brown fox").expect("seal");
+    assert!(
+        !sealed.windows(b"quick".len()).any(|w| w == b"quick"),
+        "the plaintext must not survive in the ciphertext — the one assertion \
+         that would catch a seal that quietly did nothing",
+    );
+    assert!(
+        sealed.len() > b"the quick brown fox".len(),
+        "AEAD adds overhead"
+    );
+}
+
+#[test]
+fn the_mls_group_survives_the_app_closing() {
+    // The S2 property at FFI grade. Two stores are involved — the governance
+    // store and the MLS store — and both have to come back, in step. A session
+    // that reloaded the fold and lost the epoch would show the whole
+    // conversation and be unable to add a word to it.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let store = dir.path().join("store.redb");
+
+    let epoch = {
+        let mut session = Session::open(&store, &KEY).expect("open");
+        session.create_group("durable").expect("create");
+        session.mls_epoch().expect("a seated group has an epoch")
+    };
+
+    let reopened = Session::open(&store, &KEY).expect("reopen");
+    assert!(reopened.has_mls_group(), "the MLS group must come back");
+    assert_eq!(
+        reopened.mls_epoch().expect("epoch"),
+        epoch,
+        "and at the epoch it left off at",
+    );
+}
+
+#[test]
+fn a_second_session_on_the_same_store_is_refused_rather_than_racing() {
+    // redb holds an exclusive lock, and the MLS store inherits that. Two
+    // sessions writing one identity's MLS state would be corruption; a refusal
+    // is the good outcome and the shell needs to see it as one.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let store = dir.path().join("store.redb");
+    let _first = Session::open(&store, &KEY).expect("first");
+    assert!(
+        Session::open(&store, &KEY).is_err(),
+        "a second session on one store must refuse",
+    );
+}
+
+#[test]
+fn what_one_member_seals_another_can_open() {
+    // Seal on one substrate, open on another — the plan's wiring-test shape,
+    // at the tier a JVM test can honestly reach. The transport between two
+    // real devices is the tier above this and is not simulated here.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut alice = Session::open(&dir.path().join("alice.redb"), &[0x20; 32]).expect("alice");
+    let mut bob = Session::open(&dir.path().join("bob.redb"), &[0x24; 32]).expect("bob");
+
+    alice.create_group("shared").expect("create");
+    let welcome = alice
+        .invite(&bob.mls_key_package().expect("bob's key package"))
+        .expect("alice invites bob");
+    bob.accept_invite(&welcome).expect("bob seats");
+
+    let sealed = alice.seal(b"for bob only").expect("alice seals");
+    assert_eq!(
+        bob.open_sealed(&sealed).expect("bob opens"),
+        b"for bob only",
+        "sealed on one substrate, opened on another",
+    );
+}
+
+#[test]
+fn a_stranger_cannot_open_what_was_sealed_for_the_group() {
+    // The half that makes the previous test mean something. A "seal" that
+    // everyone can open would pass every happy-path assertion above.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut alice = Session::open(&dir.path().join("alice.redb"), &[0x20; 32]).expect("alice");
+    let mut stranger =
+        Session::open(&dir.path().join("stranger.redb"), &[0x99; 32]).expect("stranger");
+    stranger.create_group("their own").expect("their own group");
+
+    alice.create_group("shared").expect("create");
+    let sealed = alice.seal(b"not for you").expect("seal");
+
+    assert!(
+        stranger.open_sealed(&sealed).is_err(),
+        "someone outside the group must not be able to open its messages",
+    );
+}

@@ -18,6 +18,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import java.nio.file.Files
 import java.nio.file.Path
@@ -116,5 +117,107 @@ class WiringTest {
             ChatSession.open(dir.resolve("no/such/dir/store.redb").toString(), signingKey)
         }
         assertTrue(e.reason.isNotBlank(), "the refusal must carry the store's own words")
+    }
+}
+
+/**
+ * S2's checkpoint: sealed chat, through the bindings, before any device.
+ *
+ * The plan is explicit that this must be green before a phone is touched. What
+ * it proves is the seam, not the network: two sessions in one JVM, each with
+ * its own store, one sealing and the other opening. Transport between two real
+ * devices is the tier above and is not simulated here — simulating it would
+ * produce a green test about a topology that exists nowhere.
+ */
+class SealedChatTest {
+    private lateinit var dir: Path
+
+    @BeforeTest
+    fun open() {
+        dir = Files.createTempDirectory("croft-sealed")
+    }
+
+    @AfterTest
+    fun close() {
+        dir.toFile().deleteRecursively()
+    }
+
+    private fun session(name: String, keyByte: Int): ChatSession =
+        ChatSession.open(dir.resolve("$name.redb").toString(), ByteArray(32) { keyByte.toByte() })
+
+    @Test
+    fun `founding a group seats real MLS`() {
+        val alice = session("alice", 0x20)
+        alice.createGroup("sealed")
+        assertTrue(alice.hasMlsGroup(), "a founded group must be seated in MLS, not folded only")
+        assertNotNull(alice.mlsEpoch())
+        alice.close()
+    }
+
+    @Test
+    fun `what one member seals another can open`() {
+        val alice = session("alice", 0x20)
+        val bob = session("bob", 0x24)
+        try {
+            alice.createGroup("shared")
+            val welcome = alice.invite(bob.mlsKeyPackage())
+            bob.acceptInvite(welcome)
+
+            val sealed = alice.seal("for bob only".toByteArray())
+            assertEquals(
+                "for bob only",
+                String(bob.openSealed(sealed)),
+                "sealed on one substrate, opened on another, through the bindings",
+            )
+        } finally {
+            alice.close()
+            bob.close()
+        }
+    }
+
+    @Test
+    fun `the ciphertext does not contain the plaintext`() {
+        val alice = session("alice", 0x20)
+        try {
+            alice.createGroup("g")
+            val sealed = alice.seal("the quick brown fox".toByteArray())
+            assertTrue(
+                !String(sealed, Charsets.ISO_8859_1).contains("quick"),
+                "a seal that quietly did nothing would pass every other assertion here",
+            )
+        } finally {
+            alice.close()
+        }
+    }
+
+    @Test
+    fun `a stranger cannot open what was sealed for the group`() {
+        val alice = session("alice", 0x20)
+        val stranger = session("stranger", 0x99)
+        try {
+            alice.createGroup("shared")
+            stranger.createGroup("their own")
+            val sealed = alice.seal("not for you".toByteArray())
+            assertFailsWith<FfiException.Refused> { stranger.openSealed(sealed) }
+        } finally {
+            alice.close()
+            stranger.close()
+        }
+    }
+
+    @Test
+    fun `the seated group survives closing and reopening the app`() {
+        val path = dir.resolve("durable.redb").toString()
+        val key = ByteArray(32) { 0x31 }
+
+        val epoch = ChatSession.open(path, key).use { first ->
+            first.createGroup("durable")
+            first.mlsEpoch()
+        }
+
+        ChatSession.open(path, key).use { reopened ->
+            assertTrue(reopened.hasMlsGroup(), "the MLS group must come back")
+            assertEquals(epoch, reopened.mlsEpoch(), "at the epoch it left off at")
+        }
     }
 }

@@ -172,8 +172,7 @@ fn a_pending_key_package_survives_a_restart_and_staged_state_does_not() {
 
     let bob_kp = {
         let bob_dir = temp_dir("provenance-bob");
-        let bob =
-            OpenMlsKeyLayer::persistent(bob_id(), &bob_dir.join("mls.redb")).expect("bob");
+        let bob = OpenMlsKeyLayer::persistent(bob_id(), &bob_dir.join("mls.redb")).expect("bob");
         bob.key_package_bytes().expect("bob's key package")
     };
 

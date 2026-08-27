@@ -25,6 +25,8 @@ use std::sync::Arc;
 
 use chat_core::model::{GroupRef, Intent, MessageLine, Model, Snapshot};
 use chat_core::view::ChatView;
+use keylayer_openmls::store::PersistentProvider;
+use keylayer_openmls::OpenMlsKeyLayer;
 use social_tree_core::model::{
     encode_message_payload, envelope_hash, AssertionEnvelope, AssertionType, DeviceId, GroupId,
     Hash, PrincipalId, Role, ENVELOPE_WIRE_VERSION,
@@ -56,6 +58,15 @@ pub struct Session {
     /// a read on the write path for a value only this device advances.
     next_lamport: u64,
     model: Model,
+    /// The MLS side, in its own store beside the governance one.
+    ///
+    /// **A separate file, deliberately.** redb takes an exclusive lock per
+    /// file, so sharing one would serialise every governance read behind every
+    /// MLS write for no benefit. They also fail independently: a corrupt
+    /// governance store is a lost timeline, a corrupt MLS store is a group that
+    /// can no longer decrypt, and keeping them apart keeps those two outcomes
+    /// from arriving together.
+    keys: OpenMlsKeyLayer<PersistentProvider>,
 }
 
 impl std::fmt::Debug for Session {
@@ -99,6 +110,20 @@ impl Session {
         let db = Arc::new(Db::open(path).inspect_err(|e| {
             tracing::warn!(target: "croft.ffi", error = %e, "refused to open the store");
         })?);
+        // Beside the governance store, named after it so the pair is obvious
+        // in a file listing and so two identities cannot collide.
+        let mls_path = path.with_extension("mls.redb");
+        let mut keys = OpenMlsKeyLayer::persistent(principal, &mls_path).map_err(|e| {
+            tracing::warn!(target: "croft.ffi", error = %e, "refused to open the MLS store");
+            SessionError::Storage {
+                reason: e.to_string(),
+            }
+        })?;
+        // A group from a previous run, if there was one. Silent when there is
+        // not — a fresh install is not a failure.
+        keys.load_group().map_err(|e| SessionError::Storage {
+            reason: e.to_string(),
+        })?;
         let next_lamport = max_lamport_for_device(&db, &device)?.map_or(0, |m| m + 1);
         let fold = DerivedFold::new(Arc::clone(&db), Ed25519Verifier, resolver);
 
@@ -110,6 +135,7 @@ impl Session {
             principal,
             next_lamport,
             model: Model::default(),
+            keys,
         };
         // A session that opens onto an empty screen and fills in later is a
         // session that shows the user nothing for a beat, and it is also one
@@ -155,6 +181,16 @@ impl Session {
             vec![genesis],
             encode_membership_add_payload(&self.principal, Role::Owner),
         )?;
+
+        // Seat real MLS for the group we just founded. Governance says who may
+        // be in the room; MLS is what makes the room a room. Before S2 a group
+        // was the first without the second, and nothing in the projection
+        // showed the difference.
+        self.keys
+            .create_group()
+            .map_err(|e| SessionError::Storage {
+                reason: e.to_string(),
+            })?;
 
         local::put_group_title(&self.db, &group, title)?;
         self.refresh()?;
@@ -392,4 +428,167 @@ fn role_label(role: Role) -> String {
         Role::Observer => "observer",
     }
     .to_string()
+}
+
+impl Session {
+    /// Whether a real MLS group is seated.
+    ///
+    /// Distinct from "a group exists in the fold": governance decides who may
+    /// be in the room, MLS is what makes the room a room, and a projection
+    /// looks identical either way. So it needs asking directly.
+    #[must_use]
+    pub fn has_mls_group(&self) -> bool {
+        self.keys.group_id().is_some()
+    }
+
+    /// The seated group's MLS epoch, if there is one.
+    #[must_use]
+    pub fn mls_epoch(&self) -> Option<u64> {
+        self.keys.epoch()
+    }
+
+    /// This device's key package, for someone else to invite it with.
+    ///
+    /// # Errors
+    /// [`SessionError::Storage`] when the key layer refuses.
+    pub fn mls_key_package(&self) -> Result<Vec<u8>, SessionError> {
+        self.keys
+            .key_package_bytes()
+            .map_err(|e| SessionError::Refused {
+                reason: e.to_string(),
+            })
+    }
+
+    /// Seal `plaintext` for the seated group.
+    ///
+    /// # Errors
+    /// [`SessionError::Refused`] when there is no group, or MLS refuses.
+    pub fn seal(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, SessionError> {
+        let out = self
+            .keys
+            .seal(plaintext)
+            .map_err(|e| SessionError::Refused {
+                reason: e.to_string(),
+            })?;
+        tracing::debug!(
+            target: "croft.ffi",
+            epoch = self.keys.epoch(),
+            bytes = out.len(),
+            "sealed",
+        );
+        Ok(out)
+    }
+
+    /// Open a sealed message from the seated group.
+    ///
+    /// # Errors
+    /// [`SessionError::Refused`] when MLS refuses — which is what a message
+    /// from a group this device is not in looks like, and what an epoch
+    /// mismatch looks like. Both are refusals with words rather than silence.
+    pub fn open_sealed(&mut self, wire: &[u8]) -> Result<Vec<u8>, SessionError> {
+        self.keys.open(wire).map_err(|e| {
+            tracing::warn!(target: "croft.ffi", epoch = self.keys.epoch(), error = %e, "could not open");
+            SessionError::Refused {
+                reason: e.to_string(),
+            }
+        })
+    }
+}
+
+impl Session {
+    /// Invite the holder of `key_package` into the seated group.
+    ///
+    /// The full arc, in the order the architecture requires and not a
+    /// shortcut around it: **governance decides first** (a `MembershipAdd`
+    /// assertion is authored and folded), then the slip is minted *from the
+    /// folded state*, then MLS enacts it. Reversing those would let the crypto
+    /// seat someone the record never admitted — which is the whole failure
+    /// mode the two-admission split exists to prevent.
+    ///
+    /// The invitee's identity comes out of their key package rather than being
+    /// supplied alongside it. Taking it out-of-band would let a caller name one
+    /// person and hand over another's key package, and nothing downstream would
+    /// notice.
+    ///
+    /// Returns the Welcome for delivery to the invitee. **Delivery is not this
+    /// crate's business** — S2 rides iroh-gossip device-to-device (Q2), and
+    /// keeping the artifact and its transport apart is what lets the transport
+    /// change without touching any of this.
+    ///
+    /// # Errors
+    /// [`SessionError::NoGroupSelected`] with no group; [`SessionError::Refused`]
+    /// when governance or MLS refuses.
+    pub fn invite(&mut self, key_package: &[u8]) -> Result<Vec<u8>, SessionError> {
+        let group = self
+            .model
+            .selected_group
+            .or_else(|| self.model.groups.first().map(|g| g.id))
+            .ok_or(SessionError::NoGroupSelected)?;
+
+        let invitee = self
+            .keys
+            .principal_in_key_package(key_package)
+            .map_err(|e| SessionError::Refused {
+                reason: e.to_string(),
+            })?;
+
+        // 1. The governance decision, folded. Without this the slip cannot be
+        //    minted at all — `authorize_invite_enactment` reads the folded
+        //    state, so an unfolded decision is simply not there.
+        self.author(
+            AssertionType::MembershipAdd,
+            group,
+            vec![],
+            store_redb::payload::encode_membership_add_payload(&invitee, Role::Member),
+        )?;
+
+        // 2. The slip, minted FROM that state.
+        let state = read::group_state(&self.db, &group)?.ok_or_else(|| SessionError::Refused {
+            reason: "the group has no folded state to authorize against".to_string(),
+        })?;
+        let slip = social_tree_core::admission::authorize_invite_enactment(&invitee, &state)
+            .map_err(|e| SessionError::Refused {
+                reason: format!("{e:?}"),
+            })?;
+
+        // 3. The enactment, on real MLS.
+        self.keys
+            .deposit_key_package(invitee, key_package)
+            .map_err(|e| SessionError::Refused {
+                reason: e.to_string(),
+            })?;
+        let artifacts = {
+            use social_tree_core::ports::keylayer::KeyLayer as _;
+            self.keys
+                .add_with_welcome(slip)
+                .map_err(|e| SessionError::Refused {
+                    reason: e.to_string(),
+                })?
+        };
+
+        tracing::debug!(
+            target: "croft.ffi",
+            epoch = self.keys.epoch(),
+            "invited, epoch advanced",
+        );
+        self.refresh()?;
+        Ok(artifacts.welcome)
+    }
+
+    /// Seat this device from a Welcome someone sent.
+    ///
+    /// # Errors
+    /// [`SessionError::Refused`] for bytes that are not a Welcome this device
+    /// can seat from — including a Welcome for a group it was never added to.
+    pub fn accept_invite(&mut self, welcome: &[u8]) -> Result<(), SessionError> {
+        let merged = {
+            self.keys
+                .join_from_welcome(welcome)
+                .map_err(|e| SessionError::Refused {
+                    reason: e.to_string(),
+                })?
+        };
+        tracing::debug!(target: "croft.ffi", epoch = merged.epoch, "seated from a Welcome");
+        Ok(())
+    }
 }

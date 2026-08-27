@@ -360,6 +360,7 @@ name = "croft-ffi"
 version = "0.0.0"
 dependencies = [
  "chat-core",
+ "keylayer-openmls",
  "social-tree-core",
  "store-redb",
  "tempfile",

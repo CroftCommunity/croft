@@ -105,6 +105,30 @@ impl<P: openmls_traits::OpenMlsProvider + store::Bookkeeping> OpenMlsKeyLayer<P>
         &self.persona.provider
     }
 
+    /// Whose key package this is, read from the credential it carries.
+    ///
+    /// The identity is IN the key package — this adapter mints credentials
+    /// whose identity bytes are the 32-byte `PrincipalId` — so an invite never
+    /// needs the principal supplied alongside. Taking it out-of-band would let
+    /// a caller name one person and hand over another's key package, and
+    /// nothing downstream would notice.
+    ///
+    /// # Errors
+    /// [`KeyLayerError::Parse`] for bytes that are not a valid key package, or
+    /// whose credential is not the 32-byte shape this adapter mints.
+    pub fn principal_in_key_package(&self, wire: &[u8]) -> Result<PrincipalId, KeyLayerError> {
+        let kp_in = KeyPackageIn::tls_deserialize_exact(wire)
+            .map_err(|e| KeyLayerError::Parse(e.to_string()))?;
+        let kp = kp_in
+            .validate(self.persona.provider.crypto(), ProtocolVersion::Mls10)
+            .map_err(|e| KeyLayerError::Parse(e.to_string()))?;
+        identity::credential_principal(kp.leaf_node().credential()).ok_or_else(|| {
+            KeyLayerError::Parse(
+                "the key package's credential is not a croft principal".to_string(),
+            )
+        })
+    }
+
     /// The live group's epoch, if a group is loaded.
     ///
     /// S2's observability asks for epoch transitions to be legible, and an
