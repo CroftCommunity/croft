@@ -64,6 +64,26 @@ android {
                 "jna.library.path",
                 rootProject.file("../target/debug").absolutePath,
             )
+
+            // The two real inputs gradle cannot see, declared so it stops
+            // reporting a stale pass as a fresh one.
+            //
+            // This is the same defect P7 S0 fixed for `ffi/kotlin` and it
+            // arrived again the moment a second module drove the bindings —
+            // which is the argument for writing it down rather than
+            // remembering it. Gradle's up-to-date check knows the Kotlin
+            // sources and nothing else, so a rebuilt cdylib with unchanged
+            // test code looks like "nothing happened": the task is SKIPPED and
+            // the build reports success. A gate that passes without running is
+            // worse than one that fails, because nothing in the output says so.
+            it.inputs.files(
+                fileTree(rootProject.file("../target/debug")) {
+                    include("libcroft_ffi.*")
+                },
+            ).withPropertyName("croftFfiLibrary").withPathSensitivity(PathSensitivity.NONE)
+            it.inputs.dir(rootProject.file("../ffi/kotlin/build/generated/uniffi"))
+                .withPropertyName("generatedBindings")
+                .withPathSensitivity(PathSensitivity.RELATIVE)
         }
     }
 }

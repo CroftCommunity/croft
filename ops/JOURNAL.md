@@ -659,3 +659,27 @@ as `[32,65][1048,191]` and my taps at y=97 and y=127 had been landing outside
 it. The code was correct the whole time. **Dump the bounds before theorising
 about the code** — `adb shell uiautomator dump` is one command and would have
 answered it immediately.
+
+## 2026-08-27 — the same gate defect arrived again in the new module (P7 S1)
+
+**What:** `:social:testDebugUnitTest` could report a pass for a test it had
+skipped, exactly as `ffi/kotlin`'s test task could before S0 fixed it.
+
+**Cause:** identical. Gradle's up-to-date check sees the Kotlin sources and
+nothing else. The two things that actually change between runs — the cdylib and
+the generated bindings — are outside the project, so a rebuilt Rust library with
+unchanged test code looks like nothing happened, the task is skipped, and the
+build says SUCCESSFUL.
+
+**Outcome:** both declared as inputs on the social module's unit tests too.
+Verified by rebuilding the cdylib and watching the task go from
+`> Task :social:testDebugUnitTest UP-TO-DATE` to `> Task :social:testDebugUnitTest`.
+
+**Why this is worth a second entry rather than a footnote on the first.** The
+fix did not generalise on its own: it lived in one module's build file, and the
+defect came back the instant a second module drove the same bindings. Nothing
+warned. Any future module that consumes the uniffi bindings inherits this
+problem by default and will look green while skipping its tests — so the rule
+belongs with the bindings, not with whoever remembers. If a third consumer
+appears, that is the point to extract this into a shared convention plugin
+rather than paste it a third time.
