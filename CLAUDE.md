@@ -43,7 +43,21 @@ bindings over a real redb store — and the calling app's APK contains **zero**
 entries matching `ing/croft/social` or `libcroft_ffi`, with its native
 libraries unchanged. 164 calling-app tests green and untouched, 26 social tests
 green, nothing skipped. E116's four presentation obligations are landed and
-pinned. Still owed: the lost-race scenario, which needs S2's second device. The **android
+pinned. **P7 S2 is PAUSED 2026-08-27 at its own checkpoint**, with everything
+short of two physical phones done: MLS state now **persists** (openmls's
+`StorageProvider` over redb, `ports/keylayer-openmls/src/store.rs` — the probe
+P0-2 required found upstream's sqlite provider does **not** support wasm32, so
+it would have capped S5), the key layer reloads a group after a restart, and
+**sealed chat crosses the FFI with the JVM checkpoint green (12/12,
+`make bindings`)** — seal on one substrate, open on another, a stranger
+refused. The invite path is the real arc: governance folds first, the slip is
+minted from that folded state, then MLS enacts. **Not built and needed before
+any device run: the iroh-gossip transport and a pairing step** — the JVM tier
+passes Welcomes and sealed messages as byte arrays inside the test, so nothing
+yet carries them between two phones. Start at
+`ops/RUNBOOK-s2-two-device-sealed-chat.md`, which is written but **NOT RUN**.
+Still owed: the lost-race scenario and the departure/token-return arc, both of
+which need that second device. The **android
 app** — the inherited croftcall client — builds, launches, and is published as
 **`v0.4.0`** (Latest): camps on **our relay** (`relay.croft.ing:8443`),
 reports the live connection path, redeems exchange invite links (Phase 11

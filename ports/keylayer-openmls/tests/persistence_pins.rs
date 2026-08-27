@@ -338,3 +338,91 @@ impl openmls_traits::storage::traits::MlsGroupJoinConfig<V> for TestValue {}
 impl openmls_traits::storage::traits::TreeSync<V> for TestValue {}
 impl openmls_traits::storage::traits::GroupContext<V> for TestValue {}
 impl openmls_traits::storage::traits::LeafNode<V> for TestValue {}
+impl openmls_traits::storage::traits::QueuedProposal<V> for TestValue {}
+impl openmls_traits::storage::traits::ProposalRef<V> for TestKey {}
+impl openmls_traits::storage::Entity<V> for TestKey {}
+
+// ---------------------------------------------------------------------------
+// Closing the two gaps a mutation audit found (2026-08-27)
+// ---------------------------------------------------------------------------
+//
+// `cargo mutants` over the six helpers: 11 caught, 1 unviable, **2 missed** —
+// both in `remove_from_list`, and both real gaps rather than equivalent
+// mutants. Replacing the whole function with `Ok(())` survived, so nothing
+// tested that removal removes; and flipping `==` to `!=` in its position
+// search survived, so nothing tested that it removes the RIGHT item.
+//
+// That function is what `remove_proposal` uses to take a proposal off a
+// group's queue. Un-tested, a proposal could stay queued after being removed
+// (openmls would re-process it) or the wrong one could vanish (openmls would
+// process a proposal the caller meant to drop). Neither is loud.
+
+#[test]
+fn removing_a_queued_proposal_actually_takes_it_off_the_queue() {
+    let path = temp_path("remove-proposal");
+    let _ = std::fs::remove_file(&path);
+    let store = RedbStorage::open(&path).expect("open");
+    let group = TestKey(b"g".to_vec());
+
+    store
+        .queue_proposal(&group, &TestKey(b"ref-1".to_vec()), &TestValue(b"p1".to_vec()))
+        .expect("queue");
+    store.remove_proposal(&group, &TestKey(b"ref-1".to_vec())).expect("remove");
+
+    let refs: Vec<TestKey> = store.queued_proposal_refs(&group).expect("read refs");
+    assert!(
+        refs.is_empty(),
+        "a removed proposal must leave the queue — left on it, openmls \
+         re-processes a proposal the caller meant to drop",
+    );
+}
+
+#[test]
+fn removing_one_queued_proposal_leaves_the_others_alone() {
+    // The `==` -> `!=` mutant: a position search that matches the wrong item
+    // removes the wrong proposal, and every single-item test still passes.
+    let path = temp_path("remove-right-one");
+    let _ = std::fs::remove_file(&path);
+    let store = RedbStorage::open(&path).expect("open");
+    let group = TestKey(b"g".to_vec());
+
+    for name in [b"ref-1", b"ref-2", b"ref-3"] {
+        store
+            .queue_proposal(
+                &group,
+                &TestKey(name.to_vec()),
+                &TestValue(name.to_vec()),
+            )
+            .expect("queue");
+    }
+    store.remove_proposal(&group, &TestKey(b"ref-2".to_vec())).expect("remove");
+
+    let refs: Vec<TestKey> = store.queued_proposal_refs(&group).expect("read refs");
+    assert_eq!(
+        refs,
+        vec![TestKey(b"ref-1".to_vec()), TestKey(b"ref-3".to_vec())],
+        "exactly the named proposal goes, and the order of the rest is kept",
+    );
+}
+
+#[test]
+fn clearing_the_queue_removes_every_proposal_and_its_refs() {
+    let path = temp_path("clear-queue");
+    let _ = std::fs::remove_file(&path);
+    let store = RedbStorage::open(&path).expect("open");
+    let group = TestKey(b"g".to_vec());
+
+    for name in [b"ref-1", b"ref-2"] {
+        store
+            .queue_proposal(&group, &TestKey(name.to_vec()), &TestValue(name.to_vec()))
+            .expect("queue");
+    }
+    StorageProvider::<{ openmls_traits::storage::CURRENT_VERSION }>::clear_proposal_queue::<
+        TestKey,
+        TestKey,
+    >(&store, &group)
+    .expect("clear");
+
+    let refs: Vec<TestKey> = store.queued_proposal_refs(&group).expect("read refs");
+    assert!(refs.is_empty(), "the queue is empty after clearing it");
+}
