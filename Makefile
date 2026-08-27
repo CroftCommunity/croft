@@ -7,7 +7,8 @@ SHELL := /usr/bin/env bash
 ENV   := env
 
 .PHONY: help bootstrap verify record-checksums emulator emulator-ui emulator-nuke \
-        install run logcat crash screenshot gate bindings ffi-android clean
+        install run logcat crash screenshot gate bindings ffi-android \
+        android-local-properties clean
 
 help: ## show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -19,6 +20,9 @@ bootstrap: ## zero -> working toolchain (idempotent; safe to re-run)
 
 verify: ## refuse if the installed toolchain differs from env/toolchain.yml
 	@$(ENV)/verify.sh
+
+android-local-properties: ## (re)write android/local.properties from the SDK this machine has
+	@$(ENV)/android-local-properties.sh
 
 record-checksums: ## fetch pinned artifacts and record their real sha256 into toolchain.yml
 	@$(ENV)/record-checksums.sh
@@ -64,6 +68,7 @@ ffi-android: ## cross-compile croft-ffi for arm64 and load it on the emulator
 gate: verify ## everything CI runs, in the same order
 	@cargo test --workspace
 	@$(ENV)/gen-kotlin-bindings.sh
+	@$(ENV)/android-local-properties.sh
 	@cd android && ./gradlew testDebugUnitTest
 
 clean:

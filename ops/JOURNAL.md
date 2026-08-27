@@ -532,3 +532,43 @@ the useful finding — the recipe generalizes with no new surprises.
 The `.so` is gitignored for now. Nothing in the app calls it yet, so committing
 it would add 2MB to the APK to be carried and never invoked; it lands in git
 when S1 links the shell against it.
+
+## 2026-08-26 — `make gate` was not reproducible, and could pass without running
+
+**What:** Running the full gate in a P7 S0 worktree failed at
+`:app:testDebugUnitTest` with `SDK location not found`, and the log showed the
+FFI wiring test reporting `> Task :test UP-TO-DATE` — skipped, while the build
+said SUCCESSFUL. Two separate defects, both found by watching one gate run.
+
+**Cause, defect one.** `android/local.properties` is gitignored — correctly, it
+is a per-machine path — but nothing generated it. It had been written by hand
+once, in the main checkout, and said `sdk.dir=$HOME/Library/Android/sdk`. Two
+consequences. A **worktree has no copy at all**, and this repo's own norm is
+that multi-turn work happens in a worktree, so the gate was green in one
+checkout and red in another for a reason unrelated to the code. And the
+hand-written value pointed at the **stub** — that path holds platform-tools and
+nothing else on this machine; the real SDK is the Homebrew cask. That is the
+third place the Android-Studio default was assumed, after `emulator.sh` and a
+planning pass that concluded the NDK was missing.
+
+**Cause, defect two.** Gradle's up-to-date check for the FFI wiring test knew
+about the Kotlin sources and nothing else. The cdylib and the generated
+bindings — the two things that actually change between runs, and the two the
+test exists to exercise — were invisible to it. So a rebuilt Rust library with
+unchanged test code looked like "nothing happened", the task was skipped, and
+the build reported success. **A gate that passes without running is worse than
+one that fails**, because nothing in the output says so.
+
+**Outcome:** `env/android-local-properties.sh` writes the file from
+`verify.sh`'s candidate probe verbatim — the fourth place would have been a
+fourth answer — and `make gate` calls it, with `make android-local-properties`
+for running it alone. Verified in the worktree that previously failed:
+`:app:testDebugUnitTest` BUILD SUCCESSFUL. The gradle test task now declares
+the cdylib and the generated bindings as inputs; verified by watching the same
+invocation go from `> Task :test UP-TO-DATE` to `> Task :test` with all seven
+tests PASSED.
+
+**The pattern, since this is the second time this week:** a target that works
+only because of local state somebody set up by hand is not a target, it is a
+habit. `emulator.sh` had it, `local.properties` had it. `env/` is supposed to
+refuse rather than warn; it cannot refuse over state it never creates.

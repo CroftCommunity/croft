@@ -53,7 +53,27 @@ tasks.test {
     useJUnitPlatform()
     // Where the cdylib built by `env/gen-kotlin-bindings.sh` lands. JNA reads
     // this to find `libcroft_ffi.dylib`.
-    systemProperty("jna.library.path", System.getProperty("croft.ffi.libdir") ?: "")
+    val libdir = System.getProperty("croft.ffi.libdir") ?: ""
+    systemProperty("jna.library.path", libdir)
+
+    // The two real inputs gradle cannot see, declared so it stops reporting a
+    // stale pass as a fresh one.
+    //
+    // Found by watching a gate run print `> Task :test UP-TO-DATE` after the
+    // Rust side had changed. Gradle's up-to-date check knows about the Kotlin
+    // sources and nothing else, so a rebuilt cdylib with unchanged test code
+    // looks like "nothing happened" — and the task is SKIPPED while the build
+    // reports BUILD SUCCESSFUL. That is a gate that passes without running,
+    // which is worse than one that fails: the bindings this test exists to
+    // check are generated fresh every run and would never have been exercised.
+    if (libdir.isNotEmpty()) {
+        inputs.files(fileTree(libdir) { include("libcroft_ffi.*") })
+            .withPropertyName("croftFfiLibrary")
+            .withPathSensitivity(PathSensitivity.NONE)
+    }
+    inputs.dir(layout.buildDirectory.dir("generated/uniffi"))
+        .withPropertyName("generatedBindings")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
     testLogging {
         events("passed", "failed", "skipped")
         showStandardStreams = true
