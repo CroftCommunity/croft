@@ -19,3 +19,10 @@ dependencyResolutionManagement {
 }
 rootProject.name = "croftcall"
 include(":app")
+
+// P7 S1. The one line the calling build reads — the social surface is a
+// separate DEV-ONLY module, so `:app`'s variant names, its release APK and
+// every command in ops/RUNBOOK-two-device-call-test.md stay exactly as they
+// are while croftcall bakes. See android/social/build.gradle.kts for why this
+// is a stronger guarantee than a product flavor rather than a weaker one.
+include(":social")

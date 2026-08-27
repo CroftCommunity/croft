@@ -69,7 +69,12 @@ for abi_target in "arm64-v8a:aarch64-linux-android:aarch64_linux_android:AARCH64
   so="$root/target/$target/release/libcroft_ffi.so"
   [ -f "$so" ] || { echo "no .so at $so"; exit 1; }
 
-  out="$root/android/app/src/main/jniLibs/$abi"
+  # The SOCIAL module, not the calling app. S1 gave the social surface its own
+  # module precisely so the calling app's build cannot contain it, and shipping
+  # our .so into `app/src/main/jniLibs` would have quietly undone that — the
+  # calling APK would carry 2MB of a library nothing in it calls. `libiroh_ffi.so`
+  # stays where it is, because the calling app genuinely does call that one.
+  out="$root/android/social/src/main/jniLibs/$abi"
   mkdir -p "$out"
   cp "$so" "$out/"
   echo "==> installed $out/libcroft_ffi.so ($(wc -c < "$out/libcroft_ffi.so") bytes)"
@@ -120,7 +125,7 @@ int main(void) {
 }
 PROBE
 "$TC/bin/aarch64-linux-android${API}-clang" "$loader.c" -o "$loader"
-adb push "$root/android/app/src/main/jniLibs/arm64-v8a/libcroft_ffi.so" /data/local/tmp/ >/dev/null
+adb push "$root/android/social/src/main/jniLibs/arm64-v8a/libcroft_ffi.so" /data/local/tmp/ >/dev/null
 adb push "$loader" /data/local/tmp/dlopen-probe >/dev/null
 adb shell chmod 755 /data/local/tmp/dlopen-probe
 result="$(adb shell /data/local/tmp/dlopen-probe | tr -d '\r')"

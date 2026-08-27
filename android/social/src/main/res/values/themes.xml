@@ -1,0 +1,6 @@
+<resources>
+    <!-- Deliberately the same parent the calling app uses, so the two surfaces
+         look like the same product rather than like two apps that happen to be
+         installed together. -->
+    <style name="Theme.CroftSocial" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

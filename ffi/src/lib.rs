@@ -36,6 +36,19 @@ uniffi::setup_scaffolding!();
 /// actionable. Flattening these into one message-carrying variant would be
 /// less code and strictly worse: a caller can branch on `NoGroupSelected` and
 /// cannot branch on a string.
+///
+/// **Every variant also carries `reason`, and that is not redundancy.** uniffi
+/// builds a generated exception's `message` from the variant's FIELDS, not
+/// from the Rust `Display` impl — so before this field existed, the fieldless
+/// variants crossed the boundary with `message == ""`. `NoGroupSelected` and
+/// `EmptyDraft`, the two refusals a person is most likely to hit, were exactly
+/// the fieldless ones: the typed exception arrived and the sentence did not,
+/// and a shell rendering `e.message` rendered nothing. Found by S1 the first
+/// time a surface tried to show a refusal to a user.
+///
+/// The words stay in the `#[error]` attributes — one source of truth — and
+/// ride across in this field. Translating them shell-side would put a product
+/// commitment in every shell, which is how they drift apart.
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum FfiError {
     /// A signing key was not 32 bytes.
@@ -43,12 +56,16 @@ pub enum FfiError {
     BadKeyLength {
         /// The length actually supplied.
         got: u32,
+        /// The refusal in words, for showing a person.
+        reason: String,
     },
     /// A group id was not 32 bytes.
     #[error("a group id is 32 bytes, got {got}")]
     BadGroupIdLength {
         /// The length actually supplied.
         got: u32,
+        /// The refusal in words, for showing a person.
+        reason: String,
     },
     /// A `TypeChar` carried something other than exactly one character.
     ///
@@ -59,18 +76,28 @@ pub enum FfiError {
     NotOneCharacter {
         /// How many characters actually arrived.
         count: u32,
+        /// The refusal in words, for showing a person.
+        reason: String,
     },
     /// A send was attempted with no group selected.
     #[error("no group is selected, so there is nowhere to send")]
-    NoGroupSelected,
+    NoGroupSelected {
+        /// The refusal in words, for showing a person.
+        reason: String,
+    },
     /// A send was attempted with an empty draft.
     #[error("the draft is empty, so there is nothing to send")]
-    EmptyDraft,
+    EmptyDraft {
+        /// The refusal in words, for showing a person.
+        reason: String,
+    },
     /// A group was named that this session is not a member of.
     #[error("no such group in this session's membership")]
     NoSuchGroup {
         /// The group that was asked for, as bytes.
         group: Vec<u8>,
+        /// The refusal in words, for showing a person.
+        reason: String,
     },
     /// The store refused, in its own words.
     #[error("storage: {reason}")]
@@ -89,17 +116,46 @@ pub enum FfiError {
 impl From<error::SessionError> for FfiError {
     fn from(e: error::SessionError) -> Self {
         use error::SessionError as S;
+        // Taken once, before the match consumes `e`: this IS the sentence from
+        // the `#[error]` attribute, and taking it here is what keeps the words
+        // in exactly one place.
+        let reason = e.to_string();
         match e {
             // `usize` does not cross; the cast is safe because these are
             // lengths of things that already fit in memory.
-            S::BadKeyLength { got } => FfiError::BadKeyLength { got: got as u32 },
-            S::NoGroupSelected => FfiError::NoGroupSelected,
-            S::EmptyDraft => FfiError::EmptyDraft,
+            S::BadKeyLength { got } => FfiError::BadKeyLength {
+                got: got as u32,
+                reason,
+            },
+            S::NoGroupSelected => FfiError::NoGroupSelected { reason },
+            S::EmptyDraft => FfiError::EmptyDraft { reason },
             S::NoSuchGroup { group } => FfiError::NoSuchGroup {
                 group: group.as_bytes().to_vec(),
+                reason,
             },
-            S::Storage { reason } => FfiError::Storage { reason },
-            S::Refused { reason } => FfiError::Refused { reason },
+            S::Storage { .. } => FfiError::Storage { reason },
+            S::Refused { .. } => FfiError::Refused { reason },
+        }
+    }
+}
+
+impl FfiError {
+    /// The refusal in words — never empty, whichever variant this is.
+    ///
+    /// The accessor exists so a caller does not have to know which variants
+    /// happen to be fieldless; see the type's own docs for why `message` alone
+    /// could not be trusted.
+    #[must_use]
+    pub fn reason(&self) -> &str {
+        match self {
+            FfiError::BadKeyLength { reason, .. }
+            | FfiError::BadGroupIdLength { reason, .. }
+            | FfiError::NotOneCharacter { reason, .. }
+            | FfiError::NoGroupSelected { reason }
+            | FfiError::EmptyDraft { reason }
+            | FfiError::NoSuchGroup { reason, .. }
+            | FfiError::Storage { reason }
+            | FfiError::Refused { reason } => reason,
         }
     }
 }
@@ -363,9 +419,11 @@ impl TryFrom<Intent> for chat_core::model::Intent {
                 match (chars.next(), chars.next()) {
                     (Some(ch), None) => chat_core::model::Intent::TypeChar(ch),
                     _ => {
+                        let count = c.chars().count() as u32;
                         return Err(FfiError::NotOneCharacter {
-                            count: c.chars().count() as u32,
-                        })
+                            count,
+                            reason: format!("TypeChar takes exactly one character, got {count}"),
+                        });
                     }
                 }
             }
@@ -384,6 +442,7 @@ impl TryFrom<Intent> for chat_core::model::Intent {
 fn group_id(bytes: &[u8]) -> Result<GroupId, FfiError> {
     let raw: [u8; 32] = bytes.try_into().map_err(|_| FfiError::BadGroupIdLength {
         got: bytes.len() as u32,
+        reason: format!("a group id is 32 bytes, got {}", bytes.len()),
     })?;
     Ok(GroupId::new(raw))
 }

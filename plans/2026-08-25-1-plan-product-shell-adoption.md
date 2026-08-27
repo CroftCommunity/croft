@@ -535,6 +535,87 @@ arm64 emulator shows the surface; **(verification)**
 untouched and passing is part of the gate, and a release-variant build shows the
 surface absent.
 
+
+**S1 CLOSED 2026-08-27.** Both halves of Done-when RAN.
+
+- **Behavioral.** The `:social` app on the arm64 emulator: found a group,
+  selected it, typed, sent, and read the line back — through the real bindings
+  over a real redb store on the device. Logged, not inferred from a screenshot:
+  `groups=1 selected=1 timeline=1 draft=''`, with `e8b36870  owner` in the
+  membership panel carrying **no** standing label (seated carries no words) and
+  `e8b36870: hello from a real device` in the timeline.
+- **Verification.** `:app:testDebugUnitTest` **164 green and untouched**;
+  `:social:testDebugUnitTest` **26 green**; nothing skipped in either. The
+  calling app's APK contains **zero** entries matching `ing/croft/social` or
+  `libcroft_ffi`, and its native libraries are unchanged from before the phase.
+
+**Deviation from the plan, decided by the owner mid-phase: a separate `:social`
+module, not a product flavor.** Q1's choice of build-level separation over a
+runtime flag stands; the mechanism changed. Implementing flavors literally
+renames every variant task in `:app` — `assembleDebug` becomes
+`assembleCallingDebug` — and those names are written into
+`ops/RUNBOOK-two-device-call-test.md`, `ops/RELEASING.md`,
+`docs/ENFORCEMENT-SCENARIOS.md` and the Makefile. croftcall is live, baking on
+two phones, and the owner is following that runbook now; churning it mid-bake
+is the ambient change the standing constraint exists to prevent. The module is
+also a **stronger** guarantee: with a flavor the social code sits in `:app` and
+is excluded by configuration, which a configuration mistake can undo; here it
+is not in the calling app's dependency graph at all.
+
+**Consequent write-set deviations, named rather than left silent:**
+- The journey test lives at `android/social/src/test/java/ing/croft/social/`,
+  not the plan's `android/app/src/test/java/ing/croft/call/workflow/`. It
+  follows the module.
+- `android/settings.gradle.kts` gains `include(":social")` — one line, and it
+  replaces the flavor block as the single thing the calling build reads.
+  `android/app/build.gradle.kts` is **untouched**.
+- `env/build-croft-ffi-android.sh` now installs the `.so` into the social
+  module. S0 put it in `app/src/main/jniLibs` because that was the only android
+  module; leaving it would have shipped 2MB of an uncalled library into the
+  calling APK and quietly undone this phase's guarantee.
+
+**The probe S1 ran before building on an assumption.** The whole test strategy
+rests on an android JVM unit test loading the **desktop** cdylib — D1's JNA trap
+points at it, since the app declares JNA as `@aar` and a desktop JVM needs the
+plain jar. Probed first: green. Had it failed, the journey test could not have
+lived in an android module at all.
+
+**What S1 found, and it corrects an S0 claim.** S0's commit said refusals "cross
+the boundary as typed Kotlin exceptions carrying their detail". Half true.
+uniffi builds a generated exception's `message` from the variant's **fields**,
+not from the Rust `Display` impl, so the FIELDLESS variants crossed with
+`message == ""` — and those were `NoGroupSelected` and `EmptyDraft`, the two
+refusals a person is most likely to hit. The typed exception arrived; the
+sentence did not. It took a surface actually trying to show a refusal to a user
+for that to become visible. Fixed at the source: every `FfiError` variant now
+carries `reason`, populated once from its `#[error]` attribute, so the words
+stay in one place instead of being retranslated in every shell.
+
+**E116's four obligations are landed and pinned** (`E116ObligationsTest`, 11
+tests): the factual fork statement (tested for what it must NOT say — no
+"winner", no "resolved", no apology, no blame); the exposure disclosure, with
+§11.8's stale-admission window and §7.6.12's revocation interval rendered as
+**distinct** facts because they have different remedies; the three response
+registers with mute first and marked as the only one reachable alone, each
+stating its cost (A7 stands — standing options with their weight visible, not a
+prompt at the gate); and returner-side "admission voided" legibility using
+E108's exact words, returning `null` on success because the obligation is
+legibility on the failure, not chatter on the happy path.
+
+**Still owed by S1, and honestly so:** the lost-race UX debt (two concurrent
+admissions, the losing side's rendering) has its *renderings* in place but no
+scenario test driving two real admissions into a race — that needs the second
+device S2 brings, and forcing it here would mean testing a fiction. Carried
+into S2 rather than claimed here.
+
+**Half an hour lost to a wrong hypothesis, recorded because the lesson is
+cheap.** A group-row tap appeared to do nothing. I formed three theories about
+Compose recomposition and `ByteArray` equality before instrumenting; the
+instrumentation showed the handler was never invoked, and `uiautomator dump`
+gave the row's real bounds in one command — my taps had been landing outside
+them. The code was correct throughout. Dump the bounds before theorising about
+the code.
+
 ### S2 — the keylayer joins the product: sealed chat on-device
 
 `ports/keylayer-openmls` wired through the shell: group creation seats real MLS, the
