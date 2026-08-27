@@ -925,3 +925,302 @@ impl StorageProvider<CURRENT_VERSION> for RedbStorage {
         self.remove(PSK, psk_id)
     }
 }
+
+// ---------------------------------------------------------------------------
+// The provider the shell hands to openmls
+// ---------------------------------------------------------------------------
+
+/// `OpenMlsRustCrypto`'s crypto and randomness, with **our** storage.
+///
+/// openmls asks a provider for three things — crypto, randomness, storage —
+/// and `OpenMlsRustCrypto` bundles all three with an in-memory store. Only the
+/// third is wrong for a product. Keeping upstream's crypto and rand rather than
+/// reimplementing them is the whole point: this type is a wiring change, not a
+/// cryptographic one, and it should be readable as such.
+#[derive(Debug)]
+pub struct PersistentProvider {
+    crypto: openmls_rust_crypto::RustCrypto,
+    storage: RedbStorage,
+}
+
+impl PersistentProvider {
+    /// Open (or create) MLS state at `path`.
+    ///
+    /// # Errors
+    /// [`StorageError::VersionMismatch`] when the store was written by another
+    /// version, and [`StorageError::Storage`] when redb refuses — including
+    /// when another handle already holds this file's exclusive lock.
+    pub fn open(path: &Path) -> Result<Self, StorageError> {
+        Ok(Self {
+            crypto: openmls_rust_crypto::RustCrypto::default(),
+            storage: RedbStorage::open(path)?,
+        })
+    }
+
+    /// The storage half, for the bookkeeping the key layer keeps beside MLS.
+    #[must_use]
+    pub fn storage(&self) -> &RedbStorage {
+        &self.storage
+    }
+}
+
+impl openmls_traits::OpenMlsProvider for PersistentProvider {
+    type CryptoProvider = openmls_rust_crypto::RustCrypto;
+    type RandProvider = openmls_rust_crypto::RustCrypto;
+    type StorageProvider = RedbStorage;
+
+    fn storage(&self) -> &Self::StorageProvider {
+        &self.storage
+    }
+
+    fn crypto(&self) -> &Self::CryptoProvider {
+        &self.crypto
+    }
+
+    fn rand(&self) -> &Self::RandProvider {
+        &self.crypto
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Croft's own bookkeeping, beside openmls's
+// ---------------------------------------------------------------------------
+
+/// Croft-local facts kept in the same store, under keys openmls never touches.
+///
+/// Two of them, and P0-3 decided both.
+///
+/// **Group ids**, because openmls has **no enumeration API**: nothing lists the
+/// groups in a store, so `MlsGroup::load` cannot be called without an id the
+/// shell kept itself. A store holding every byte of a group and not its id is a
+/// store nobody can open.
+///
+/// **Pending key packages**, split from the rest of the key layer's in-flight
+/// state on *provenance*: a key package was handed over by another person and
+/// cannot be regenerated on this side, so losing it to our crash makes our
+/// problem theirs. `staged` and `staged_commits` deliberately do NOT live here
+/// — they replay from the governance log, and a second source for the same fact
+/// is how two sources come to disagree.
+const CROFT_GROUP_IDS: &[u8] = b"croft_group_ids";
+const CROFT_PENDING_KP: &[u8] = b"croft_pending_kp";
+const CROFT_PENDING_KP_INDEX: &[u8] = b"croft_pending_kp_index";
+const CROFT_SIG_PUBKEY: &[u8] = b"croft_signature_public_key";
+
+impl RedbStorage {
+    /// Remember a group id so the group can be found again.
+    ///
+    /// # Errors
+    /// [`StorageError::Storage`] when redb refuses.
+    pub fn remember_group_id(&self, group_id: &[u8]) -> Result<(), StorageError> {
+        let mut ids = self.group_ids()?;
+        if !ids.iter().any(|existing| existing == group_id) {
+            ids.push(group_id.to_vec());
+            self.put(CROFT_GROUP_IDS, &(), serde_json::to_vec(&ids)?)?;
+        }
+        Ok(())
+    }
+
+    /// Every group id this identity has been part of.
+    ///
+    /// # Errors
+    /// [`StorageError::Storage`] when redb refuses.
+    pub fn group_ids(&self) -> Result<Vec<Vec<u8>>, StorageError> {
+        Ok(self.get(CROFT_GROUP_IDS, &())?.unwrap_or_default())
+    }
+
+    /// Keep a key package someone else handed over.
+    ///
+    /// Also records the principal in an index, because nothing enumerates
+    /// these either — the same gap that makes group ids necessary. An entry
+    /// nobody can find is an entry that was not kept.
+    ///
+    /// # Errors
+    /// [`StorageError::Storage`] when redb refuses.
+    pub fn put_pending_key_package(
+        &self,
+        principal: &[u8; 32],
+        key_package: &[u8],
+    ) -> Result<(), StorageError> {
+        self.put(
+            CROFT_PENDING_KP,
+            principal,
+            serde_json::to_vec(key_package)?,
+        )?;
+        let mut index = self.pending_key_package_principals()?;
+        if !index.contains(principal) {
+            index.push(*principal);
+            self.put(CROFT_PENDING_KP_INDEX, &(), serde_json::to_vec(&index)?)?;
+        }
+        Ok(())
+    }
+
+    /// Remember this identity's signature public key.
+    ///
+    /// # Errors
+    /// [`StorageError::Storage`] when redb refuses.
+    pub fn put_signature_public_key(&self, public: &[u8]) -> Result<(), StorageError> {
+        self.put(CROFT_SIG_PUBKEY, &(), serde_json::to_vec(public)?)
+    }
+
+    /// This identity's signature public key, if kept.
+    ///
+    /// # Errors
+    /// [`StorageError::Storage`] when redb refuses.
+    pub fn signature_public_key(&self) -> Result<Option<Vec<u8>>, StorageError> {
+        self.get(CROFT_SIG_PUBKEY, &())
+    }
+
+    /// Whose key packages are held.
+    ///
+    /// # Errors
+    /// [`StorageError::Storage`] when redb refuses.
+    pub fn pending_key_package_principals(&self) -> Result<Vec<[u8; 32]>, StorageError> {
+        Ok(self.get(CROFT_PENDING_KP_INDEX, &())?.unwrap_or_default())
+    }
+
+    /// A key package previously handed over, if one is held.
+    ///
+    /// # Errors
+    /// [`StorageError::Storage`] when redb refuses.
+    pub fn pending_key_package(
+        &self,
+        principal: &[u8; 32],
+    ) -> Result<Option<Vec<u8>>, StorageError> {
+        self.get(CROFT_PENDING_KP, principal)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// What a provider can remember on croft's behalf
+// ---------------------------------------------------------------------------
+
+/// A key package someone handed over: whose it is, and its wire bytes.
+pub type HeldKeyPackage = ([u8; 32], Vec<u8>);
+
+/// The bookkeeping croft keeps beside openmls's own state.
+///
+/// A trait on the **provider** rather than a method on the key layer, because
+/// the distinction it captures is a property of the provider: an in-memory one
+/// genuinely has nowhere to put these and nothing that would read them back.
+/// The default implementations say exactly that — they discard — and a caller
+/// reading them learns the truth rather than finding a silent no-op.
+///
+/// Both entries exist for the same reason, which is worth stating once:
+/// **openmls has no enumeration API.** Nothing lists the groups in a store and
+/// nothing lists the key packages, so anything croft must find again after a
+/// restart, croft has to index itself.
+pub trait Bookkeeping {
+    /// Remember that a group exists. Without this a stored group is
+    /// unreachable — `MlsGroup::load` needs an id, and nothing supplies one.
+    ///
+    /// # Errors
+    /// The store's own words when it refuses.
+    fn remember_group_id(&self, _group_id: &[u8]) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// Keep a key package another person handed over. It cannot be regenerated
+    /// on this side, so losing it to a crash makes our problem theirs.
+    ///
+    /// # Errors
+    /// The store's own words when it refuses.
+    fn remember_key_package(&self, _principal: &[u8; 32], _wire: &[u8]) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// Every group id remembered. Empty when nothing was.
+    ///
+    /// # Errors
+    /// The store's own words when it refuses.
+    fn stored_group_ids(&self) -> Result<Vec<Vec<u8>>, String> {
+        Ok(Vec::new())
+    }
+
+    /// Every key package kept, with whose it is.
+    ///
+    /// # Errors
+    /// The store's own words when it refuses.
+    fn stored_key_packages(&self) -> Result<Vec<HeldKeyPackage>, String> {
+        Ok(Vec::new())
+    }
+
+    /// Remember this identity's signature public key.
+    ///
+    /// The third thing openmls cannot enumerate, and the one whose absence is
+    /// least obvious. `SignatureKeyPair::read` needs the PUBLIC key to find the
+    /// pair, so a store holding the signer and not its public half cannot
+    /// produce the signer. Minting a fresh one instead looks like it works —
+    /// the group reloads, seals succeed — and every other member rejects the
+    /// signature, because the new key is not the one in this member's leaf
+    /// node. Found by a test where one member restarted and the other could no
+    /// longer open what they sent.
+    ///
+    /// # Errors
+    /// The store's own words when it refuses.
+    fn remember_signature_public_key(&self, _public: &[u8]) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// This identity's signature public key, if one was kept.
+    ///
+    /// # Errors
+    /// The store's own words when it refuses.
+    fn stored_signature_public_key(&self) -> Result<Option<Vec<u8>>, String> {
+        Ok(None)
+    }
+}
+
+/// The in-memory provider remembers nothing, and the defaults say so.
+///
+/// Not an oversight and not a TODO: this provider holds its state in a
+/// `HashMap` that dies with the process, so there is no version of "remember"
+/// that would mean anything. The loopback suites want exactly this.
+impl Bookkeeping for openmls_rust_crypto::OpenMlsRustCrypto {}
+
+impl Bookkeeping for PersistentProvider {
+    fn remember_group_id(&self, group_id: &[u8]) -> Result<(), String> {
+        self.storage
+            .remember_group_id(group_id)
+            .map_err(|e| e.to_string())
+    }
+
+    fn remember_key_package(&self, principal: &[u8; 32], wire: &[u8]) -> Result<(), String> {
+        self.storage
+            .put_pending_key_package(principal, wire)
+            .map_err(|e| e.to_string())
+    }
+
+    fn stored_group_ids(&self) -> Result<Vec<Vec<u8>>, String> {
+        self.storage.group_ids().map_err(|e| e.to_string())
+    }
+
+    fn remember_signature_public_key(&self, public: &[u8]) -> Result<(), String> {
+        self.storage
+            .put_signature_public_key(public)
+            .map_err(|e| e.to_string())
+    }
+
+    fn stored_signature_public_key(&self) -> Result<Option<Vec<u8>>, String> {
+        self.storage
+            .signature_public_key()
+            .map_err(|e| e.to_string())
+    }
+
+    fn stored_key_packages(&self) -> Result<Vec<HeldKeyPackage>, String> {
+        let mut out = Vec::new();
+        for principal in self
+            .storage
+            .pending_key_package_principals()
+            .map_err(|e| e.to_string())?
+        {
+            if let Some(wire) = self
+                .storage
+                .pending_key_package(&principal)
+                .map_err(|e| e.to_string())?
+            {
+                out.push((principal, wire));
+            }
+        }
+        Ok(out)
+    }
+}
