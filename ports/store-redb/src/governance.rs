@@ -1299,7 +1299,7 @@ mod tests {
             let last = table
                 .range(start.as_slice()..=end.as_slice())
                 .unwrap()
-                .last()
+                .next_back()
                 .unwrap()
                 .unwrap();
             let mut h = [0u8; 32];
@@ -1424,7 +1424,7 @@ mod tests {
             let last = table
                 .range(start.as_slice()..=end.as_slice())
                 .unwrap()
-                .last()
+                .next_back()
                 .unwrap()
                 .unwrap();
             let mut h = [0u8; 32];
@@ -1518,7 +1518,7 @@ mod tests {
                 let last = table
                     .range(start.as_slice()..=end.as_slice())
                     .unwrap()
-                    .last()
+                    .next_back()
                     .unwrap()
                     .unwrap();
                 let mut h = [0u8; 32];

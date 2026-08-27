@@ -572,3 +572,45 @@ tests PASSED.
 only because of local state somebody set up by hand is not a target, it is a
 habit. `emulator.sh` had it, `local.properties` had it. `env/` is supposed to
 refuse rather than warn; it cannot refuse over state it never creates.
+
+## 2026-08-27 — the new CI arm went red on its first real run, and could not be reproduced locally
+
+**What:** `ports-and-ffi`, added by S0, failed on the merge push with
+`clippy::double_ended_iterator_last` at four call sites in the promoted
+store-redb code — while the identical command on this machine passed.
+
+**Cause of the code failure:** four `.range(..).last()` calls on redb ranges.
+The range is double-ended, so `next_back()` reaches the same element in one
+step where `last()` walks every key in between. Wrong answer, no; wrong cost,
+yes, and the cost grows with how much a device has ever written. Real defect,
+inherited with the promotion, fixed.
+
+**Cause of the local/CI divergence: not established, and that matters more than
+the fix.** Ruled out by testing rather than by reasoning:
+
+- Not the PATH shadow this repo already documents. `/opt/homebrew/bin/cargo-clippy`
+  does precede rustup's, but forcing `PATH=$HOME/.cargo/bin:$PATH` changed
+  nothing.
+- Not a version skew. Both report `clippy 0.1.97 (8bab26f4f6 2026-07-14)`; CI's
+  log confirms it synced `1.97.1` from the same `rust-toolchain.toml`.
+- Not a stale cache. Reproduced after `touch` and again after
+  `cargo clean -p store-redb`.
+
+The remaining difference is the host: CI is `x86_64-unknown-linux-gnu`, this
+machine is `aarch64-apple-darwin`. Whether the lint's firing depends on a
+platform-conditional `DoubleEndedIterator` impl in redb was not chased — three
+attempts to reproduce was the point to stop and let the authority answer.
+
+**Outcome:** **CI is the authority on clippy for this repo, and a local pass is
+necessary but not sufficient.** That is a real weakening of "one gate command,
+identical locally and in CI" (CI-PATTERN rule 6) and it should be treated as an
+open question rather than a settled arrangement. The honest operational rule
+until it is settled: do not describe a clippy arm as clean on the strength of a
+local run — say it passed locally and wait for CI.
+
+**The wider point.** This is the second lint-shaped surprise this week and the
+first one *caught by CI rather than by us*, which is the arm doing exactly the
+job it was added for on its very first run. The uncomfortable part is that S0's
+own commit message claimed both new crates were "deny-clean today rather than
+aspirationally so" — true of this machine, and not true of the gate. Claims
+about a gate belong to the gate.
