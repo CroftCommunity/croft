@@ -1,14 +1,18 @@
-# D1 SPIKE — Phase 0 discovery, NOT production code.
+# The uniffi surface: the shared core, reachable from a platform shell.
 #
-# Disposition `promote` (plan 2026-08-25-1 § Phase 0 D1): this crate becomes S0's
-# scaffold, and S0 wraps it in real tests before anything ships. Until then nothing
-# here is vetted — it exists to answer one question: does OUR crate cross uniffi?
+# Grown from the D1 spike (plan 2026-08-25-1 § Phase 0) under S0. The spike
+# answered one question — does OUR crate cross uniffi — and this crate is what
+# was built on the yes.
+#
+# The object graph IS ADR-0002's sentence: one substrate instance per shell,
+# owned by the shell, ports beside it. `Session` holds the store, the signer
+# and the fold; the pond holds none of them and never learns redb exists.
 [package]
 name = "croft-ffi"
 version = "0.0.0"
 edition = "2021"
 license = "AGPL-3.0-or-later"
-description = "D1 spike: the uniffi surface over the croft core (Phase 0 discovery)"
+description = "The uniffi surface over the croft core: one session, the chat pond's loop, the redb store"
 publish = false
 
 [lib]
@@ -17,12 +21,18 @@ crate-type = ["cdylib", "lib"]
 name = "croft_ffi"
 
 [dependencies]
-# 0.31.1 is what this machine already has cached, and its Kotlin templates use
-# `com.sun.jna.internal.Cleaner` — satisfied by the JNA 5.14.0 already on the
-# android classpath (android/app/build.gradle.kts).
+# 0.31.1's Kotlin templates use `com.sun.jna.internal.Cleaner`, which needs JNA
+# >= 5.12 — satisfied by the JNA 5.14.0 already on the android classpath
+# (android/app/build.gradle.kts). One JNA across both is the point: two on a
+# classpath is a packaging bug waiting to happen.
 uniffi = "=0.31.1"
 thiserror = "1"
 social-tree-core = { path = "../core/social-tree-core" }
+chat-core = { path = "../core/chat-core" }
+store-redb = { path = "../ports/store-redb" }
+
+[dev-dependencies]
+tempfile = "3"
 
 [[bin]]
 # The bindgen CLI, per uniffi's recommended layout. Gated: `uniffi_bindgen_main`
