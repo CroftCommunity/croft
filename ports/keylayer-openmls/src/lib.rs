@@ -25,6 +25,11 @@
 
 mod identity;
 
+/// MLS state that survives the process: openmls's `StorageProvider` over redb
+/// (P7 S2, P0-2). Public because the shell constructs one and hands it to the
+/// provider — the storage location is the shell's business, not this crate's.
+pub mod store;
+
 use std::collections::HashMap;
 
 use openmls::group::StagedCommit;
