@@ -30,9 +30,15 @@ thiserror = "1"
 social-tree-core = { path = "../core/social-tree-core" }
 chat-core = { path = "../core/chat-core" }
 store-redb = { path = "../ports/store-redb" }
+# The boundary is the one place a failure can go quiet: Rust returns an error,
+# the binding hands the shell an exception, and what happens next is out of this
+# crate's hands. Emitting here leaves something behind to find afterwards.
+# Routing these to logcat needs android app code and belongs to S1.
+tracing = "0.1"
 
 [dev-dependencies]
 tempfile = "3"
+tracing-subscriber = "0.3"
 
 [[bin]]
 # The bindgen CLI, per uniffi's recommended layout. Gated: `uniffi_bindgen_main`

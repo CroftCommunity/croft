@@ -78,11 +78,14 @@ impl Session {
     /// things — one device, one persona, is an S0 simplification and not the
     /// end state; S3's DID↔persona binding is what separates them.
     pub fn open(path: &Path, signing_key: &[u8]) -> Result<Self, SessionError> {
-        let seed: [u8; 32] = signing_key
-            .try_into()
-            .map_err(|_| SessionError::BadKeyLength {
+        let seed: [u8; 32] = signing_key.try_into().map_err(|_| {
+            // The LENGTH, never the bytes. Everything about a signing key that
+            // is safe to log is its length.
+            tracing::warn!(target: "croft.ffi", got = signing_key.len(), "refused a signing key of the wrong length");
+            SessionError::BadKeyLength {
                 got: signing_key.len(),
-            })?;
+            }
+        })?;
         let signer = Ed25519Signer::from_seed(seed);
         let device = DeviceId::new(signer.device_id().0);
         let principal = PrincipalId::new(signer.device_id().0);
@@ -93,7 +96,9 @@ impl Session {
             PortPrincipalId(*principal.as_bytes()),
         );
 
-        let db = Arc::new(Db::open(path)?);
+        let db = Arc::new(Db::open(path).inspect_err(|e| {
+            tracing::warn!(target: "croft.ffi", error = %e, "refused to open the store");
+        })?);
         let next_lamport = max_lamport_for_device(&db, &device)?.map_or(0, |m| m + 1);
         let fold = DerivedFold::new(Arc::clone(&db), Ed25519Verifier, resolver);
 
@@ -110,6 +115,7 @@ impl Session {
         // session that shows the user nothing for a beat, and it is also one
         // whose first refresh is untested. Load now.
         session.refresh()?;
+        tracing::debug!(target: "croft.ffi", device = ?session.device, next_lamport, "session opened");
         Ok(session)
     }
 
@@ -152,6 +158,7 @@ impl Session {
 
         local::put_group_title(&self.db, &group, title)?;
         self.refresh()?;
+        tracing::debug!(target: "croft.ffi", group = ?group, "group founded");
         Ok(group)
     }
 
@@ -171,15 +178,15 @@ impl Session {
         match &intent {
             Intent::SendMessage => {
                 if self.model.selected_group.is_none() {
-                    return Err(SessionError::NoGroupSelected);
+                    return Err(self.refuse(SessionError::NoGroupSelected));
                 }
                 if self.model.draft.trim().is_empty() {
-                    return Err(SessionError::EmptyDraft);
+                    return Err(self.refuse(SessionError::EmptyDraft));
                 }
             }
             Intent::SelectGroup(group) => {
                 if !self.model.groups.iter().any(|g| g.id == *group) {
-                    return Err(SessionError::NoSuchGroup { group: *group });
+                    return Err(self.refuse(SessionError::NoSuchGroup { group: *group }));
                 }
             }
             // A refresh is a request to go and READ, and the snapshot is the
@@ -200,6 +207,7 @@ impl Session {
         for effect in effects {
             self.perform(effect)?;
         }
+        tracing::debug!(target: "croft.ffi", "intent applied");
         Ok(chat_core::project(&self.model))
     }
 
@@ -210,6 +218,16 @@ impl Session {
     }
 
     // -----------------------------------------------------------------------
+
+    /// Log a refusal on its way out, and hand it back unchanged.
+    ///
+    /// Every refusal goes through here so that none of them can be added later
+    /// without one — a boundary where SOME failures are logged is worse than
+    /// one where none are, because the gaps look like absences of failure.
+    fn refuse(&self, e: SessionError) -> SessionError {
+        tracing::warn!(target: "croft.ffi", reason = %e, "refused");
+        e
+    }
 
     /// Perform one effect the pond emitted.
     fn perform(&mut self, effect: chat_core::model::Effect) -> Result<(), SessionError> {

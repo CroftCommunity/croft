@@ -24,6 +24,15 @@ dial) and recovery (see `plans/2026-08-20-1-plan-m4-call-time-admission.md`
 and `ops/RUNBOOK-two-device-call-test.md` §11). It is not yet rebuilt on
 the shared core.
 
+**The core is now reachable from a shell (P7 S0, 2026-08-26).** `ffi/` is no
+longer a placeholder: a Kotlin JVM test drives create-group → send → project
+through the generated uniffi bindings, over `chat-core`'s update/project loop
+and the promoted `ports/store-redb`, and the arm64 emulator loads the
+cross-compiled `libcroft_ffi.so` and resolves its symbols. `make bindings` runs
+the first; `make ffi-android` runs the second and refuses to pass on a
+non-arm64 device or with no device attached. Nothing in the android app calls
+any of it yet — wiring the shell is S1.
+
 ## The shape
 
 ```
@@ -32,12 +41,15 @@ SHARED (pure, no I/O, no async, no clock — WASM-clean)
   shell/     cross-platform composition — owns the "rendered principal" seam
   design/    tokens and primitives
   ports/     the I/O contracts as traits; held by the shell, never called by a core
+             — plus their realizations, which are NOT pure and say so:
+             keylayer-openmls (MLS), store-redb (durable local state)
 
 PER-PLATFORM SHELLS (thin — the only place platform code lives)
   web/       leptos/wasm + effects
   android/   kotlin + effects          ← first target
   apple/     swift + effects           ← follows android
-  ffi/       uniffi bindings for the mobile shells
+  ffi/       uniffi bindings for the mobile shells — one ChatSession object
+             holding the substrate instance with its ports beside it
 ```
 
 Effects are **data**, never function calls. A core emits an effect request; its
