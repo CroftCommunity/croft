@@ -299,3 +299,45 @@ fn refreshing_re_reads_the_store_rather_than_clearing_the_model() {
         "and so must the selected group's timeline"
     );
 }
+
+#[test]
+fn every_refusal_carries_its_sentence_across_the_boundary() {
+    // Found by S1: uniffi builds a generated exception's `message` from the
+    // variant's FIELDS, not from the Rust `Display` impl. So a fieldless
+    // variant crosses with `message == ""` — and `NoGroupSelected` and
+    // `EmptyDraft`, the two refusals a person is most likely to hit, were
+    // exactly the fieldless ones. The typed exception arrived; the sentence
+    // did not, and a shell showing `e.message` showed nothing.
+    //
+    // The fix keeps ONE source of truth: the words stay in the Rust `#[error]`
+    // attributes and ride across in a `reason` field. Translating them
+    // Kotlin-side would put a product commitment in two places, which is how
+    // the two drift.
+    use croft_ffi::FfiError;
+
+    let cases: Vec<FfiError> = vec![
+        SessionError::BadKeyLength { got: 31 }.into(),
+        SessionError::NoGroupSelected.into(),
+        SessionError::EmptyDraft.into(),
+        SessionError::NoSuchGroup {
+            group: social_tree_core::model::GroupId::new([0x11; 32]),
+        }
+        .into(),
+        SessionError::Storage {
+            reason: "the parent directory does not exist".to_string(),
+        }
+        .into(),
+        SessionError::Refused {
+            reason: "the fold said no".to_string(),
+        }
+        .into(),
+    ];
+
+    for case in cases {
+        let reason = case.reason();
+        assert!(
+            !reason.trim().is_empty(),
+            "{case:?} crossed the boundary with nothing a person could read"
+        );
+    }
+}
