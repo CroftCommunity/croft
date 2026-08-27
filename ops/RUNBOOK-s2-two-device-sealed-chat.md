@@ -16,11 +16,16 @@ that session's memory.
 
 | Claim | Command | Expected |
 |---|---|---|
-| MLS state persists | `cargo test -p keylayer-openmls` | 23 passed |
-| Sealed chat at Rust grade | `cargo test -p croft-ffi` | 22 + 2 passed |
+| MLS state persists | `cargo test -p keylayer-openmls` | **26** passed |
+| Sealed chat at Rust grade | `cargo test -p croft-ffi` | **24** passed (22 session + 2 tracing) |
 | **Sealed chat through the bindings** | `make bindings` | 12 PASSED |
 | The social app runs on arm64 | `make ffi-android` then install | `LOADED AND RESOLVED` |
 | The calling app is untouched | `unzip -l …/app-debug.apk \| grep -c social` | `0` |
+
+These counts were re-verified 2026-08-27 against croft `2c50689`. A count that
+is *higher* than stated is fine — someone added tests. A count that is **lower**
+means something was removed, and that is worth understanding before going near
+a phone.
 
 If any of those is not true, **stop** — the device run cannot tell you anything
 useful on top of a broken JVM tier, and the plan's checkpoint is exactly that
