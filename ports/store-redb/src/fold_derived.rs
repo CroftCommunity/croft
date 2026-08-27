@@ -307,10 +307,14 @@ where
                 .map_err(|e| FoldError::StorageError(e.to_string()))?;
             let start = encode_by_device_key(&envelope.author_device, 0);
             let end = encode_by_device_key(&envelope.author_device, u64::MAX);
+            // `next_back()`, not `last()`: this is a double-ended range, so
+            // taking the end costs one step where `last()` walks every key in
+            // the device's history to get there. Same answer, and the cost of
+            // the wrong one grows with how much the device has ever written.
             match table
                 .range(start.as_slice()..=end.as_slice())
                 .map_err(|e| FoldError::StorageError(e.to_string()))?
-                .last()
+                .next_back()
             {
                 Some(entry) => {
                     let (k, _) = entry.map_err(|e| FoldError::StorageError(e.to_string()))?;
