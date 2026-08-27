@@ -10,8 +10,7 @@ use thiserror::Error;
 
 use social_tree_core::model::{
     compute_hash, envelope_hash, AssertionEnvelope, AssertionType, DeviceId as TypesDeviceId,
-    GroupId, GroupRules, Hash as TypesHash, KindTag, PrincipalId as TypesPrincipalId, Role,
-    RuleKey, TypedId,
+    GroupId, Hash as TypesHash, KindTag, PrincipalId as TypesPrincipalId, TypedId,
 };
 
 use social_tree_core::metrics::NoopMetrics;
@@ -22,7 +21,6 @@ use social_tree_core::update::{evaluate, Evaluation, FoldContext, SlotOccupancy}
 pub use social_tree_core::update::{is_governance, rule_change_approval_subject, IngestResult};
 pub use social_tree_core::wire::decode_envelope_from_canonical;
 
-use social_tree_core::model::{role_to_u8, u8_to_role};
 use social_tree_core::ports::{
     CredentialResolver, DeviceId as TraitsDeviceId, PrincipalId as TraitsPrincipalId, Verifier,
 };
@@ -643,7 +641,7 @@ fn apply_derived_effects_free(
         }
 
         AssertionType::AttachmentAdd => {
-            if env.payload.len() < 1 {
+            if env.payload.is_empty() {
                 return Err(FoldError::MalformedEnvelope(
                     "AttachmentAdd payload too short".to_string(),
                 ));
@@ -919,8 +917,7 @@ pub fn comparator_version(db: &Arc<Db>) -> Result<Option<u8>, FoldError> {
     let stamped = table
         .get(META_COMPARATOR_KEY)
         .map_err(|e| FoldError::StorageError(e.to_string()))?
-        .map(|v| v.value().first().copied())
-        .flatten();
+        .and_then(|v| v.value().first().copied());
     Ok(stamped)
 }
 
@@ -981,8 +978,13 @@ fn stamp_comparator_version(db: &Arc<Db>) -> Result<(), FoldError> {
 /// in causal (merge_cmp) order to reproduce byte-identical derived state.
 pub fn rebuild(
     db: &Arc<Db>,
-    verifier: &impl Verifier,
-    cred_resolver: &impl CredentialResolver,
+    // Unused today and kept anyway: a rebuild replays assertions that were
+    // already verified on the way in, so it does not re-verify. If that ever
+    // stops being true — a store restored from an untrusted source, say — the
+    // capability has to be in hand at the call site, and widening a signature
+    // later is a breaking change for every caller.
+    _verifier: &impl Verifier,
+    _cred_resolver: &impl CredentialResolver,
 ) -> Result<(), FoldError> {
     // Step 1: Collect all assertions from auth_assertions.
     let envelopes: Vec<AssertionEnvelope> = {
@@ -1315,6 +1317,10 @@ fn upsert_node_stub(
 // Helper: upsert a full node card (present=true), overwriting stubs
 // ---------------------------------------------------------------------------
 
+// Eight arguments where clippy wants seven. They are the NodeCard's own fields
+// plus the transaction to write them in, so a struct here would be `NodeCard`
+// with a different name; the honest simplification is not available.
+#[allow(clippy::too_many_arguments)]
 fn upsert_node_full(
     txn: &redb::WriteTransaction,
     typed_id: &TypedId,
@@ -1409,7 +1415,11 @@ fn decode_attachment_add_payload(
             "AttachmentAdd payload too short".to_string(),
         ));
     }
-    let title_len = u32::from_be_bytes(payload[1..5].try_into().unwrap()) as usize;
+    let title_len = u32::from_be_bytes(
+        payload[1..5]
+            .try_into()
+            .expect("not possible: the length was checked as >= 6 immediately above"),
+    ) as usize;
     let title_end = 5 + title_len;
     if payload.len() < title_end + 1 {
         return Err(FoldError::MalformedEnvelope(
@@ -1456,8 +1466,8 @@ mod tests {
     use crate::tables::Db;
     use proptest::prelude::*;
     use social_tree_core::model::{
-        AssertionEnvelope, AssertionType, DeviceId as TypesDeviceId, GroupId,
-        PrincipalId as TypesPrincipalId, Role,
+        role_to_u8, AssertionEnvelope, AssertionType, DeviceId as TypesDeviceId, GroupId,
+        GroupRules, PrincipalId as TypesPrincipalId, Role,
     };
     use social_tree_core::ports::mocks::{MockCredentialResolver, MockSigner};
     use social_tree_core::ports::{
@@ -1586,10 +1596,6 @@ mod tests {
     // Test helpers
     // -----------------------------------------------------------------------
 
-    fn make_device(seed: u8) -> TypesDeviceId {
-        TypesDeviceId::new([seed; 32])
-    }
-
     fn make_principal(seed: u8) -> TypesPrincipalId {
         TypesPrincipalId::new([seed; 32])
     }
@@ -1637,22 +1643,6 @@ mod tests {
         p
     }
 
-    fn attachment_add_payload(kind: KindTag, title: &str, blob: Option<TypesHash>) -> Vec<u8> {
-        let mut p = Vec::new();
-        p.push(kind as u8);
-        let title_bytes = title.as_bytes();
-        p.extend_from_slice(&(title_bytes.len() as u32).to_be_bytes());
-        p.extend_from_slice(title_bytes);
-        match blob {
-            None => p.push(0x00),
-            Some(h) => {
-                p.push(0x01);
-                p.extend_from_slice(h.as_bytes());
-            }
-        }
-        p
-    }
-
     fn artifact_ref_payload(kind: KindTag, hash: TypesHash) -> Vec<u8> {
         let mut p = Vec::with_capacity(33);
         p.push(kind as u8);
@@ -1696,8 +1686,8 @@ mod tests {
         let verifier = MockSigner::new(signer.device_id().0);
         let mut cred = MockCredentialResolver::new();
         cred.register(
-            TraitsDeviceId(device.as_bytes().clone()),
-            TraitsPrincipalId(principal.as_bytes().clone()),
+            TraitsDeviceId(*device.as_bytes()),
+            TraitsPrincipalId(*principal.as_bytes()),
         );
         DerivedFold::new(db, verifier, cred)
     }
@@ -2302,7 +2292,7 @@ mod tests {
             let mut cred = MockCredentialResolver::new();
             cred.register(
                 TraitsDeviceId(signer_a.device_id().0),
-                TraitsPrincipalId(principal_a.as_bytes().clone()),
+                TraitsPrincipalId(*principal_a.as_bytes()),
             );
             DerivedFold::new(Arc::clone(&db), verifier, cred)
         };
@@ -2312,7 +2302,7 @@ mod tests {
             let mut cred = MockCredentialResolver::new();
             cred.register(
                 TraitsDeviceId(signer_b.device_id().0),
-                TraitsPrincipalId(principal_b.as_bytes().clone()),
+                TraitsPrincipalId(*principal_b.as_bytes()),
             );
             DerivedFold::new(Arc::clone(&db), verifier, cred)
         };
@@ -2364,7 +2354,7 @@ mod tests {
             let mut cred = MockCredentialResolver::new();
             cred.register(
                 TraitsDeviceId(signer_a.device_id().0),
-                TraitsPrincipalId(principal_a.as_bytes().clone()),
+                TraitsPrincipalId(*principal_a.as_bytes()),
             );
             DerivedFold::new(Arc::clone(&db2), verifier, cred)
         };
@@ -2373,7 +2363,7 @@ mod tests {
             let mut cred = MockCredentialResolver::new();
             cred.register(
                 TraitsDeviceId(signer_b.device_id().0),
-                TraitsPrincipalId(principal_b.as_bytes().clone()),
+                TraitsPrincipalId(*principal_b.as_bytes()),
             );
             DerivedFold::new(Arc::clone(&db2), verifier, cred)
         };
@@ -2426,7 +2416,7 @@ mod tests {
         let mut cred = MockCredentialResolver::new();
         cred.register(
             TraitsDeviceId(signer.device_id().0),
-            TraitsPrincipalId(principal.as_bytes().clone()),
+            TraitsPrincipalId(*principal.as_bytes()),
         );
         rebuild(&db, &verifier, &cred).unwrap();
         assert_eq!(
@@ -2531,11 +2521,11 @@ mod tests {
         let mut cred = MockCredentialResolver::new();
         cred.register(
             TraitsDeviceId(signer_a.device_id().0),
-            TraitsPrincipalId(principal_a.as_bytes().clone()),
+            TraitsPrincipalId(*principal_a.as_bytes()),
         );
         cred.register(
             TraitsDeviceId(signer_b.device_id().0),
-            TraitsPrincipalId(principal_b.as_bytes().clone()),
+            TraitsPrincipalId(*principal_b.as_bytes()),
         );
         rebuild(&db_xy, &verifier, &cred).unwrap();
         rebuild(&db_yx, &verifier, &cred).unwrap();

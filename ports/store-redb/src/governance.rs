@@ -9,8 +9,7 @@ use std::sync::Arc;
 
 use crate::fold_derived::FoldError;
 use crate::tables::{
-    encode_checkpoint_key, encode_gov_log_key, Db, AUTH_ASSERTIONS, AUTH_GOV_LOG,
-    STATE_CHECKPOINTS, STATE_GROUP,
+    encode_checkpoint_key, encode_gov_log_key, Db, AUTH_ASSERTIONS, AUTH_GOV_LOG, STATE_CHECKPOINTS,
 };
 use social_tree_core::model::{
     compute_hash, envelope_hash, AssertionEnvelope, GroupId, GroupRules, Hash as TypesHash,
@@ -281,7 +280,7 @@ pub fn compute_merkle_root(hashes: &[TypesHash]) -> TypesHash {
     let mut current: Vec<TypesHash> = hashes.to_vec();
 
     while current.len() > 1 {
-        let mut next = Vec::with_capacity((current.len() + 1) / 2);
+        let mut next = Vec::with_capacity(current.len().div_ceil(2));
         let mut i = 0;
         while i < current.len() {
             if i + 1 < current.len() {
@@ -544,8 +543,11 @@ fn current_content_merkle(
     Ok((compute_merkle_root(&content_hashes), checkpoint_seq))
 }
 
+/// One stored assertion as bytes: its content hash, and its versioned record.
+type HashAndRecord = (Vec<u8>, Vec<u8>);
+
 /// Read all (hash_bytes, versioned_bytes) pairs from `auth_assertions`.
-fn read_all_assertion_bytes(db: &Arc<Db>) -> Result<Vec<(Vec<u8>, Vec<u8>)>, FoldError> {
+fn read_all_assertion_bytes(db: &Arc<Db>) -> Result<Vec<HashAndRecord>, FoldError> {
     let read_txn = db
         .inner()
         .begin_read()
@@ -587,7 +589,10 @@ fn gov_seq_for_hash(
         let (k, v) = item.map_err(|e| FoldError::StorageError(e.to_string()))?;
         if v.value() == target_hash.as_bytes().as_slice() {
             let key_bytes = k.value();
-            let seq = u64::from_be_bytes(key_bytes[32..40].try_into().unwrap());
+            // Through the canonical decoder, which refuses a malformed key rather
+            // than panicking on a store this version did not write.
+            let (_, seq) = crate::tables::decode_gov_log_key(key_bytes)
+                .map_err(|e| FoldError::StorageError(e.to_string()))?;
             return Ok(Some(seq));
         }
     }
@@ -608,8 +613,6 @@ fn checkpoint_lamport(db: &Arc<Db>, hash: &TypesHash) -> Option<u64> {
     Some(env.lamport)
 }
 
-/// Minimal envelope decoder (reused from fold_derived pattern).
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -617,8 +620,8 @@ fn checkpoint_lamport(db: &Arc<Db>, hash: &TypesHash) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fold_derived::{rebuild, DerivedFold, ForkStatus, GroupState, IngestResult};
-    use crate::tables::Db;
+    use crate::fold_derived::{rebuild, DerivedFold, GroupState, IngestResult};
+    use crate::tables::{Db, STATE_GROUP};
     use social_tree_core::model::{
         AssertionEnvelope, AssertionType, DeviceId as TypesDeviceId, GroupId, GroupRules,
         PrincipalId as TypesPrincipalId, Role, RuleKey,
@@ -632,10 +635,6 @@ mod tests {
     // -----------------------------------------------------------------------
     // Common test helpers
     // -----------------------------------------------------------------------
-
-    fn make_device(seed: u8) -> TypesDeviceId {
-        TypesDeviceId::new([seed; 32])
-    }
 
     fn make_principal(seed: u8) -> TypesPrincipalId {
         TypesPrincipalId::new([seed; 32])
@@ -716,8 +715,8 @@ mod tests {
         let verifier = MockSigner::new(signer.device_id().0);
         let mut cred = MockCredentialResolver::new();
         cred.register(
-            TraitsDeviceId(device.as_bytes().clone()),
-            TraitsPrincipalId(principal.as_bytes().clone()),
+            TraitsDeviceId(*device.as_bytes()),
+            TraitsPrincipalId(*principal.as_bytes()),
         );
         DerivedFold::new(db, verifier, cred)
     }
@@ -1094,7 +1093,6 @@ mod tests {
         // increments the sequence; instead we use `detect_fork` directly to
         // verify the fork detection logic.
         let lam_rc_b = lam;
-        lam += 1;
         let mut rc_b = AssertionEnvelope {
             version: social_tree_core::model::ENVELOPE_WIRE_VERSION,
             assertion_type: AssertionType::RuleChange,
@@ -1255,7 +1253,6 @@ mod tests {
         // only relative to a checkpoint that comes after it.
         {
             let add_lam = lam;
-            lam += 1;
             let mut add = AssertionEnvelope {
                 version: social_tree_core::model::ENVELOPE_WIRE_VERSION,
                 assertion_type: AssertionType::MembershipAdd,
@@ -1448,8 +1445,8 @@ mod tests {
         let verifier = MockSigner::new(signer.device_id().0);
         let mut cred = MockCredentialResolver::new();
         cred.register(
-            TraitsDeviceId(device.as_bytes().clone()),
-            TraitsPrincipalId(principal.as_bytes().clone()),
+            TraitsDeviceId(*device.as_bytes()),
+            TraitsPrincipalId(*principal.as_bytes()),
         );
         rebuild(&db, &verifier, &cred).expect("rebuild must succeed");
 

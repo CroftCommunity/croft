@@ -12,7 +12,7 @@
 //! and a write that overwrites where overwriting is the contract.
 
 use redb::ReadableTableMetadata;
-use store_redb::tables::{Db, AUTH_ASSERTIONS};
+use store_redb::tables::{Db, EdgeType, AUTH_ASSERTIONS};
 
 /// The canonical constants must be the ones a caller can actually read
 /// through. Anything that only works via a re-declared string literal is the
@@ -100,4 +100,85 @@ fn a_second_write_to_one_key_overwrites_rather_than_accumulating() {
     let txn = db.inner().begin_read().expect("begin_read");
     let table = txn.open_table(AUTH_ASSERTIONS).expect("open_table");
     assert_eq!(table.len().expect("len"), 1, "one key, one row");
+}
+
+// ---------------------------------------------------------------------------
+// The key decoders refuse rather than panic
+// ---------------------------------------------------------------------------
+//
+// These decode *stored bytes*. An unknown discriminant is not a programming
+// error — it is what a store written by a future version, or a corrupted file,
+// looks like. Every value decoder in `tables` already returns `Result`
+// (`EdgeMeta::from_bytes`, `NodeCard::from_bytes`), and `DbError::KeyLength`
+// exists for exactly this and is constructed nowhere. The key decoders were
+// the odd ones out: they panicked.
+
+#[test]
+fn an_edge_key_of_the_wrong_width_is_refused_not_panicked() {
+    for len in [0usize, 67, 69] {
+        let err = store_redb::tables::decode_edge_out_key(&vec![0u8; len])
+            .expect_err("a wrong-width key must be refused");
+        match err {
+            store_redb::tables::DbError::KeyLength { expected, got } => {
+                assert_eq!(expected, 68);
+                assert_eq!(got, len);
+            }
+            other => panic!("expected KeyLength, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn an_edge_key_with_an_unknown_edge_type_is_refused() {
+    // A discriminant this version does not know — what a forward-version store
+    // hands back. Refusing names the value; panicking would take the process
+    // down on a read.
+    let mut key = [0u8; 68];
+    key[0] = 0x01; // a valid source KindTag
+    key[35] = 0x01; // a valid target KindTag
+    key[33..35].copy_from_slice(&0xBEEFu16.to_be_bytes());
+    let err = store_redb::tables::decode_edge_out_key(&key).expect_err("unknown edge type");
+    assert!(
+        matches!(err, store_redb::tables::DbError::Deserialize(ref m) if m.contains("48879")),
+        "the refusal must name the discriminant it did not recognise, got: {err}"
+    );
+}
+
+#[test]
+fn an_edge_key_with_an_invalid_kind_tag_is_refused() {
+    let mut key = [0u8; 68];
+    key[0] = 0xFF; // not a KindTag
+    key[35] = 0x01;
+    key[33..35].copy_from_slice(&EdgeType::MemberOf.to_be_bytes());
+    let err = store_redb::tables::decode_edge_out_key(&key).expect_err("invalid source kind");
+    assert!(
+        matches!(err, store_redb::tables::DbError::Deserialize(ref m) if m.contains("source")),
+        "the refusal must say which end was bad, got: {err}"
+    );
+}
+
+#[test]
+fn a_by_device_key_of_the_wrong_width_is_refused() {
+    let err = store_redb::tables::decode_by_device_key(&[0u8; 39])
+        .expect_err("a wrong-width key must be refused");
+    assert!(matches!(
+        err,
+        store_redb::tables::DbError::KeyLength {
+            expected: 40,
+            got: 39
+        }
+    ));
+}
+
+#[test]
+fn a_gov_log_key_of_the_wrong_width_is_refused() {
+    let err = store_redb::tables::decode_gov_log_key(&[0u8; 41])
+        .expect_err("a wrong-width key must be refused");
+    assert!(matches!(
+        err,
+        store_redb::tables::DbError::KeyLength {
+            expected: 40,
+            got: 41
+        }
+    ));
 }

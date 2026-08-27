@@ -21,28 +21,35 @@ use thiserror::Error;
 // ---------------------------------------------------------------------------
 
 /// Errors produced by the table layer.
+///
+/// redb's own error types are boxed. They are large — `TransactionError` alone
+/// is 160 bytes — and this enum is the `Err` half of every codec and every
+/// store call, so unboxed they would widen a `Result` that is overwhelmingly
+/// `Ok` from 24 bytes to 168 on every return in the crate. Boxing moves that
+/// cost onto the failure path, which is where it belongs; the error itself is
+/// preserved whole.
 #[derive(Debug, Error)]
 pub enum DbError {
     /// redb could not read or write the underlying storage.
     #[error("redb storage error: {0}")]
-    Storage(#[from] redb::StorageError),
+    Storage(Box<redb::StorageError>),
 
     /// The database file could not be opened or created.
     #[error("redb database error: {0}")]
-    Database(#[from] redb::DatabaseError),
+    Database(Box<redb::DatabaseError>),
 
     /// A table could not be opened — a missing table means the schema was
     /// never created (see [`Db::open`], which creates it).
     #[error("redb table error: {0}")]
-    Table(#[from] redb::TableError),
+    Table(Box<redb::TableError>),
 
     /// A read or write transaction could not be begun.
     #[error("redb transaction error: {0}")]
-    Transaction(#[from] redb::TransactionError),
+    Transaction(Box<redb::TransactionError>),
 
     /// A write transaction failed to commit; nothing in it landed.
     #[error("redb commit error: {0}")]
-    Commit(#[from] redb::CommitError),
+    Commit(Box<redb::CommitError>),
 
     /// Stored bytes did not decode as the record their table promises. The
     /// string carries what was wrong; the store never guesses past a bad read.
@@ -57,6 +64,26 @@ pub enum DbError {
         /// The width actually supplied.
         got: usize,
     },
+}
+
+// `#[from]` cannot box on the way in, and `?` at every call site is worth
+// keeping, so the five conversions are written out.
+macro_rules! boxed_from {
+    ($($src:ty => $variant:ident),+ $(,)?) => {$(
+        impl From<$src> for DbError {
+            fn from(e: $src) -> Self {
+                DbError::$variant(Box::new(e))
+            }
+        }
+    )+};
+}
+
+boxed_from! {
+    redb::StorageError => Storage,
+    redb::DatabaseError => Database,
+    redb::TableError => Table,
+    redb::TransactionError => Transaction,
+    redb::CommitError => Commit,
 }
 
 // ---------------------------------------------------------------------------
@@ -221,13 +248,20 @@ pub fn encode_by_device_key(device: &DeviceId, lamport: u64) -> [u8; 40] {
 
 /// Decode an `AUTH_ASSERTIONS_BY_DEVICE` key.
 ///
-/// Panics if `bytes.len() != 40`.
-pub fn decode_by_device_key(bytes: &[u8]) -> (DeviceId, u64) {
-    assert_eq!(bytes.len(), 40, "decode_by_device_key: expected 40 bytes");
+/// Refuses a key of the wrong width with [`DbError::KeyLength`].
+pub fn decode_by_device_key(bytes: &[u8]) -> Result<(DeviceId, u64), DbError> {
+    let bytes: &[u8; 40] = bytes.try_into().map_err(|_| DbError::KeyLength {
+        expected: 40,
+        got: bytes.len(),
+    })?;
     let mut dev = [0u8; 32];
     dev.copy_from_slice(&bytes[..32]);
-    let lamport = u64::from_be_bytes(bytes[32..40].try_into().unwrap());
-    (DeviceId::new(dev), lamport)
+    let lamport = u64::from_be_bytes(
+        bytes[32..40]
+            .try_into()
+            .expect("not possible: an 8-byte window of a 40-byte array"),
+    );
+    Ok((DeviceId::new(dev), lamport))
 }
 
 /// Encode an `AUTH_GOV_LOG` key.
@@ -242,13 +276,20 @@ pub fn encode_gov_log_key(group: &GroupId, gov_seq: u64) -> [u8; 40] {
 
 /// Decode an `AUTH_GOV_LOG` key.
 ///
-/// Panics if `bytes.len() != 40`.
-pub fn decode_gov_log_key(bytes: &[u8]) -> (GroupId, u64) {
-    assert_eq!(bytes.len(), 40, "decode_gov_log_key: expected 40 bytes");
+/// Refuses a key of the wrong width with [`DbError::KeyLength`].
+pub fn decode_gov_log_key(bytes: &[u8]) -> Result<(GroupId, u64), DbError> {
+    let bytes: &[u8; 40] = bytes.try_into().map_err(|_| DbError::KeyLength {
+        expected: 40,
+        got: bytes.len(),
+    })?;
     let mut grp = [0u8; 32];
     grp.copy_from_slice(&bytes[..32]);
-    let gov_seq = u64::from_be_bytes(bytes[32..40].try_into().unwrap());
-    (GroupId::new(grp), gov_seq)
+    let gov_seq = u64::from_be_bytes(
+        bytes[32..40]
+            .try_into()
+            .expect("not possible: an 8-byte window of a 40-byte array"),
+    );
+    Ok((GroupId::new(grp), gov_seq))
 }
 
 /// Encode an `IDX_EDGES_OUT` key.
@@ -264,24 +305,46 @@ pub fn encode_edge_out_key(source: &TypedId, edge_type: EdgeType, target: &Typed
 
 /// Decode an `IDX_EDGES_OUT` key.
 ///
-/// Panics if `bytes.len() != 68` or if the edge type discriminant is unknown.
-pub fn decode_edge_out_key(bytes: &[u8]) -> (TypedId, EdgeType, TypedId) {
-    assert_eq!(bytes.len(), 68, "decode_edge_out_key: expected 68 bytes");
-    let et = EdgeType::from_be_bytes(bytes[33..35].try_into().unwrap())
-        .expect("decode_edge_out_key: unknown EdgeType discriminant");
+/// Refuses rather than panics. The bytes come from the store, so an unknown
+/// edge-type discriminant or an invalid kind tag is what a forward-version or
+/// corrupted database looks like on a read — not a programming error. The
+/// refusal names the value it did not recognise.
+pub fn decode_edge_out_key(bytes: &[u8]) -> Result<(TypedId, EdgeType, TypedId), DbError> {
+    let bytes: &[u8; 68] = bytes.try_into().map_err(|_| DbError::KeyLength {
+        expected: 68,
+        got: bytes.len(),
+    })?;
+    let raw_et: [u8; 2] = bytes[33..35]
+        .try_into()
+        .expect("not possible: a 2-byte window of a 68-byte array");
+    let et = EdgeType::from_be_bytes(raw_et).ok_or_else(|| {
+        DbError::Deserialize(format!(
+            "decode_edge_out_key: unknown EdgeType discriminant {}",
+            u16::from_be_bytes(raw_et)
+        ))
+    })?;
     // Reconstruct TypedId via the public KindTag + Hash constructor.
-    let src_kind = KindTag::from_u8(bytes[0]).expect("decode_edge_out_key: invalid source KindTag");
+    let src_kind = KindTag::from_u8(bytes[0]).ok_or_else(|| {
+        DbError::Deserialize(format!(
+            "decode_edge_out_key: invalid source KindTag {}",
+            bytes[0]
+        ))
+    })?;
     let mut src_hash = [0u8; 32];
     src_hash.copy_from_slice(&bytes[1..33]);
-    let tgt_kind =
-        KindTag::from_u8(bytes[35]).expect("decode_edge_out_key: invalid target KindTag");
+    let tgt_kind = KindTag::from_u8(bytes[35]).ok_or_else(|| {
+        DbError::Deserialize(format!(
+            "decode_edge_out_key: invalid target KindTag {}",
+            bytes[35]
+        ))
+    })?;
     let mut tgt_hash = [0u8; 32];
     tgt_hash.copy_from_slice(&bytes[36..68]);
-    (
+    Ok((
         TypedId::new(src_kind, Hash::new(src_hash)),
         et,
         TypedId::new(tgt_kind, Hash::new(tgt_hash)),
-    )
+    ))
 }
 
 /// Encode an `IDX_EDGES_IN` key (inverted direction).
@@ -349,7 +412,11 @@ impl EdgeMeta {
             )));
         }
         let version = b[0];
-        let since_lamport = u64::from_be_bytes(b[1..9].try_into().unwrap());
+        let since_lamport = u64::from_be_bytes(
+            b[1..9]
+                .try_into()
+                .expect("not possible: the length was checked as >= 42 immediately above"),
+        );
         let mut hash_bytes = [0u8; 32];
         hash_bytes.copy_from_slice(&b[9..41]);
         let since_assertion = Hash::new(hash_bytes);
@@ -444,7 +511,11 @@ impl NodeCard {
             DbError::Deserialize(format!("NodeCard: unknown KindTag byte 0x{:02x}", b[1]))
         })?;
         let present = b[2] != 0x00;
-        let title_len = u32::from_be_bytes(b[3..7].try_into().unwrap()) as usize;
+        let title_len = u32::from_be_bytes(
+            b[3..7]
+                .try_into()
+                .expect("not possible: the header length was checked immediately above"),
+        ) as usize;
         let title_end = 7 + title_len;
         if b.len() < title_end + 32 + 8 + 1 {
             return Err(DbError::Deserialize(format!(
@@ -459,7 +530,11 @@ impl NodeCard {
         let mut pb = [0u8; 32];
         pb.copy_from_slice(&b[title_end..title_end + 32]);
         let created_by = PrincipalId::new(pb);
-        let created_at = u64::from_be_bytes(b[title_end + 32..title_end + 40].try_into().unwrap());
+        let created_at = u64::from_be_bytes(
+            b[title_end + 32..title_end + 40]
+                .try_into()
+                .expect("not possible: the length was checked as >= title_end + 41 above"),
+        );
         let has_blob_offset = title_end + 40;
         if b.len() < has_blob_offset + 1 {
             return Err(DbError::Deserialize(
@@ -630,7 +705,7 @@ mod tests {
         let lamport = 0x0102030405060708u64;
         let enc = encode_by_device_key(&dev, lamport);
         assert_eq!(enc.len(), 40);
-        let (dev2, lam2) = decode_by_device_key(&enc);
+        let (dev2, lam2) = decode_by_device_key(&enc).expect("a key this test just encoded");
         assert_eq!(dev2.as_bytes(), dev.as_bytes());
         assert_eq!(lam2, lamport);
     }
@@ -641,7 +716,7 @@ mod tests {
         let seq = 999u64;
         let enc = encode_gov_log_key(&grp, seq);
         assert_eq!(enc.len(), 40);
-        let (grp2, seq2) = decode_gov_log_key(&enc);
+        let (grp2, seq2) = decode_gov_log_key(&enc).expect("a key this test just encoded");
         assert_eq!(grp2.as_bytes(), grp.as_bytes());
         assert_eq!(seq2, seq);
     }
@@ -653,7 +728,7 @@ mod tests {
         let et = EdgeType::MemberOf;
         let enc = encode_edge_out_key(&src, et, &tgt);
         assert_eq!(enc.len(), 68);
-        let (src2, et2, tgt2) = decode_edge_out_key(&enc);
+        let (src2, et2, tgt2) = decode_edge_out_key(&enc).expect("a key this test just encoded");
         assert_eq!(src2.as_bytes(), src.as_bytes());
         assert_eq!(et2, et);
         assert_eq!(tgt2.as_bytes(), tgt.as_bytes());

@@ -36,10 +36,6 @@ mod scale_tests {
     // Shared helpers
     // -----------------------------------------------------------------------
 
-    fn make_device(seed: u8) -> TypesDeviceId {
-        TypesDeviceId::new([seed; 32])
-    }
-
     fn make_principal(seed: u8) -> TypesPrincipalId {
         TypesPrincipalId::new([seed; 32])
     }
@@ -62,10 +58,6 @@ mod scale_tests {
         TypesPrincipalId::new(b)
     }
 
-    fn make_hash(seed: u8) -> TypesHash {
-        TypesHash::new([seed; 32])
-    }
-
     fn genesis_payload(device: &TypesDeviceId) -> Vec<u8> {
         let mut p = Vec::with_capacity(50);
         p.extend_from_slice(&1u16.to_be_bytes()); // policy_version
@@ -82,10 +74,6 @@ mod scale_tests {
         p.extend_from_slice(principal.as_bytes());
         p.push(role_byte(role));
         p
-    }
-
-    fn membership_remove_payload(principal: &TypesPrincipalId) -> Vec<u8> {
-        principal.as_bytes().to_vec()
     }
 
     fn role_grant_payload(principal: &TypesPrincipalId, role: &Role) -> Vec<u8> {
@@ -421,7 +409,7 @@ mod scale_tests {
 
         // list_my_groups equivalent: for each owner, the edge table should have
         // MemberOf edges from the owner to their group (present=true).
-        for (owner_signer, owner_principal, group_id) in &group_owners {
+        for (_owner_signer, owner_principal, group_id) in &group_owners {
             let my_hash = TypesHash::new(*owner_principal.as_bytes());
             let my_typed = TypedId::new(KindTag::Principal, my_hash);
             let group_hash = TypesHash::new(*group_id.as_bytes());
@@ -494,7 +482,7 @@ mod scale_tests {
         let fold = make_fold(&signer, owner, Arc::clone(&db));
         let device = TypesDeviceId::new(signer.device_id().0);
 
-        let mut lam = boot_group(&fold, &signer, owner, group, 1);
+        let base_lam = boot_group(&fold, &signer, owner, group, 1);
 
         // Build a chain: each message's antecedent = hash of the previous.
         let mut prev_hash: Option<TypesHash> = None;
@@ -509,7 +497,7 @@ mod scale_tests {
                 author_principal: owner,
                 group,
                 antecedents,
-                lamport: lam,
+                lamport: base_lam + i as u64,
                 payload: message_payload(&format!("chain_{}", i)),
                 signature: vec![],
             };
@@ -518,7 +506,6 @@ mod scale_tests {
             fold.ingest(&env).expect("chain message");
             msg_hashes.push(h);
             prev_hash = Some(h);
-            lam += 1;
         }
 
         // Assert causal order preserved: lamport values must be strictly ascending.
@@ -535,7 +522,7 @@ mod scale_tests {
             .unwrap()
             .map(|item| {
                 let (k, _) = item.unwrap();
-                let (_, lam) = decode_by_device_key(k.value());
+                let (_, lam) = decode_by_device_key(k.value()).expect("a key the fold wrote");
                 lam
             })
             .collect();
@@ -566,7 +553,7 @@ mod scale_tests {
         );
 
         // All CHAIN_LEN message assertions must be present in auth_assertions.
-        let auth_table = rtxn.open_table(AUTH_ASSERTIONS).unwrap();
+        let _auth_table = rtxn.open_table(AUTH_ASSERTIONS).unwrap();
         for h in &msg_hashes {
             // After rebuild the read txn is stale; open a fresh one.
             let rtxn2 = db.inner().begin_read().unwrap();
@@ -614,8 +601,8 @@ mod scale_tests {
             DerivedFold::new(Arc::clone(&db), verifier, cred.clone())
         };
 
-        let device0 = TypesDeviceId::new(signers[0].device_id().0);
-        let mut lam0 = boot_group(&fold0, &signers[0], principal, group, 1);
+        let _device0 = TypesDeviceId::new(signers[0].device_id().0);
+        let _lam0 = boot_group(&fold0, &signers[0], principal, group, 1);
 
         // Each device sends MSGS_PER_DEVICE messages from its own lamport stream.
         // Device N starts at lamport = N * 1000 + 1 (well above boot sequence).
@@ -677,7 +664,7 @@ mod scale_tests {
                 .unwrap()
                 .map(|item| {
                     let (k, _) = item.unwrap();
-                    let (_, l) = decode_by_device_key(k.value());
+                    let (_, l) = decode_by_device_key(k.value()).expect("a key the fold wrote");
                     l
                 })
                 .collect();
@@ -732,7 +719,7 @@ mod scale_tests {
 
         // Compute all hashes; find expected winner (lex-smallest).
         let hashes: Vec<TypesHash> = genesis_envs.iter().map(envelope_hash).collect();
-        let winner_idx = hashes
+        let _winner_idx = hashes
             .iter()
             .enumerate()
             .min_by(|(_, a), (_, b)| a.as_bytes().cmp(b.as_bytes()))
@@ -740,10 +727,9 @@ mod scale_tests {
             .unwrap();
 
         // Ingest all three in order.
-        for (i, (signer, (principal, genesis))) in signers
+        for (signer, (principal, genesis)) in signers
             .iter()
             .zip(principals.iter().zip(genesis_envs.iter()))
-            .enumerate()
         {
             let fold = make_fold(signer, *principal, Arc::clone(&db));
             fold.ingest(genesis).expect("competing genesis");
@@ -891,7 +877,7 @@ mod scale_tests {
         #[test]
         fn prop_i2_convergence(seed in 0u64..1000) {
             let (signer, principal, envs) = build_seeded_sequence(seed, 8);
-            let group_seed_byte = envs[0].group.as_bytes()[0];
+            let _group_seed_byte = envs[0].group.as_bytes()[0];
             let group = envs[0].group;
 
             // Apply 5 times to separate DBs; compare state bytes.
@@ -1077,7 +1063,7 @@ mod scale_tests {
         let fold = make_fold(&signer, principal, Arc::clone(&db));
         let device = TypesDeviceId::new(signer.device_id().0);
 
-        let mut lam = boot_group(&fold, &signer, principal, group, 1);
+        let lam = boot_group(&fold, &signer, principal, group, 1);
 
         // First message at lamport = lam.
         let mut msg1 = AssertionEnvelope {
@@ -1137,7 +1123,7 @@ mod scale_tests {
         let fold = make_fold(&signer, principal, Arc::clone(&db));
         let device = TypesDeviceId::new(signer.device_id().0);
 
-        let mut lam = boot_group(&fold, &signer, principal, group, 1);
+        let lam = boot_group(&fold, &signer, principal, group, 1);
 
         // A phantom antecedent hash that is not in the store.
         let phantom = TypesHash::new([0xFFu8; 32]);
@@ -1272,7 +1258,7 @@ mod scale_tests {
         let fold = make_fold(&signer, principal, Arc::clone(&db));
         let device = TypesDeviceId::new(signer.device_id().0);
 
-        let mut lam = boot_group(&fold, &signer, principal, group, 1);
+        let lam = boot_group(&fold, &signer, principal, group, 1);
 
         let auth_before = count_table_rows(&db, AUTH_ASSERTIONS);
 
@@ -1452,14 +1438,13 @@ mod scale_tests {
         };
 
         let owner_dev = TypesDeviceId::new(owner.device_id().0);
-        let mut envs = Vec::new();
-        envs.push(mk(
+        let mut envs = vec![mk(
             AssertionType::GroupGenesis,
             &owner,
             owner_p,
             1,
             genesis_payload(&owner_dev),
-        ));
+        )];
         envs.push(mk(
             AssertionType::MembershipAdd,
             &owner,
