@@ -42,6 +42,16 @@ the lightest, and returner-side "admission voided" legibility — each pinned by
 tests that also check what the words must NOT say. The calling app's APK
 contains none of it, because the code is not in that module's dependency graph.
 
+**Chat is sealed on-device (P7 S2, paused 2026-08-27).** MLS state persists
+across restarts — openmls's `StorageProvider` implemented over redb — and
+sealed chat crosses the FFI: `make bindings` runs a JVM test that seals on one
+substrate, opens on another, and refuses a stranger. The invite path folds the
+governance decision first and mints its enactment slip from that folded state,
+so the crypto cannot seat someone the record never admitted. What is **not**
+built: the device-to-device transport, so nothing yet carries a Welcome or a
+sealed message between two phones. `ops/RUNBOOK-s2-two-device-sealed-chat.md`
+is written and not yet run.
+
 ## The shape
 
 ```

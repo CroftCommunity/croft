@@ -683,3 +683,41 @@ problem by default and will look green while skipping its tests — so the rule
 belongs with the bindings, not with whoever remembers. If a third consumer
 appears, that is the point to extract this into a shared convention plugin
 rather than paste it a third time.
+
+## 2026-08-27 — a mutation audit of the MLS store found two silent holes (P7 S2)
+
+**What:** `cargo mutants` over the six helpers in
+`ports/keylayer-openmls/src/store.rs` — the module's own doc says all 53 trait
+delegations funnel through them, so that is where an audit is worth spending.
+**11 caught, 1 unviable, 2 MISSED**, both in `remove_from_list`, and both real
+gaps rather than equivalent mutants:
+
+- replacing the whole function with `Ok(())` survived — **nothing tested that
+  removal removes**;
+- flipping `==` to `!=` in its position search survived — **nothing tested that
+  it removes the RIGHT item**.
+
+**Why that matters more than the count.** `remove_from_list` is what
+`remove_proposal` uses to take a proposal off a group's queue. Left on the
+queue, openmls re-processes a proposal the caller meant to drop; remove the
+wrong one and openmls processes a proposal the caller meant to keep. Neither is
+loud, and both are the sort of thing that surfaces as an unexplained epoch
+disagreement between two devices much later.
+
+**Outcome:** three tests written, all three killing what they were written for
+— removal empties the queue, removing one of three leaves the other two in
+order, and clearing removes everything. Re-ran the audit scoped to that
+function: **2 mutants, 2 caught.**
+
+**Two notes for whoever runs the next one.** The full-file run is 146 mutants
+at roughly 90s each — about three and a half hours — because the default test
+command runs the whole crate suite including openmls crypto and a subprocess
+abort test. Scoping with `--examine-re` to the helpers and `-- --test
+persistence_pins` brought it to 14 mutants in 74s, which is the difference
+between an audit that gets run and one that does not. And `mutants.out/` holds
+a lock file: a killed run leaves it behind and the next one blocks on it
+silently, so remove the directory before re-running rather than wondering why
+nothing is happening.
+
+The tree was committed before mutating, per the house rule — the restore path
+has to be as trustworthy as the mutation.

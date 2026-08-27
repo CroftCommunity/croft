@@ -679,6 +679,78 @@ the standing rig) exchange sealed messages in a group one of them planted; a dep
 **(verification)** the JVM sealed-round-trip test green plus the device run recorded
 with per-plane rungs stated in the runbook style.
 
+
+**S2 PAUSED 2026-08-27 at the plan's own checkpoint — everything up to needing
+two physical phones is done.**
+
+*Done and run:*
+- **MLS state persists.** openmls's `StorageProvider` over redb — six helpers,
+  53 delegations, 14 tests including one where a **child process writes and
+  calls `abort()`** with no destructors and the parent finds the value. A
+  provider that batched writes and committed at drop would pass every
+  clean-restart test and lose an epoch to any real crash.
+- **The key layer persists.** 7 more tests, including two members where one
+  restarts mid-conversation and the other can still open what it seals.
+- **Sealed chat crosses the FFI.** 22 Rust session pins.
+- **The JVM checkpoint is GREEN — 12/12** (`make bindings`), including seal on
+  one substrate and open on another through the generated bindings, a stranger
+  refused, and the ciphertext checked for the plaintext.
+
+*The probe P0-2 required, answered:* `openmls_sqlite_storage` 0.2.0 **does not
+support wasm32** (its own docs). P0-1's whole argument for redb was that redb
+compiles for wasm and carries its own backend seam, so taking sqlite would put
+a permanent ceiling under S5's web probe — and would be the second storage
+engine P0-1 explicitly assumed away, plus a bundled C SQLite in the Android
+cross-compile. It does not dominate. Two things were taken from upstream rather
+than reinvented: a version constant with a stated bump policy, and the
+observation that the whole trait is mechanical.
+
+*The bug the tests caught, which is the phase justifying itself:* a restart
+minted a **fresh signature key pair**. Locally that looks perfect — group
+reloads, epoch right, seals succeed — and every other member rejects the
+signature, because the new key is not the one in this member's leaf node. **The
+failure has no local symptom at all**; it appears on someone else's device as a
+message that will not open. The hazard was written into a doc comment and not
+implemented; the test found it, the comment did not. Fixing it needed a third
+piece of croft bookkeeping (the signature *public* key), because
+`SignatureKeyPair::read` needs the public half to find the pair — the same root
+cause as group ids and pending key packages: **openmls has no enumeration API**,
+so anything croft must find again, croft indexes itself.
+
+*Three methods deliberately absent:* the `extensions-draft-08`
+application-export-tree methods were written and removed. Enabling that feature
+makes upstream's OWN `openmls_memory_storage` fail to compile, so they cannot
+be compiled here, cannot be tested, and keeping them would leave code that
+looks done and has never run.
+
+*Two tests were written wrong first, both usefully.* Sealing and opening on one
+layer asserts something MLS does not do ("Cannot decrypt own messages"); it
+became an epoch-continuity test. And the durability test opened a second handle
+to observe a write — redb holds an **exclusive file lock** and refused, which
+is a constraint on callers worth pinning (one store per identity; two writers
+on one MLS store is corruption, and a lock prevents rather than detects it).
+
+*What remains, and it needs two physical phones:*
+- **The gossip transport is not built.** The JVM tier passes the Welcome and
+  the sealed messages as byte arrays inside the test. Nothing yet carries them
+  between two devices. Q2 put this on iroh-gossip device-to-device; the app
+  already carries iroh on both sides of the FFI, so it is wiring rather than a
+  new dependency — but it is real work, not setup.
+- **A pairing step** — how one device's key package reaches the other. A QR or
+  paste blob is enough for a dev app; reusing the calling app's exchange-invite
+  machinery would drag the contract in and is not wanted.
+- **The two-device run itself**, per `ops/RUNBOOK-s2-two-device-sealed-chat.md`
+  — written before the run with per-rung expected output, so a failure names
+  its rung. Rung 6 is the one this phase exists for: force-stop one device,
+  relaunch, send, and check the OTHER device can still read it.
+- **The departure + token return arc** device-to-device.
+- **The lost-race scenario** carried from S1, which this run is the first place
+  it can be staged for real.
+
+*A fresh context should start at that runbook.* It carries the re-verification
+commands, the claims to take, the "no relay contact at any point" rule and why,
+and the gap it will hit first.
+
 ### S3 — the E120 binding fact: DID ↔ persona as a recorded human act
 
 The designed joint between the calling identity (atproto DID, proven by OAuth — M3's

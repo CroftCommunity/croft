@@ -30,6 +30,10 @@ thiserror = "1"
 social-tree-core = { path = "../core/social-tree-core" }
 chat-core = { path = "../core/chat-core" }
 store-redb = { path = "../ports/store-redb" }
+# S2: the key layer. Sealed chat is what makes a group a conversation rather
+# than a shared log, and the seal happens Rust-side beside the store — the same
+# argument as for effects: the material must not cross the FFI.
+keylayer-openmls = { path = "../ports/keylayer-openmls" }
 # The boundary is the one place a failure can go quiet: Rust returns an error,
 # the binding hands the shell an exception, and what happens next is out of this
 # crate's hands. Emitting here leaves something behind to find afterwards.

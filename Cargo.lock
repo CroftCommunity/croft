@@ -360,6 +360,7 @@ name = "croft-ffi"
 version = "0.0.0"
 dependencies = [
  "chat-core",
+ "keylayer-openmls",
  "social-tree-core",
  "store-redb",
  "tempfile",
@@ -998,6 +999,9 @@ dependencies = [
  "openmls_basic_credential",
  "openmls_rust_crypto",
  "openmls_traits",
+ "redb",
+ "serde",
+ "serde_json",
  "social-tree-core",
  "thiserror 1.0.69",
  "tls_codec",

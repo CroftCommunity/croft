@@ -23,7 +23,15 @@
 
 #![warn(missing_docs)]
 
+use openmls_rust_crypto::OpenMlsRustCrypto;
+use store::Bookkeeping as _;
+
 mod identity;
+
+/// MLS state that survives the process: openmls's `StorageProvider` over redb
+/// (P7 S2, P0-2). Public because the shell constructs one and hands it to the
+/// provider — the storage location is the shell's business, not this crate's.
+pub mod store;
 
 use std::collections::HashMap;
 
@@ -55,27 +63,104 @@ fn psk_id_for(token: &TokenId) -> PreSharedKeyId {
 
 /// One member's key layer: their persona, their (at most one) live group,
 /// and the commits staged awaiting a decision.
-pub struct OpenMlsKeyLayer {
+pub struct OpenMlsKeyLayer<
+    P: openmls_traits::OpenMlsProvider + store::Bookkeeping = OpenMlsRustCrypto,
+> {
     principal: PrincipalId,
-    persona: Persona,
+    persona: Persona<P>,
     group: Option<MlsGroup>,
     pending_key_packages: HashMap<PrincipalId, KeyPackage>,
     staged: HashMap<[u8; 32], AdmissionClaims>,
     staged_commits: HashMap<[u8; 32], StagedCommit>,
 }
 
-impl OpenMlsKeyLayer {
-    /// A fresh key layer for `principal` (its own provider and signer).
+impl OpenMlsKeyLayer<OpenMlsRustCrypto> {
+    /// A fresh key layer for `principal`, holding its MLS state in memory.
+    ///
+    /// The loopback suites use this, and so does anything that wants a key
+    /// layer without a filesystem. Nothing about it changed when persistence
+    /// arrived.
     #[must_use]
     pub fn new(principal: PrincipalId) -> Self {
+        Self::over(Persona::new(&principal), principal)
+    }
+}
+
+impl<P: openmls_traits::OpenMlsProvider + store::Bookkeeping> OpenMlsKeyLayer<P> {
+    fn over(persona: Persona<P>, principal: PrincipalId) -> Self {
         Self {
             principal,
-            persona: Persona::new(&principal),
+            persona,
             group: None,
             pending_key_packages: HashMap::new(),
             staged: HashMap::new(),
             staged_commits: HashMap::new(),
         }
+    }
+
+    /// The provider this layer holds — what it is, is the difference between
+    /// state that survives the app closing and state that does not.
+    #[must_use]
+    pub fn provider(&self) -> &P {
+        &self.persona.provider
+    }
+
+    /// Whose key package this is, read from the credential it carries.
+    ///
+    /// The identity is IN the key package — this adapter mints credentials
+    /// whose identity bytes are the 32-byte `PrincipalId` — so an invite never
+    /// needs the principal supplied alongside. Taking it out-of-band would let
+    /// a caller name one person and hand over another's key package, and
+    /// nothing downstream would notice.
+    ///
+    /// # Errors
+    /// [`KeyLayerError::Parse`] for bytes that are not a valid key package, or
+    /// whose credential is not the 32-byte shape this adapter mints.
+    pub fn principal_in_key_package(&self, wire: &[u8]) -> Result<PrincipalId, KeyLayerError> {
+        let kp_in = KeyPackageIn::tls_deserialize_exact(wire)
+            .map_err(|e| KeyLayerError::Parse(e.to_string()))?;
+        let kp = kp_in
+            .validate(self.persona.provider.crypto(), ProtocolVersion::Mls10)
+            .map_err(|e| KeyLayerError::Parse(e.to_string()))?;
+        identity::credential_principal(kp.leaf_node().credential()).ok_or_else(|| {
+            KeyLayerError::Parse(
+                "the key package's credential is not a croft principal".to_string(),
+            )
+        })
+    }
+
+    /// The live group's epoch, if a group is loaded.
+    ///
+    /// S2's observability asks for epoch transitions to be legible, and an
+    /// epoch that silently failed to survive a restart is the failure this
+    /// whole phase guards against — so it needs to be readable, not inferred.
+    #[must_use]
+    pub fn epoch(&self) -> Option<u64> {
+        self.group.as_ref().map(|g| g.epoch().as_u64())
+    }
+
+    /// The live group's id, if a group is loaded.
+    #[must_use]
+    pub fn group_id(&self) -> Option<Vec<u8>> {
+        self.group
+            .as_ref()
+            .map(|g| g.group_id().as_slice().to_vec())
+    }
+
+    /// Whether a key package handed over by `principal` is held.
+    #[must_use]
+    pub fn has_pending_key_package(&self, principal: &PrincipalId) -> bool {
+        self.pending_key_packages.contains_key(principal)
+    }
+
+    /// Whether any commit is staged awaiting a decision.
+    ///
+    /// Exposed for the P0-3 pin: staged state must NOT come back from the
+    /// store, and a test of only the surviving half would pass just as well if
+    /// everything persisted.
+    #[must_use]
+    pub fn staged_is_empty(&self) -> bool {
+        self.staged.is_empty() && self.staged_commits.is_empty()
     }
 
     /// The principal this layer serves.
@@ -96,6 +181,13 @@ impl OpenMlsKeyLayer {
             self.persona.cwk.clone(),
         )
         .map_err(|e| KeyLayerError::Process(e.to_string()))?;
+        // Whatever this layer is persisting to, tell it the group exists. The
+        // hook is a no-op for the in-memory provider and is what makes the
+        // group findable again for a persistent one.
+        self.persona
+            .provider
+            .remember_group_id(g.group_id().as_slice())
+            .map_err(KeyLayerError::Process)?;
         self.group = Some(g);
         Ok(())
     }
@@ -127,6 +219,13 @@ impl OpenMlsKeyLayer {
         let kp = kp_in
             .validate(self.persona.provider.crypto(), ProtocolVersion::Mls10)
             .map_err(|e| KeyLayerError::Parse(e.to_string()))?;
+        // Kept before it is inserted, so a crash between the two loses the
+        // in-memory copy and not the durable one. The other order would leave
+        // the layer believing it holds a key package the store never saw.
+        self.persona
+            .provider
+            .remember_key_package(principal.as_bytes(), kp_wire)
+            .map_err(KeyLayerError::Process)?;
         self.pending_key_packages.insert(principal, kp);
         Ok(())
     }
@@ -317,7 +416,7 @@ impl OpenMlsKeyLayer {
     }
 }
 
-impl KeyLayer for OpenMlsKeyLayer {
+impl<P: openmls_traits::OpenMlsProvider + store::Bookkeeping> KeyLayer for OpenMlsKeyLayer<P> {
     fn stage_commit(&mut self, wire: &[u8]) -> Result<AdmissionClaims, KeyLayerError> {
         let content_address = *blake3::hash(wire).as_bytes();
         let provider = &self.persona.provider;
@@ -422,5 +521,96 @@ impl KeyLayer for OpenMlsKeyLayer {
                 .tls_serialize_detached()
                 .map_err(|e| KeyLayerError::Process(e.to_string()))?,
         })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The persistent key layer (P7 S2)
+// ---------------------------------------------------------------------------
+
+impl OpenMlsKeyLayer<store::PersistentProvider> {
+    /// A key layer whose MLS state lives at `path` and survives the process.
+    ///
+    /// The store is **per identity**, not per device: redb holds an exclusive
+    /// lock, and two personas sharing one file would be both a lock fight and a
+    /// cross-persona leak of exactly the material that must not leak.
+    ///
+    /// # Errors
+    /// [`KeyLayerError::Process`] when the store refuses — a version it does
+    /// not speak, or a lock another handle already holds. Refusing here rather
+    /// than opening empty is deliberate: an empty-looking store is
+    /// indistinguishable from a fresh install, and a "fresh install" that is
+    /// really a locked-out one would let someone start a second group under an
+    /// identity that already has one.
+    pub fn persistent(
+        principal: PrincipalId,
+        path: &std::path::Path,
+    ) -> Result<Self, KeyLayerError> {
+        let provider = store::PersistentProvider::open(path)
+            .map_err(|e| KeyLayerError::Process(e.to_string()))?;
+
+        // A signer already in the store is this identity's signer, and minting
+        // a second would silently make the reloaded group unopenable by its own
+        // member. Only a genuinely fresh store gets a new one.
+        let persona = Persona::over(provider, &principal);
+        let mut layer = Self::over(persona, principal);
+        layer.restore_pending_key_packages()?;
+        Ok(layer)
+    }
+
+    /// Every group id this identity has kept.
+    ///
+    /// # Errors
+    /// [`KeyLayerError::Process`] when the store refuses.
+    pub fn stored_group_ids(&self) -> Result<Vec<Vec<u8>>, KeyLayerError> {
+        self.persona
+            .provider
+            .stored_group_ids()
+            .map_err(KeyLayerError::Process)
+    }
+
+    /// Load the single group this identity holds, if it kept one.
+    ///
+    /// openmls has no enumeration API, so this reads the id croft kept beside
+    /// the MLS state and calls `MlsGroup::load` with it. Without that id the
+    /// group is unreachable no matter how completely it was stored.
+    ///
+    /// # Errors
+    /// [`KeyLayerError::Process`] when the store refuses or the group will not
+    /// load.
+    pub fn load_group(&mut self) -> Result<bool, KeyLayerError> {
+        let Some(id_bytes) = self.stored_group_ids()?.into_iter().next() else {
+            return Ok(false);
+        };
+        let group_id = GroupId::from_slice(&id_bytes);
+        let loaded = MlsGroup::load(self.persona.provider.storage(), &group_id)
+            .map_err(|e| KeyLayerError::Process(e.to_string()))?;
+        self.group = loaded;
+        Ok(self.group.is_some())
+    }
+
+    /// Bring back the key packages other people handed over.
+    ///
+    /// P0-3's provenance split, on the restore side: these came from someone
+    /// else and cannot be regenerated here, so they are read back. `staged` and
+    /// `staged_commits` are deliberately left empty — they replay from the
+    /// governance log, and restoring them here would create a second source for
+    /// a fact the fold already owns.
+    fn restore_pending_key_packages(&mut self) -> Result<(), KeyLayerError> {
+        for (principal_bytes, wire) in self
+            .persona
+            .provider
+            .stored_key_packages()
+            .map_err(KeyLayerError::Process)?
+        {
+            let kp_in = KeyPackageIn::tls_deserialize_exact(&wire)
+                .map_err(|e| KeyLayerError::Parse(e.to_string()))?;
+            let kp = kp_in
+                .validate(self.persona.provider.crypto(), ProtocolVersion::Mls10)
+                .map_err(|e| KeyLayerError::Parse(e.to_string()))?;
+            self.pending_key_packages
+                .insert(PrincipalId::new(principal_bytes), kp);
+        }
+        Ok(())
     }
 }
