@@ -196,6 +196,24 @@ pub const STATE_BLOB_PRESENCE: TableDefinition<'static, &'static [u8], &'static 
 pub const META: TableDefinition<'static, &'static [u8], &'static [u8]> =
     TableDefinition::new("meta_v1");
 
+/// LOCAL_GROUP_TITLES
+///
+/// Key:   32-byte GroupId
+/// Value: the title, UTF-8
+///
+/// **Local truth, and the only table here that is.** Every other table in this
+/// module holds folded consequences of signed assertions; this one holds a name
+/// this device chose, which is never folded and never sent — the same posture
+/// E134 gives the personal mute set.
+///
+/// It exists because the substrate has no group-title mechanism: a
+/// `GroupGenesis` payload carries thresholds and a founding device, and the
+/// fold writes an empty title into the group's node card. Naming a group in the
+/// shared record needs a wire format that does not exist yet. Until it does, a
+/// title is a local convenience and this table says so by name.
+pub const LOCAL_GROUP_TITLES: TableDefinition<'static, &'static [u8], &'static [u8]> =
+    TableDefinition::new("local_group_titles_v1");
+
 // ---------------------------------------------------------------------------
 // EdgeType enum
 // ---------------------------------------------------------------------------
@@ -592,6 +610,7 @@ const ALL_TABLES: &[TableDefinition<'static, &'static [u8], &'static [u8]>] = &[
     STATE_CHECKPOINTS,
     STATE_BLOB_PRESENCE,
     META,
+    LOCAL_GROUP_TITLES,
 ];
 
 impl Db {

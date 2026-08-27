@@ -182,3 +182,155 @@ fn a_gov_log_key_of_the_wrong_width_is_refused() {
         }
     ));
 }
+
+// ---------------------------------------------------------------------------
+// The device's lamport high-water mark
+// ---------------------------------------------------------------------------
+//
+// A session that reopens a store has to know where its own lamport stream left
+// off, or its next assertion collides with one already written. The answer is a
+// scan of the by-device index, which lives in this crate — the corpus computed
+// it in `surface.rs`, which did not travel.
+
+#[test]
+fn an_unseen_device_has_no_lamport_high_water_mark() {
+    let db = Db::create_in_memory().expect("create_in_memory");
+    let device = social_tree_core::model::DeviceId::new([0x01; 32]);
+    assert_eq!(
+        store_redb::fold_derived::max_lamport_for_device(&db, &device).expect("scan"),
+        None,
+        "a device that has written nothing has no mark — not zero, which is a\
+         real lamport value and would collide"
+    );
+}
+
+#[test]
+fn the_high_water_mark_is_the_largest_lamport_written_not_the_last() {
+    use store_redb::tables::{encode_by_device_key, AUTH_ASSERTIONS_BY_DEVICE};
+
+    let db = Db::create_in_memory().expect("create_in_memory");
+    let device = social_tree_core::model::DeviceId::new([0x02; 32]);
+    let other = social_tree_core::model::DeviceId::new([0x03; 32]);
+
+    // Written out of order on purpose: the answer is the maximum, and a scan
+    // that returns "the last row it happened to see" agrees with the maximum
+    // only when the writes were already sorted.
+    let txn = db.inner().begin_write().expect("begin_write");
+    {
+        let mut t = txn.open_table(AUTH_ASSERTIONS_BY_DEVICE).expect("open");
+        for lamport in [7u64, 3, 5] {
+            t.insert(
+                encode_by_device_key(&device, lamport).as_slice(),
+                &[0u8; 32][..],
+            )
+            .expect("insert");
+        }
+        // A different device's higher value must not leak into the answer.
+        t.insert(encode_by_device_key(&other, 99).as_slice(), &[0u8; 32][..])
+            .expect("insert");
+    }
+    txn.commit().expect("commit");
+
+    assert_eq!(
+        store_redb::fold_derived::max_lamport_for_device(&db, &device).expect("scan"),
+        Some(7),
+    );
+    assert_eq!(
+        store_redb::fold_derived::max_lamport_for_device(&db, &other).expect("scan"),
+        Some(99),
+        "the scan must be scoped to its device prefix"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Local group titles — local truth, never folded, never sent
+// ---------------------------------------------------------------------------
+//
+// The substrate has no group-title mechanism today: `genesis_initial_state`
+// carries thresholds and a founding device, and the fold writes `""` into the
+// group's node card. Rather than invent a wire format for a name — core work,
+// outside this phase — a title is held the way E134 holds the personal mute
+// set: local truth, in this store, never folded and never sent. That is a
+// deliberately smaller claim than "the group is named", and the difference
+// matters the moment two devices disagree about what a group is called.
+
+#[test]
+fn a_group_with_no_local_title_has_none_rather_than_an_empty_name() {
+    let db = Db::create_in_memory().expect("create_in_memory");
+    let group = social_tree_core::model::GroupId::new([0x44; 32]);
+    assert_eq!(
+        store_redb::local::group_title(&db, &group).expect("read"),
+        None,
+        "absent and named-empty-string are different facts"
+    );
+}
+
+#[test]
+fn a_local_title_round_trips_and_the_latest_write_wins() {
+    let db = Db::create_in_memory().expect("create_in_memory");
+    let group = social_tree_core::model::GroupId::new([0x55; 32]);
+    let other = social_tree_core::model::GroupId::new([0x56; 32]);
+
+    store_redb::local::put_group_title(&db, &group, "the kitchen table").expect("write");
+    store_redb::local::put_group_title(&db, &other, "somewhere else").expect("write");
+    assert_eq!(
+        store_redb::local::group_title(&db, &group)
+            .expect("read")
+            .as_deref(),
+        Some("the kitchen table")
+    );
+
+    // A rename overwrites; it does not accumulate a second name.
+    store_redb::local::put_group_title(&db, &group, "the back porch").expect("rename");
+    assert_eq!(
+        store_redb::local::group_title(&db, &group)
+            .expect("read")
+            .as_deref(),
+        Some("the back porch")
+    );
+    assert_eq!(
+        store_redb::local::group_title(&db, &other)
+            .expect("read")
+            .as_deref(),
+        Some("somewhere else"),
+        "renaming one group must not touch another"
+    );
+}
+
+#[test]
+fn a_local_title_survives_reopening_the_store() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("titles.redb");
+    let group = social_tree_core::model::GroupId::new([0x57; 32]);
+    {
+        let db = Db::open(&path).expect("open");
+        store_redb::local::put_group_title(&db, &group, "durable name").expect("write");
+    }
+    let reopened = Db::open(&path).expect("reopen");
+    assert_eq!(
+        store_redb::local::group_title(&reopened, &group)
+            .expect("read")
+            .as_deref(),
+        Some("durable name")
+    );
+}
+
+#[test]
+fn a_title_that_is_not_valid_utf8_is_refused_rather_than_lossily_decoded() {
+    use store_redb::tables::LOCAL_GROUP_TITLES;
+
+    let db = Db::create_in_memory().expect("create_in_memory");
+    let group = social_tree_core::model::GroupId::new([0x58; 32]);
+
+    // What a corrupted store looks like. `from_utf8_lossy` here would hand the
+    // UI a name full of replacement characters and call it a success.
+    let txn = db.inner().begin_write().expect("begin_write");
+    {
+        let mut t = txn.open_table(LOCAL_GROUP_TITLES).expect("open");
+        t.insert(&group.as_bytes()[..], &[0xff, 0xfe][..])
+            .expect("insert");
+    }
+    txn.commit().expect("commit");
+
+    store_redb::local::group_title(&db, &group).expect_err("invalid UTF-8 must be refused");
+}

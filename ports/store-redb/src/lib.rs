@@ -20,5 +20,14 @@ pub mod fold_derived;
 /// checkpoints, the Merkle root, and compaction.
 pub mod governance;
 
+/// Local truth: what this device holds that is never folded and never sent.
+pub mod local;
+
+/// Assertion payload encoders — the writer half of the wire format.
+pub mod payload;
+
+/// Queries over the folded tables: what a shell asks, in substrate types.
+pub mod read;
+
 #[cfg(test)]
 mod tests_stage7;

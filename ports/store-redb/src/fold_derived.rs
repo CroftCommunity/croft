@@ -1460,6 +1460,43 @@ fn decode_attachment_add_payload(
 // Tests
 // ---------------------------------------------------------------------------
 
+/// The largest lamport value `device` has written, or `None` if it has written
+/// nothing.
+///
+/// A session reopening a store needs this to know where its own lamport stream
+/// left off; without it the next assertion it authors collides with one already
+/// in the log. `None` and `Some(0)` are deliberately distinct — zero is a real
+/// lamport value, and collapsing the two would hand a fresh device a starting
+/// point one behind where it belongs.
+///
+/// The scan is bounded to the device's own 32-byte key prefix, and reads the
+/// last key in that range: the index encodes lamport big-endian, so
+/// lexicographic order over the key IS numeric order over the lamport, which is
+/// why the maximum is a range end and not a full iteration.
+pub fn max_lamport_for_device(db: &Db, device: &TypesDeviceId) -> Result<Option<u64>, FoldError> {
+    let read_txn = db
+        .inner()
+        .begin_read()
+        .map_err(|e| FoldError::StorageError(e.to_string()))?;
+    let table = read_txn
+        .open_table(AUTH_ASSERTIONS_BY_DEVICE)
+        .map_err(|e| FoldError::StorageError(e.to_string()))?;
+    let start = encode_by_device_key(device, 0);
+    let end = encode_by_device_key(device, u64::MAX);
+    let mut range = table
+        .range(start.as_slice()..=end.as_slice())
+        .map_err(|e| FoldError::StorageError(e.to_string()))?;
+    match range.next_back() {
+        None => Ok(None),
+        Some(item) => {
+            let (k, _) = item.map_err(|e| FoldError::StorageError(e.to_string()))?;
+            let (_, lamport) = crate::tables::decode_by_device_key(k.value())
+                .map_err(|e| FoldError::StorageError(e.to_string()))?;
+            Ok(Some(lamport))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
