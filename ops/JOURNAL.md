@@ -499,3 +499,76 @@ script's header no longer claims to be untested, because it has now been run.
 `arm64-v8a` system image and the `croft-dev` AVD were all present the whole
 time. An earlier planning pass concluded the NDK was absent because it inspected
 `~/Library/Android/sdk` — the stub. Resolve the path, do not assume it.
+
+## 2026-08-26 — croft-ffi cross-compiles and the emulator loads it (P7 S0)
+
+**What:** S0 needed the android half of its Done-when: the ffi cdylib built for
+`aarch64-linux-android` and *loaded* on the arm64 emulator. New script,
+`env/build-croft-ffi-android.sh`.
+
+**Cause:** none — this is new capability, not a fix. Recorded because it adds an
+`env/` entry point and installs an artifact into the android tree, and G4 says
+environment changes are journalled whether or not anything went wrong.
+
+**Outcome:** `libcroft_ffi.so` builds for arm64-v8a (2,146,224 bytes, `ELF
+64-bit LSB shared object, ARM aarch64`) and the `croft-dev` emulator both
+`dlopen`s it and resolves `uniffi_croft_ffi_fn_constructor_chatsession_open`.
+Run, not inferred: `==> LOADED AND RESOLVED`.
+
+**Two things the script does that the iroh one does not, both deliberate.** It
+refuses when the attached device is not `arm64-v8a`, because an x86_64 image can
+mask exactly the packaging bug the emulator exists to catch. And it refuses when
+no device is attached rather than exiting green on a successful build —
+producing a `.so` proves the compiler was happy, and only a load proves the
+device is. `--no-emulator` says out loud that you are only building.
+
+The build recipe itself is `build-iroh-android.sh`'s, unchanged: direct NDK
+clang via `CC_*`/`AR_*`/linker env vars, `rustup which` for both binaries, and
+`export RUSTC` because Homebrew's rustc shadows rustup with a sysroot carrying
+no Android targets. That script's header lists the five things that must line up
+and notes each was found by failing; all five applied here identically, which is
+the useful finding — the recipe generalizes with no new surprises.
+
+The `.so` is gitignored for now. Nothing in the app calls it yet, so committing
+it would add 2MB to the APK to be carried and never invoked; it lands in git
+when S1 links the shell against it.
+
+## 2026-08-26 — `make gate` was not reproducible, and could pass without running
+
+**What:** Running the full gate in a P7 S0 worktree failed at
+`:app:testDebugUnitTest` with `SDK location not found`, and the log showed the
+FFI wiring test reporting `> Task :test UP-TO-DATE` — skipped, while the build
+said SUCCESSFUL. Two separate defects, both found by watching one gate run.
+
+**Cause, defect one.** `android/local.properties` is gitignored — correctly, it
+is a per-machine path — but nothing generated it. It had been written by hand
+once, in the main checkout, and said `sdk.dir=$HOME/Library/Android/sdk`. Two
+consequences. A **worktree has no copy at all**, and this repo's own norm is
+that multi-turn work happens in a worktree, so the gate was green in one
+checkout and red in another for a reason unrelated to the code. And the
+hand-written value pointed at the **stub** — that path holds platform-tools and
+nothing else on this machine; the real SDK is the Homebrew cask. That is the
+third place the Android-Studio default was assumed, after `emulator.sh` and a
+planning pass that concluded the NDK was missing.
+
+**Cause, defect two.** Gradle's up-to-date check for the FFI wiring test knew
+about the Kotlin sources and nothing else. The cdylib and the generated
+bindings — the two things that actually change between runs, and the two the
+test exists to exercise — were invisible to it. So a rebuilt Rust library with
+unchanged test code looked like "nothing happened", the task was skipped, and
+the build reported success. **A gate that passes without running is worse than
+one that fails**, because nothing in the output says so.
+
+**Outcome:** `env/android-local-properties.sh` writes the file from
+`verify.sh`'s candidate probe verbatim — the fourth place would have been a
+fourth answer — and `make gate` calls it, with `make android-local-properties`
+for running it alone. Verified in the worktree that previously failed:
+`:app:testDebugUnitTest` BUILD SUCCESSFUL. The gradle test task now declares
+the cdylib and the generated bindings as inputs; verified by watching the same
+invocation go from `> Task :test UP-TO-DATE` to `> Task :test` with all seven
+tests PASSED.
+
+**The pattern, since this is the second time this week:** a target that works
+only because of local state somebody set up by hand is not a target, it is a
+habit. `emulator.sh` had it, `local.properties` had it. `env/` is supposed to
+refuse rather than warn; it cannot refuse over state it never creates.

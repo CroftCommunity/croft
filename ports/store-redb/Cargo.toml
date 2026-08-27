@@ -1,0 +1,32 @@
+# The storage realization: redb. Promoted from the discovery corpus's
+# `local_storage_projection` (P7 S0, plan 2026-08-25-1; Q6 decided promote).
+#
+# It sits under ports/ beside keylayer-openmls but, unlike that crate, it
+# implements no core trait — there is no storage port in social-tree-core and
+# P0-1 (owner, 2026-08-26) decided not to invent one: redb carries its own
+# `StorageBackend` seam (FileBackend / InMemoryBackend, and it compiles for
+# wasm32), so platform variation lands inside redb and a core trait would have
+# exactly one implementor. Recorded as a deliberate ADR-0003 deviation; the
+# revisit trigger is a second storage engine appearing on the roadmap.
+#
+# What did NOT travel: the corpus's `surface.rs` (view models + the LocalStore
+# command API) and the C-series experiment tests. `surface.rs` has no clean
+# split line — every read both opens a table and assembles a view struct — so
+# it stays in the corpus and depends on this crate. Dropping it drops tokio.
+[package]
+name = "store-redb"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "redb realization of the croft local store: the derived fold, its tables, and governance"
+
+[dependencies]
+social-tree-core = { path = "../../core/social-tree-core" }
+redb = "2.4"
+blake3 = "1"
+thiserror = "1"
+
+[dev-dependencies]
+proptest = "1"
+proptest-derive = "0.4"
+tempfile = "3"

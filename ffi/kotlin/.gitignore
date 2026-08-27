@@ -1,0 +1,6 @@
+# The generated Kotlin bindings. Not committed on purpose: a generated file in
+# the tree is a file that can disagree with its generator, and the disagreement
+# is silent. `env/gen-kotlin-bindings.sh` regenerates them from the built
+# cdylib every run.
+build/
+.gradle/

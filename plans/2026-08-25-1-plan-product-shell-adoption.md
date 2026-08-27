@@ -346,18 +346,18 @@ deviation with its revisit trigger (§ Phase 0 decisions, P0-1). The effect-comp
 object graph is exactly that sentence.
 
 **Changes (test-first in this order):**
-- [ ] the `ffi/` crate from D1's scaffold — RED: the Kotlin wiring test below, written
+- [x] the `ffi/` crate from D1's scaffold — RED: the Kotlin wiring test below, written
   against the intended binding surface before the surface exists.
-- [ ] `ports/store-redb` promoted from the corpus — RED: the promoted adapter's own
+- [x] `ports/store-redb` promoted from the corpus — RED: the promoted adapter's own
   pins run in croft *before* it is wired to the ffi crate. Promoted code gets TDD in
   this phase; it does not inherit the corpus's green as a free pass.
-- [ ] workspace `members` gains both crates (root `Cargo.toml`).
-- [ ] the android cross-compile step generalized from `env/build-iroh-android.sh`
+- [x] workspace `members` gains both crates (root `Cargo.toml`).
+- [x] the android cross-compile step generalized from `env/build-iroh-android.sh`
   (D3's template) so the `.so` lands in `jniLibs/arm64-v8a/`.
-- [ ] CI arms for both crates (read `CroftC/.claude/CI-PATTERN.md` before touching the
+- [x] CI arms for both crates (read `CroftC/.claude/CI-PATTERN.md` before touching the
   workflow; follow the existing clippy `-D warnings --force-warn missing_docs` and fmt
   patterns in `.github/workflows/ci.yml`).
-- [ ] `README.md` repo-map wording (`ffi/` is no longer a placeholder) and `CLAUDE.md`
+- [x] `README.md` repo-map wording (`ffi/` is no longer a placeholder) and `CLAUDE.md`
   status line — in this phase's landing commit, per G2.
 
 **Test specifics (mutation-resistant, not single-point):** the store port's pins name
@@ -398,6 +398,87 @@ inherited client's packaging-bug class is exactly what the emulator CAN answer);
 **(verification)** the JVM binding-test command (exact gradle/cargo invocation named
 during execution) runs green, and the emulator load is a recorded run; no android app
 code touched yet.
+
+
+**S0 CLOSED 2026-08-26.** Both halves of Done-when were RUN:
+
+- **Behavioral.** `ffi/kotlin` drives create-group → send → project through the
+  generated bindings, **7/7 green**, including four refusal cases arriving as
+  typed Kotlin exceptions carrying their detail. The arm64 emulator (`croft-dev`)
+  `dlopen`s `libcroft_ffi.so` and resolves
+  `uniffi_croft_ffi_fn_constructor_chatsession_open` — `LOADED AND RESOLVED`.
+- **Verification.** `make bindings` (= `env/gen-kotlin-bindings.sh`: build the
+  cdylib, generate from it, run gradle against both) and `make ffi-android`
+  (cross-compile + push + dlopen; refuses on a non-arm64 device and refuses to
+  exit green with no device attached). `make gate` now carries the binding test.
+  No android app code touched.
+
+**Observability, as the phase specified it.** The boundary emits on
+`croft.ffi` — DEBUG for a crossing, WARN for a refusal — and every refusal
+leaves through one `refuse()` helper, so a refusal cannot be added later
+without a log line. A boundary where *some* failures are logged is worse than
+one where none are, because the gaps read as absences of failure. Two pins
+(`tests/tracing_pins.rs`) assert it with a capturing subscriber rather than
+trusting that the calls are there: a successful crossing is DEBUG and never
+WARN, and each of the four refusal shapes warns individually. **Routing these
+to logcat under a distinct tag needs android app code and is S1's**, which is
+the half of the plan's observability item S0 could not honestly do.
+
+**Test counts:** store-redb 86 (58 promoted and re-earned, 28 new), croft-ffi 17
+Rust + 7 Kotlin. `clippy -D warnings --force-warn missing_docs` and
+`fmt --check` clean on both new crates, and the `ports-and-ffi` CI arm holds
+them there.
+
+**What S0 found that the plan did not predict**, each fixed with a RED test
+first:
+
+1. **Reading a never-written redb table answers `TableDoesNotExist`, not
+   empty.** Nothing in the corpus hit it because `DerivedFold::new` opened all
+   nine tables before anyone read — from a constructor that could only
+   `.expect()` on failure, the fallible-constructor defect D4 flagged. Schema
+   creation moved into `Db`, which fixes both.
+2. **The key decoders panicked on stored bytes.** `decode_edge_out_key` took an
+   unknown `EdgeType` discriminant straight to `.expect()`. Those bytes come out
+   of the database, so that is what a forward-version or corrupted store looks
+   like on a read. `DbError::KeyLength` already existed for this and was
+   constructed nowhere. All three key decoders now refuse by name.
+3. **An FFI `Refresh` mapped to a default snapshot**, which `update` faithfully
+   adopted — succeeding, and blanking the screen. A wipe indistinguishable from
+   having no groups.
+4. **The table constants were triplicated in four files**, two tables existing
+   only as string literals and never in `tables.rs` — the canonical list was
+   simultaneously duplicated and incomplete. `ALL_TABLES` is now the one list.
+5. **CI had no `timeout-minutes` on any job** (CI-PATTERN rule 8), so a hung
+   test would have sat for GitHub's six-hour default. Added to all three jobs.
+
+**Two gaps S0 surfaced and deliberately did NOT close**, because closing either
+means core work outside this plan's write-set:
+
+- **The substrate has no group-title mechanism.** A genesis payload carries
+  thresholds and a founding device; the fold writes `""` into the group's node
+  card. Rather than invent a wire format, a title is held as **local truth** —
+  `store_redb::local`, table `LOCAL_GROUP_TITLES`, never folded and never sent,
+  the posture E134 gives the mute set. That is a smaller claim than "the group
+  is named", and the difference shows the moment two devices disagree about what
+  a group is called. A shared name needs an assertion type.
+- **The payload encoders and their decoders live in different crates.**
+  `GroupGenesis`'s decoder is private inside `social_tree_core::update` and
+  `MembershipAdd`'s is in `fold_derived`, while both encoders are now in
+  `store_redb::payload`; only `Message` has both halves together in the core,
+  which is the shape all three should have. Mitigated rather than fixed:
+  `tests/read_pins.rs` ingests what the encoders produce **through the real
+  fold** with real Ed25519 signatures, which is the only check that fails when
+  the halves drift.
+
+**One S0 simplification to carry into later phases:** the principal is currently
+the device's own verifying key. One device, one persona. S3's DID↔persona
+binding is what makes them genuinely different things, and `Session::open`
+carries a note saying so.
+
+**Not watched, and honestly so:** the new CI arms have not been seen running on
+GitHub, because nothing has been pushed (pushes are owner-gated). `make gate`
+was watched locally. CI-PATTERN's "watch it fail before trusting it" is
+therefore satisfied for the gate command and **not** for the workflow file.
 
 ### S1 — the android chat surface, behind a flag
 

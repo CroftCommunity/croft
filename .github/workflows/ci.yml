@@ -14,6 +14,12 @@ on:
 jobs:
   gate:
     runs-on: ubuntu-latest
+    # CI-PATTERN rule 8. Without it a job inherits GitHub's six-hour default,
+    # and a test that HANGS rather than fails sits there for all of it — in
+    # `fun` that produced "every test passed, run failed", which is not a shape
+    # anyone reads quickly. Sized with room: store-redb's promoted suite is
+    # proptest-heavy and takes ~5 minutes on its own.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -27,6 +33,7 @@ jobs:
 
   core-purity:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: rustup syncs the pinned toolchain
@@ -48,3 +55,28 @@ jobs:
         run: cargo clippy -p social-tree-core -- -D warnings --force-warn missing_docs
       - name: fmt
         run: cargo fmt -p social-tree-core -- --check
+
+  # The two crates P7 S0 landed. A separate job from core-purity because they
+  # are not pure and must not be held to that standard: `store-redb` opens
+  # files and `croft-ffi` holds a signing key, which is the whole point of
+  # living under ports/ and ffi/ rather than in core/ (ADR-0003).
+  #
+  # Same clippy form as above, for the same reason — and it is DENY-clean on
+  # both crates today rather than aspirationally so, which is why it is worth
+  # having: an arm that is red on the commit that adds it teaches people to
+  # ignore it.
+  ports-and-ffi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: rustup syncs the pinned toolchain
+        run: rustup show
+      - name: clippy — store-redb
+        run: cargo clippy -p store-redb --all-targets -- -D warnings --force-warn missing_docs
+      - name: clippy — croft-ffi
+        run: cargo clippy -p croft-ffi --all-targets -- -D warnings --force-warn missing_docs
+      - name: fmt — store-redb
+        run: cargo fmt -p store-redb -- --check
+      - name: fmt — croft-ffi
+        run: cargo fmt -p croft-ffi -- --check

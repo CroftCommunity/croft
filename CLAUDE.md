@@ -18,7 +18,19 @@ machinery (E117 P1–P4: CONTESTED, real Ed25519, §7.6.4 removal kinds, the
 token/admission facts), `ports/keylayer-openmls` realizes the KeyLayer port
 on real openmls — both admission paths green end-to-end at loopback
 (`ports/keylayer-openmls/tests/loopback_e2e.rs`); `shell/` is still
-skeleton. The **android
+skeleton. **P7 S0 landed 2026-08-26 and the core is now reachable from a
+shell.** `ports/store-redb` is the redb store, promoted out of the discovery
+corpus and re-earning its 58 tests here rather than inheriting them; `ffi/`
+holds the uniffi surface — one `ChatSession` object with the substrate
+instance and its ports beside it, driving `chat-core`'s update/project loop.
+Both halves of that phase were RUN, not inferred: a Kotlin JVM test does
+create-group → send → project through the generated bindings (7/7,
+`make bindings`), and the arm64 emulator `dlopen`s the cross-compiled
+`libcroft_ffi.so` and resolves our symbol (`make ffi-android`). Refusals cross
+the boundary as typed Kotlin exceptions carrying their detail, which is the
+half worth proving. **No android app code calls any of it yet** — the P7
+standing constraint holds every phase additive while croftcall bakes, and
+wiring the shell is S1. The **android
 app** — the inherited croftcall client — builds, launches, and is published as
 **`v0.4.0`** (Latest): camps on **our relay** (`relay.croft.ing:8443`),
 reports the live connection path, redeems exchange invite links (Phase 11

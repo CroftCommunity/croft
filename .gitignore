@@ -19,4 +19,15 @@ node_modules/
 
 # env scratch
 /tmp/
+# Where env/ scripts stage things they build: the iroh-ffi clone, the emulator
+# dlopen probe. Reproducible from the scripts, so never committed.
+/.build/
 mutants.out/
+
+# The croft-ffi native library, as `env/build-croft-ffi-android.sh` installs it.
+# Untracked deliberately for now: nothing in the app calls it yet, so committing
+# it would put 2MB into the APK to be carried and never invoked. It gets
+# committed the moment S1 links the android shell against it — which is also
+# when it starts being worth reviewing when it changes. (libiroh_ffi.so IS
+# committed, because the app does call it.)
+android/app/src/main/jniLibs/*/libcroft_ffi.so
