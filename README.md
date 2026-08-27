@@ -31,7 +31,16 @@ and the promoted `ports/store-redb`, and the arm64 emulator loads the
 cross-compiled `libcroft_ffi.so` and resolves its symbols. `make bindings` runs
 the first; `make ffi-android` runs the second and refuses to pass on a
 non-arm64 device or with no device attached. Nothing in the android app calls
-any of it yet — wiring the shell is S1.
+any of it — that is the guarantee, not an accident of ordering.
+
+**The surface exists and runs (P7 S1, 2026-08-27).** `android/social/` is a
+separate dev-only app module, driven end to end on the arm64 emulator: found a
+group, selected it, sent a message, read it back off the timeline through the
+real bindings. It carries E116's four presentation obligations — the factual
+fork statement, the exposure disclosure, the three response registers with mute
+the lightest, and returner-side "admission voided" legibility — each pinned by
+tests that also check what the words must NOT say. The calling app's APK
+contains none of it, because the code is not in that module's dependency graph.
 
 ## The shape
 

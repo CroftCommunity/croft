@@ -106,3 +106,152 @@ data class ForkBanner(
     /** Whether the surface must refuse governance while it is shown. */
     val blocking: Boolean,
 )
+
+// ---------------------------------------------------------------------------
+// E116's presentation obligations
+// ---------------------------------------------------------------------------
+
+/**
+ * Something the group is owed a disclosure about.
+ *
+ * Two kinds, kept distinct because they are different facts with different
+ * remedies. Collapsing them into one "there was an exposure" message would read
+ * more calmly and would tell the group the wrong thing.
+ */
+sealed interface Exposure {
+    /**
+     * §11.8's stale-admission window: someone held an admission that had
+     * already been superseded, and everything sent in that span reached them.
+     */
+    data class StaleAdmission(
+        /** Whose admission was stale. */
+        val who: String,
+        /** Lamport at which the stale admission began being honoured. */
+        val fromLamport: Long,
+        /** Lamport at which it was closed. */
+        val toLamport: Long,
+        /** How many messages fell inside the span. */
+        val messageCount: Int,
+    ) : Exposure
+
+    /**
+     * §7.6.12's two-phase revocation interval: the gap between a revocation
+     * being decided and it taking effect everywhere.
+     */
+    data class RevocationInterval(
+        /** Whose access was being revoked. */
+        val who: String,
+        /** Lamport at which revocation was decided. */
+        val fromLamport: Long,
+        /** Lamport at which it took effect. */
+        val toLamport: Long,
+    ) : Exposure
+}
+
+/** One of §7.6.5's three responses. */
+enum class Register {
+    /** Personal, local, immediate — and the only one reachable alone. */
+    MUTE,
+
+    /** The group decides, at whatever threshold its rules set. */
+    GOVERNANCE,
+
+    /** Leave with those who agree, and keep the history. */
+    FORK,
+}
+
+/** A response register as it is offered. */
+data class RegisterOffer(
+    /** Which register. */
+    val register: Register,
+    /** What it is, in a phrase. */
+    val label: String,
+    /** What it costs — stated, so weight is visible before it is chosen. */
+    val cost: String,
+    /** Whether a person can reach it without anyone else's agreement. */
+    val actsAlone: Boolean,
+)
+
+/**
+ * Disclose an exposure to the group, factually.
+ *
+ * The obligation is §11.8 and §7.6.12's: the window and the interval are
+ * disclosed **where they occur**, which is why this is a timeline-level
+ * statement rather than a setting somebody has to go and find.
+ *
+ * Every number the group would otherwise have to guess at is stated: who, the
+ * span in lamport terms, and — for a stale admission — how much was inside it.
+ * "You were exposed" without a quantity is a feeling; with one it is a fact
+ * someone can act on. There is no apology and no accusation, because the record
+ * supports neither.
+ */
+fun Rendering.exposureDisclosure(exposure: Exposure): String = when (exposure) {
+    is Exposure.StaleAdmission ->
+        "${exposure.who} held an admission that had already been superseded, from " +
+            "gov_seq ${exposure.fromLamport} to ${exposure.toLamport}. " +
+            "${exposure.messageCount} message(s) sent in that span reached them."
+
+    is Exposure.RevocationInterval ->
+        "${exposure.who}'s access was revoked at gov_seq ${exposure.fromLamport} and " +
+            "took effect everywhere at ${exposure.toLamport}. Anything sent in between " +
+            "may have reached them."
+}
+
+/**
+ * The three responses, in the order they are offered.
+ *
+ * Mute comes first because §7.6.5 asks that the lightest be the path of least
+ * resistance, and order is the cheapest and most honest way a surface says so —
+ * cheaper than a recommendation, which would be the product taking a side in
+ * someone else's dispute.
+ *
+ * Each carries its cost. A7 stands: these are standing options with their
+ * weight stated, not a prompt pushed at someone at the admission gate.
+ */
+fun Rendering.responseRegisters(): List<RegisterOffer> = listOf(
+    RegisterOffer(
+        register = Register.MUTE,
+        label = "Mute them for yourself",
+        cost = "Local to you. Nobody is told, nothing is removed, and you can undo it.",
+        actsAlone = true,
+    ),
+    RegisterOffer(
+        register = Register.GOVERNANCE,
+        label = "Raise it with the group",
+        cost = "Needs the group's threshold to carry, and the record keeps the attempt.",
+        actsAlone = false,
+    ),
+    RegisterOffer(
+        register = Register.FORK,
+        label = "Fork the group",
+        cost = "Splits the group. Both sides keep the history up to the split.",
+        actsAlone = false,
+    ),
+)
+
+/**
+ * What a returner is told when their admission turned out to be void.
+ *
+ * §11.7/§11.8's re-fire, rendered per E108's CONTESTED pattern. The words are
+ * "admission voided" — the same words the membership panel uses — because a
+ * returner meeting a different phrase for the same fact has to work out that it
+ * is the same fact.
+ */
+fun Rendering.returnerNotice(voided: Boolean, cause: String?): String =
+    returnerNoticeOrNull(voided, cause) ?: ""
+
+/**
+ * The returner notice, or `null` when there is nothing to say.
+ *
+ * Null on success is the point: the obligation is legibility on the failure,
+ * not chatter on the happy path. A surface that announced every successful
+ * return would bury the one case that matters.
+ */
+fun Rendering.returnerNoticeOrNull(voided: Boolean, cause: String?): String? =
+    if (!voided) {
+        null
+    } else {
+        val because = cause?.let { " ($it)" } ?: ""
+        "admission voided$because. Your earlier admission was closed before you " +
+            "returned, so it no longer admits you. Nothing about it happened silently."
+    }

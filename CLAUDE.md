@@ -27,10 +27,23 @@ Both halves of that phase were RUN, not inferred: a Kotlin JVM test does
 create-group → send → project through the generated bindings (7/7,
 `make bindings`), and the arm64 emulator `dlopen`s the cross-compiled
 `libcroft_ffi.so` and resolves our symbol (`make ffi-android`). Refusals cross
-the boundary as typed Kotlin exceptions carrying their detail, which is the
-half worth proving. **No android app code calls any of it yet** — the P7
-standing constraint holds every phase additive while croftcall bakes, and
-wiring the shell is S1. The **android
+as typed Kotlin exceptions carrying their detail — **corrected by S1**: uniffi
+builds a generated exception's `message` from the variant's FIELDS, so the
+fieldless variants (`NoGroupSelected`, `EmptyDraft`) crossed with an EMPTY
+message until every variant gained a `reason` field. The typed exception was
+always there; the sentence was not. **The calling app still calls none of it** — the P7
+standing constraint holds every phase additive while croftcall bakes.
+**P7 S1 landed 2026-08-27: the surface exists and runs on a device.**
+`android/social/` is a SEPARATE dev-only module (owner chose a module over a
+product flavor, so `:app`'s variant names and every runbook command stay
+exactly as they are) with its own applicationId, so both apps sit on one device
+without replacing each other. It was driven on the arm64 emulator end to end —
+found a group, selected, typed, sent, read the line back through the real
+bindings over a real redb store — and the calling app's APK contains **zero**
+entries matching `ing/croft/social` or `libcroft_ffi`, with its native
+libraries unchanged. 164 calling-app tests green and untouched, 26 social tests
+green, nothing skipped. E116's four presentation obligations are landed and
+pinned. Still owed: the lost-race scenario, which needs S2's second device. The **android
 app** — the inherited croftcall client — builds, launches, and is published as
 **`v0.4.0`** (Latest): camps on **our relay** (`relay.croft.ing:8443`),
 reports the live connection path, redeems exchange invite links (Phase 11
