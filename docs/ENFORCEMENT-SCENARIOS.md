@@ -75,7 +75,7 @@ House truths the rows encode:
 | Expired policy | MUST SAY hidden AND the mint revokes — both layers | PIN:CallabilityJourneyTest.kt::`an expired policy hides the grant from callability AND revokes at mint` |
 | Callability yes, mint no | THE GATE WINS | PIN:CallabilityJourneyTest.kt::`callability can say yes and the mint still says no - the gate wins` · PIN:CallabilityJourneyTest.kt::`an unlisted caller is refused at the gate whatever it presents` |
 
-## Screen honesty (E135, was "E130" — the poll is the truth) and the session
+## Screen honesty (E135 — `online()` is the truth) and the session
 
 | Scenario | Outcome | Pinned by |
 |---|---|---|
