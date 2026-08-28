@@ -88,7 +88,9 @@ pub enum TransportError {
         reason: String,
     },
     /// A pairing blob carried a version this build does not know.
-    #[error("this pairing code was made by a newer build (version {got}, this one speaks {expected})")]
+    #[error(
+        "this pairing code was made by a newer build (version {got}, this one speaks {expected})"
+    )]
     BlobVersion {
         /// The version that arrived.
         got: u8,

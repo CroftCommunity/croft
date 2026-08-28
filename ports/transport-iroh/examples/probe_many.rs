@@ -16,13 +16,19 @@ fn pair(seed: u8) -> (GossipTransport, GossipTransport, DialCard) {
     let topic = TopicKey::from_group_id(&[seed; 32]);
     let a = GossipTransport::start(&[seed; 32], topic, &[]).expect("A starts");
     let card = a.dial_card();
-    let b = GossipTransport::start(&[seed.wrapping_add(100); 32], topic, &[card.clone()])
-        .expect("B starts");
+    let b = GossipTransport::start(
+        &[seed.wrapping_add(100); 32],
+        topic,
+        std::slice::from_ref(&card),
+    )
+    .expect("B starts");
     (a, b, card)
 }
 
 fn main() {
-    let arm = std::env::args().nth(1).unwrap_or_else(|| "sequential".into());
+    let arm = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "sequential".into());
     println!("arm = {arm}");
 
     let pairs: Vec<(GossipTransport, GossipTransport, DialCard)> = if arm == "concurrent" {
@@ -49,7 +55,11 @@ fn main() {
             .iter()
             .map(|(a, b, _)| format!("{}/{}", a.neighbour_count(), b.neighbour_count()))
             .collect();
-        println!("t={:>5}ms  a/b neighbours per pair: {}", t * 500, counts.join("  "));
+        println!(
+            "t={:>5}ms  a/b neighbours per pair: {}",
+            t * 500,
+            counts.join("  ")
+        );
         if pairs.iter().all(|(a, _, _)| a.neighbour_count() > 0) {
             println!("ALL PAIRS FORMED at ~{}ms", t * 500);
             break;

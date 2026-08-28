@@ -76,7 +76,15 @@ jobs:
         run: cargo clippy -p store-redb --all-targets -- -D warnings --force-warn missing_docs
       - name: clippy — croft-ffi
         run: cargo clippy -p croft-ffi --all-targets -- -D warnings --force-warn missing_docs
+      # P7 S2's transport. Added in the same commit that adds the crate, per the
+      # note above: an arm that arrives later than the code it guards spends the
+      # gap unguarded, and an arm that is red on arrival teaches people to
+      # ignore it. This one is DENY-clean on the commit that introduces it.
+      - name: clippy — transport-iroh
+        run: cargo clippy -p transport-iroh --all-targets -- -D warnings --force-warn missing_docs
       - name: fmt — store-redb
         run: cargo fmt -p store-redb -- --check
       - name: fmt — croft-ffi
         run: cargo fmt -p croft-ffi -- --check
+      - name: fmt — transport-iroh
+        run: cargo fmt -p transport-iroh -- --check

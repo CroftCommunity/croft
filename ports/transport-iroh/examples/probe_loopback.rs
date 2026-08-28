@@ -100,9 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Q4: does a broadcast arrive?
     let recv = tokio::spawn(async move {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
-        while let Ok(Some(event)) =
-            tokio::time::timeout_at(deadline, rx_b.next()).await
-        {
+        while let Ok(Some(event)) = tokio::time::timeout_at(deadline, rx_b.next()).await {
             match event {
                 Ok(Event::Received(msg)) => {
                     return Some(String::from_utf8_lossy(&msg.content).to_string());
@@ -119,9 +117,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Wait for the swarm to actually form before broadcasting.
     topic_a.joined().await?;
-    println!("Q4 topic A joined; neighbors = {}", topic_a.neighbors().count());
+    println!(
+        "Q4 topic A joined; neighbors = {}",
+        topic_a.neighbors().count()
+    );
 
-    topic_a.broadcast("hello from A".as_bytes().to_vec().into()).await?;
+    topic_a
+        .broadcast("hello from A".as_bytes().to_vec().into())
+        .await?;
     println!("Q4 broadcast sent");
 
     match recv.await? {

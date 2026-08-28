@@ -132,18 +132,18 @@ impl GossipTransport {
         // current-thread runtime that call would starve the actor it is waiting
         // on.
         //
-        // **Two workers, explicitly.** `new_multi_thread()` defaults to one
-        // worker per CPU, which is wrong here in both directions. This work is
+        // **Two workers, explicitly**, on their own merits: this work is
         // I/O-bound — a QUIC socket, a gossip actor, a decode pump — so the
-        // extra workers buy nothing, and on a phone they are threads and
-        // battery spent to sit idle. Worse, the default made the loopback suite
-        // fail outright: six tests in parallel, each holding two or three
-        // transports, each sizing itself to the whole machine, and the gossip
-        // actors starved badly enough that no swarm formed inside twenty
-        // seconds. Every test passed alone and the suite failed together, which
-        // reads as flakiness and is not — it is oversubscription. Pinning the
-        // width fixes it at the cause; `--test-threads=1` would only have
-        // hidden it, and would have hidden it on the machine least like a phone.
+        // per-CPU default `new_multi_thread()` picks buys nothing, and on a
+        // phone those extra workers are threads and battery spent to sit idle.
+        //
+        // It is NOT a fix for the loopback suite's failures, though it was
+        // introduced believing it was. That belief was tested and refuted: the
+        // suite failed again with this pin already in place, and later went
+        // green four runs running with no code change at all, once a leaked
+        // probe process holding two live iroh endpoints was cleaned up off the
+        // host. The honest state is recorded on `PATIENCE` in
+        // `tests/loopback_gossip.rs`: cause unproven, headroom not diagnosis.
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .enable_all()
@@ -258,11 +258,10 @@ impl GossipTransport {
                         // Saturating: a NeighborDown without a matching Up
                         // would otherwise wrap to usize::MAX and make the
                         // transport claim a swarm it does not have.
-                        let _ = pump_neighbours.fetch_update(
-                            Ordering::SeqCst,
-                            Ordering::SeqCst,
-                            |n| Some(n.saturating_sub(1)),
-                        );
+                        let _ =
+                            pump_neighbours.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
+                                Some(n.saturating_sub(1))
+                            });
                         tracing::debug!(peer = %id.fmt_short(), "neighbor down");
                     }
                     Err(e) => {
@@ -394,12 +393,12 @@ impl DialCard {
         let raw = unhex(&self.endpoint_id).ok_or_else(|| TransportError::BadDialCard {
             reason: format!("endpoint id is not hex: {:?}", self.endpoint_id),
         })?;
-        let bytes: [u8; 32] = raw
-            .as_slice()
-            .try_into()
-            .map_err(|_| TransportError::BadDialCard {
-                reason: format!("an endpoint id is 32 bytes, got {}", raw.len()),
-            })?;
+        let bytes: [u8; 32] =
+            raw.as_slice()
+                .try_into()
+                .map_err(|_| TransportError::BadDialCard {
+                    reason: format!("an endpoint id is 32 bytes, got {}", raw.len()),
+                })?;
         let id = iroh::EndpointId::from_bytes(&bytes).map_err(|e| TransportError::BadDialCard {
             reason: format!("not a valid endpoint id: {e}"),
         })?;

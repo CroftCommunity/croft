@@ -52,7 +52,10 @@ fn a_welcome_crosses_from_the_device_that_minted_it() {
     let card = a.dial_card();
 
     let b = GossipTransport::start(&[2u8; 32], topic(0xAA), &[card]).expect("B starts");
-    assert!(a.wait_for_peer(PATIENCE), "the swarm must form before A sends");
+    assert!(
+        a.wait_for_peer(PATIENCE),
+        "the swarm must form before A sends"
+    );
 
     let welcome = b"an openmls welcome, as bytes".to_vec();
     a.broadcast(ArtifactKind::Welcome, &welcome)
@@ -72,7 +75,10 @@ fn a_welcome_crosses_from_the_device_that_minted_it() {
 fn sealed_messages_cross_in_both_directions() {
     let a = GossipTransport::start(&[3u8; 32], topic(0xBB), &[]).expect("A starts");
     let b = GossipTransport::start(&[4u8; 32], topic(0xBB), &[a.dial_card()]).expect("B starts");
-    assert!(a.wait_for_peer(PATIENCE), "the swarm must form before A sends");
+    assert!(
+        a.wait_for_peer(PATIENCE),
+        "the swarm must form before A sends"
+    );
     assert!(b.wait_for_peer(PATIENCE), "B must see A too");
 
     a.broadcast(ArtifactKind::Sealed, b"from A").unwrap();
@@ -92,7 +98,10 @@ fn sealed_messages_cross_in_both_directions() {
 fn the_kind_survives_the_crossing() {
     let a = GossipTransport::start(&[5u8; 32], topic(0xCC), &[]).expect("A starts");
     let b = GossipTransport::start(&[6u8; 32], topic(0xCC), &[a.dial_card()]).expect("B starts");
-    assert!(a.wait_for_peer(PATIENCE), "the swarm must form before A sends");
+    assert!(
+        a.wait_for_peer(PATIENCE),
+        "the swarm must form before A sends"
+    );
 
     a.broadcast(ArtifactKind::Welcome, b"w").unwrap();
     a.broadcast(ArtifactKind::Sealed, b"s").unwrap();
@@ -113,10 +122,14 @@ fn a_transport_on_a_different_topic_hears_nothing() {
     let a = GossipTransport::start(&[7u8; 32], topic(0xD1), &[]).expect("A starts");
     let card = a.dial_card();
 
-    let same = GossipTransport::start(&[8u8; 32], topic(0xD1), &[card.clone()]).expect("same topic");
+    let same = GossipTransport::start(&[8u8; 32], topic(0xD1), std::slice::from_ref(&card))
+        .expect("same topic");
     let other =
         GossipTransport::start(&[9u8; 32], topic(0xD2), &[card]).expect("different topic starts");
-    assert!(a.wait_for_peer(PATIENCE), "the swarm must form before A sends");
+    assert!(
+        a.wait_for_peer(PATIENCE),
+        "the swarm must form before A sends"
+    );
 
     a.broadcast(ArtifactKind::Sealed, b"for the group").unwrap();
 
