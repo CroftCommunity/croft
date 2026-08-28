@@ -14,6 +14,15 @@ unresolved GAP fails.
 Pin syntax: ``PIN:<File.kt>::`test name` `` — file anywhere under
 `android/app/src/test`, backticked Kotlin test function defined in it.
 
+**What a green gate does and does not mean.** It means every row names a test
+that exists and the taxonomy has no unlisted refusal. It does **not** mean the
+row holds on hardware: a test can pin a mapping perfectly while the production
+input feeding that mapping is wrong on a device. That is not hypothetical — the
+screen-honesty row below is unit-green and device-open, found by pointing a
+phone at an enforcing relay (runbook §13 step 3). Rows carrying **DEVICE-OPEN**
+are pinned in the harness and unproven or disproven on real hardware; treat
+them as open work, not coverage.
+
 House truths the rows encode:
 
 - **Degrade means tokenless WITH words** (open-mode posture; the relay
@@ -68,7 +77,7 @@ House truths the rows encode:
 | Scenario | Outcome | Pinned by |
 |---|---|---|
 | Attached with a home relay | MUST SAY camped | PIN:CampPresenceTest.kt::`a home relay present is the camped line` |
-| No home relay (refused attach) | MUST SAY NOT camped and what it costs — never silence | PIN:CampPresenceTest.kt::`no home relay says NOT camped and what it costs — never silence` |
+| No home relay (refused attach) | MUST SAY NOT camped and what it costs — never silence | PIN:CampPresenceTest.kt::`no home relay says NOT camped and what it costs — never silence` — **DEVICE-OPEN (E135(a))**: the unit test pins the mapping correctly, but on hardware `relayUrl()` keeps returning the CONFIGURED relay after a refused attach, so the mapping's input never goes false and the screen still reads "camped". Measured 2026-08-28 against staging enforce (runbook §13 step 3). The row is NOT satisfied end-to-end. |
 | Session staleness and rotation | MUST SURVIVE the arc (single-use rotation; the §12 race) | PIN:SessionJourneyTest.kt::`sign-in, staleness, and rotation — the whole session arc over real sockets` |
 | A successful mint | IS SILENT — stated, not fixed | runbook §13 results; the relay's attributed `usage` line is the instrument (no client test can see a server journal; the row exists so silence is never re-read as failure) |
 

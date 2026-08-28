@@ -510,3 +510,51 @@ promote to v0.5.0 Latest has NOT happened yet, owner's call pending.
 Both phones left camped: Samsung holding its pass, Pixel tokenless with
 the honest words (the designed caller posture). Remaining: step 1 (the
 promote), step 3 (E130(a) against staging 8444), and the bake days.
+
+### §13 step 3 + the Pixel's record — 2026-08-28 (~02:38–02:47Z, both phones on USB)
+
+Two results, one of them a defect the earlier tests could not have caught.
+
+**The caller became reachable (E135(b)'s empirical half).** The Pixel camped
+`endpoint_unbound` against production for one reason: its account
+(`bobzmudacroft.bsky.social`) published NO `ing.croft.iroh.endpoint` record —
+verified by `listRecords` before touching anything, and the admit's rule read
+from source first (`camp.rs`: `list_records` → `parse_endpoints` → any record
+whose `endpointId` equals the connecting hex; only that field is load-bearing).
+Published `rkey=self`, `label=pixel-test`, the device's endpoint id, same shape
+as the callee's record. The phone then minted its pass **silently** and the
+relay attributed its next connection close (`usage endpoint_id=631277dda5`).
+One transient `endpoint_unbound` refusal was logged between the write and the
+successful mint (02:40:20Z) — read-after-write lag on the PDS read path, gone
+by the retry. **Consequence for the flip: the Pixel is now reachable under
+enforce. It was not before, and nothing on screen said so.**
+
+**E135(a) IS NOT FIXED ON DEVICE — the honest line still lies.** A debug build
+pointed at the staging enforce listener (`-PcroftRelayUrl=…:8444`, which
+verifies the STAGING key and so must refuse a production-minted pass) was
+installed on the Pixel. Staging refused every attach, repeatedly:
+
+    denied endpoint_id=631277dda5 reason="invalid_token" detail=SignatureOrMalformed
+    error accepting upgraded connection: The relay denied our authentication
+
+…and the phone's screen read **"ready, camped on relay"** the entire time,
+with logcat reporting `home relay: https://relay.croft.ing:8444/`. The E135(a)
+fix polls `endpoint.addr().relayUrl()`, and **iroh-ffi keeps returning the
+CONFIGURED home relay after a refused attach** — the poll's input never goes
+false, so the mapping (which its unit test pins correctly) is never reached.
+The javap-verified assumption behind that fix — that `relayUrl()` reflects a
+successful attach — is now measured false. A reachability signal has to come
+from somewhere else (a probe, an ffi connection-state hook, or attach failure
+surfaced through E128's missing native logging).
+
+**Live confirmation of matrix row C4.** The same run is the wrong-key refusal
+observed on hardware with two real keys, `SignatureOrMalformed` at the relay —
+the row pinned in `phase2_token.rs::wrong_issuer_key_denies` yesterday.
+
+Rig restored: the Pixel is back on the published `v0.5.0-rc.1` APK, camping on
+production with its pass and attributing. Both phones now hold passes.
+
+**Flip implication, stated plainly:** under enforce, any phone the relay
+refuses — signed out, session expired, endpoint unpublished — will show
+"ready, camped on relay" while being unreachable. E135(a) should be treated as
+OPEN, and fixing it before the flip is the honest sequencing.

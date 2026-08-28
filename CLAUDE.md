@@ -100,7 +100,7 @@ real admit key — **the bake is live** — and §13 steps 2+4 RAN: the
 first PRODUCTION camp mint (silent success; the relay's attributed
 `usage` line is the instrument — silence is not failure), the
 `endpoint_unbound` caller posture live, the first attributed production
-call. E135(a) (screen honesty, was "E130(a)") landed under tests; the
+call. E135(a) (screen honesty) landed under tests but is **DEVICE-OPEN**: measured 2026-08-28 against staging enforce, `relayUrl()` keeps returning the configured relay after a REFUSED attach, so a refused phone still reads "ready, camped on relay" (runbook §13 step 3) — fix before the flip; the
 **enforcement scenario matrix** is landed and gated in BOTH repos
 (`docs/ENFORCEMENT-SCENARIOS.md` here + croft-stack's, each walked by a
 test). Remaining: the bake days → the owner's one-word enforce flip
