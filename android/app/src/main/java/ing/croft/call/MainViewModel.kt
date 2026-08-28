@@ -233,8 +233,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             } catch (t: Throwable) {
+                // Cancellation propagates untouched (structured concurrency);
+                // only a real failure earns words.
+                val note = CampAdmission.failureNote(t) ?: throw t
                 Log.w("CroftCall", "camp setup failed: ${t.message}")
-                _campStatus.value = "camping pass setup failed: ${t.message}"
+                _campStatus.value = note
             }
         }
     }

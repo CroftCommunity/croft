@@ -82,4 +82,15 @@ object CampAdmission {
             note = "client error building the camping request",
         )
     }
+
+    /**
+     * Words for a camp attempt that threw, or null when there is nothing
+     * honest to say. A [kotlinx.coroutines.CancellationException] means the
+     * app rebound or backgrounded mid-attempt — a lifecycle event, not a
+     * refusal — and rendering it as "camping pass setup failed" put a scary,
+     * unactionable line on screen during device runs (2026-08-28).
+     */
+    fun failureNote(t: Throwable): String? =
+        if (t is kotlinx.coroutines.CancellationException) null
+        else "camping pass setup failed: ${t.message}"
 }

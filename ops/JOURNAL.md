@@ -721,3 +721,40 @@ nothing is happening.
 
 The tree was committed before mutating, per the house rule — the restore path
 has to be as trustworthy as the mutation.
+
+## 2026-08-28 — E135(a): the reachability signal, found by refuting two others
+
+**What:** the camped claim needed a truth source. Three candidates, tested on
+the Pixel against production (attached) and the staging enforce listener
+(refusing every attach), which is the only pair of states that can tell them
+apart.
+
+1. `addr().relayUrl()` — **refuted.** Reports the CONFIGURED relay in both
+   states. This is what shipped as the E135(a) "fix" and why a refused phone
+   still read "ready, camped on relay".
+2. `watchHomeRelay(...)` — **refuted, and it is the same old lesson.** Throws
+   `there is no reactor running, must be called from the context of a Tokio
+   1.x runtime`, exactly as `Connection.watchPaths()` did on 2026-08-17. The
+   note in `CallPeer` that predicted this was right; the watcher family is
+   unusable from this binding, Endpoint-level included. Registration is now
+   guarded so a reactor failure could never break bind.
+3. `Endpoint.online()` — **the signal.** A suspend fn (async works here; only
+   callbacks need the reactor), it returns promptly when attached and blocks
+   while the relay refuses, so a timeout converts "still blocked" into an
+   answer. Measured **ONLINE** on production and **TIMEOUT** on staging with
+   the same configured url in both.
+
+Also measured and discarded: `stats()` — `socket:relay_home_change` reads 1 in
+BOTH states (it counts the configured home relay being set, not an attach), so
+it would have been a false signal had it been adopted on plausibility.
+
+**Outcome:** `CampPresence.attachedRelay(online, relayUrl)` gates the url on
+the endpoint's own reachability answer; `CallPeer` probes every 5 s with a 6 s
+timeout (which only bites when NOT online, since an online endpoint answers
+immediately) and honors cancellation instead of reporting a refusal it never
+observed. Device-verified BOTH ways: staging → "ready — NOT camped on relay;
+calls cannot reach this device", production → "ready, camped on relay".
+Same session, same root cause: a lifecycle cancellation was rendering
+"camping pass setup failed: Job was cancelled" on screen; cancellation now
+propagates and only real failures earn words. 169 tests green. The Pixel was
+returned to the published rc.1 build afterwards.
