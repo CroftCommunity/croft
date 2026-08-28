@@ -47,6 +47,9 @@ House truths the rows encode:
 | Pass near expiry | MUST RE-MINT (margin, boundary exact) | PIN:CampAdmissionTest.kt::`a pass inside the re-mint margin mints fresh instead of riding expiry` · PIN:CampAdmissionTest.kt::`a pass exactly at the margin boundary still mints` |
 | Admit refuses the camp (endpoint_unbound, …) | MUST DEGRADE WITH WORDS | PIN:CampAdmissionTest.kt::`a refusal camps tokenless with words — reception must not die quietly` · PIN:CampAdmissionTest.kt::`each refusal reason has its own words` · observed live at production 2026-08-26 02:23Z |
 | Unpublish revokes the next mint | MUST DEGRADE at re-mint | PIN:CampJourneyTest.kt::`session to camp proof to camping pass — then unpublish revokes the next mint` |
+| Never-published device, then published (the repair) | MUST DEGRADE, then MUST CAMP | PIN:CampJourneyTest.kt::`an unpublished device is refused until the record exists, then camps` — the caller phone's real state through the whole first bake (§13 step 3) |
+| A successful camp | MUST SAY NOTHING (silence is the success signal) | PIN:CampJourneyTest.kt::`a successful camp says nothing — a note would mean something is wrong` |
+| Holding a pass while the relay refuses the attach | MUST SAY NOT camped (possession ≠ reachability) | PIN:CampJourneyTest.kt::`a held pass is not a camped claim — a refused attach still reads NOT camped` — DEVICE-VERIFIED 2026-08-28 |
 | Admit outage | MUST DEGRADE WITH availability note | PIN:CampAdmissionTest.kt::`an outage camps tokenless with the availability note` · PIN:CampJourneyTest.kt::`an admit outage camps tokenless with the availability note` |
 | Client defect (bad request) | MUST DEGRADE AND SAY SO | PIN:CampAdmissionTest.kt::`a client defect camps tokenless and says so` |
 | Sign-out | MUST DROP THE PASS | PIN:CampAdmissionTest.kt::`signing out drops the pass — a cached pass without a session does not camp` · §12 sign-out rung |
