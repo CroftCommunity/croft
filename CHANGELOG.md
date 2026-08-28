@@ -20,8 +20,9 @@ revocation refused with words, identity-proof mint on-device). M4e
 every rung green on hardware**: the signed-out camp refused, sign-in →
 self-minted camping pass → admitted with attribution, the first call
 with both sides holding passes on an enforcing relay, the endings'
-words verbatim on both screens, and the sign-out negative. versionCode 5,
-versionName 0.5.0 — published as **v0.5.0-rc.1** 2026-08-24.
+words verbatim on both screens, and the sign-out negative. versionCode 5 / versionName 0.5.0 published as **v0.5.0-rc.1**
+2026-08-24; **versionCode 6** re-cut as **rc.2** 2026-08-28 carrying the
+E135(a) device fix below.
 
 Then the operational distance closed almost entirely (2026-08-25/26):
 croft-admit + its private store ACTIVATED on the box, production relay
@@ -38,11 +39,11 @@ caller-side camp posture (filed as "E130" in this repo's earlier notes;
 the roadmap renumbered it when openprices claimed E130).
 
 ### Added (M4, unreleased)
-- **The camped line is polled truth (E135(a), was "E130(a)").** The
-  screen's camped claim now derives from `endpoint.addr().relayUrl()` —
-  a refused attach reads "NOT camped on relay; calls cannot reach this
-  device", never a comfortable lie. Landed under tests 2026-08-25;
-  device semantics are §13 step 3 (staging), still to run.
+- **The camped line is honest (E135(a)).** The screen no longer claims
+  "camped on relay" the app cannot see — a refused attach reads "NOT
+  camped on relay; calls cannot reach this device". Landed 2026-08-25
+  against `addr().relayUrl()`, which §13 step 3 then proved blind; see
+  the Fixed entry below for the signal that actually works.
 - **The enforcement scenario matrix, client half**
   (`docs/ENFORCEMENT-SCENARIOS.md` + `EnforcementMatrixTest` riding
   `testDebugUnitTest`): ~30 posture rows — what must dial, camp, degrade
@@ -90,6 +91,20 @@ the roadmap renumbered it when openprices claimed E130).
   resolved from PDS source). Existing sessions must re-sign-in to mint.
 
 ### Fixed (M4, unreleased)
+- **The camped claim is now device-true (E135(a)).** The screen said
+  "ready, camped on relay" while an enforcing relay refused every
+  attach — the earlier fix polled `addr().relayUrl()`, which reports the
+  CONFIGURED relay in both states, so its (correct) mapping was fed a
+  blind input. The truth source is `Endpoint.online()`, chosen by
+  refuting the alternatives on hardware: `watchHomeRelay` throws "there
+  is no reactor running" exactly as `conn.watchPaths()` does, and
+  `stats()`'s `relay_home_change` reads 1 whether attached or refused.
+  Verified both ways on a phone — refused → "NOT camped on relay; calls
+  cannot reach this device", attached → "camped" (runbook §13 step 3,
+  `ops/JOURNAL.md` 2026-08-28).
+- **A cancelled camp no longer speaks.** A rebind mid-mint rendered
+  "camping pass setup failed: Job was cancelled" on screen; cancellation
+  is a lifecycle event, not a refusal, and now propagates untouched.
 - **The refresh-token race the §12 run earned.** The foreground
   best-effort refresh and the camp mint's before-mint refresh raced the
   SINGLE-USE refresh token; the entryway answered 400 invalid_grant
