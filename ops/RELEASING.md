@@ -77,7 +77,19 @@ build, never reuse.
 
 ## Current
 
-- `v0.5.0-rc.1` — Phase 11 M4: call-time admission, client side complete
+- `v0.5.0` (Latest) — Phase 11 M4: call-time admission, client side
+  complete. Promoted 2026-08-28 from `v0.5.0-rc.2` (versionCode 6) on the
+  same-day two-device validation with the PUBLISHED APK: both phones
+  honestly camped on production, a call born relayed on
+  `relay.croft.ing:8443` and upgraded to direct both ways, and the
+  endings verbatim — "you ended the call" / "call ended: closed by peer:
+  hangup (code 0)". rc.1 and rc.2 are pruned. Why rc.2 exists: rc.1's
+  E135(a) fix was proven blind on hardware (§13 step 3) — it polled
+  `addr().relayUrl()`, which reports the configured relay even while the
+  relay refuses every attach — so promoting rc.1 would have shipped a
+  build that says "camped" to an unreachable phone. rc.2 carries the
+  `Endpoint.online()` signal, device-verified in BOTH states.
+- ~~`v0.5.0-rc.1`~~ (pruned; superseded by rc.2) — Phase 11 M4: call-time admission, client side complete
   (mint-at-dial, camp-at-attach with the pass as the cache, the three
   call-endings with words, the refresh-rotation race fix). Cut 2026-08-24
   from the same-day §12 enforce rehearsal: every rung green on hardware —
