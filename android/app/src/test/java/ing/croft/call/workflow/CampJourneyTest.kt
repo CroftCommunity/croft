@@ -190,4 +190,124 @@ class CampJourneyTest {
             assertTrue(tokenless.note!!.contains("unreachable"))
         }
     }
+
+    /**
+     * The RECOVERY arc, which is the one production actually hit
+     * (2026-08-28, runbook §13 step 3): a device whose account has NEVER
+     * published it is refused `endpoint_unbound` — the caller phone sat in
+     * exactly this state through the whole first bake, camping tokenless
+     * while looking fine — and publishing the record makes the very next
+     * mint camp with a real pass. The existing arc above covers the
+     * revocation direction; this covers the repair, which is what an
+     * operator or a user actually does about it.
+     */
+    @Test
+    fun `an unpublished device is refused until the record exists, then camps`() =
+        runBlocking {
+            FixtureExchange().use { fx ->
+                fx.accounts[calleeDid] = "callee.example"
+                // No putEndpoint: the account publishes nothing at all.
+
+                val refused = Admit.campToken(
+                    UrlHttpJson,
+                    admitBase = fx.base,
+                    endpointId = homeEndpoint,
+                    serviceAuthJwt = campProof(fx),
+                )
+                assertEquals(
+                    Admit.CampOutcome.Refused(Admit.CampRefusal.ENDPOINT_UNBOUND),
+                    refused,
+                )
+                val tokenless =
+                    CampAdmission.action(refused, nowMs = now) as CampAdmission.Action.CampTokenless
+                assertEquals("this device is not published by your account", tokenless.note)
+
+                // The repair: publish this device under the account.
+                fx.putEndpoint(calleeDid, "home", homeEndpoint)
+
+                val out = Admit.campToken(
+                    UrlHttpJson,
+                    admitBase = fx.base,
+                    endpointId = homeEndpoint,
+                    serviceAuthJwt = campProof(fx),
+                )
+                val camp = CampAdmission.action(out, nowMs = now) as CampAdmission.Action.Camp
+                assertEquals((out as Admit.CampOutcome.Minted).token, camp.authToken)
+            }
+        }
+
+    /**
+     * Silence is the success signal — and it nearly read as failure during
+     * the first production bake (runbook §13 results): a successful mint logs
+     * nothing client-side, nothing at the admit, and nothing at the relay
+     * until the connection closes. The posture must therefore carry NO note
+     * on success, so that any note on screen means something actually went wrong.
+     */
+    @Test
+    fun `a successful camp says nothing — a note would mean something is wrong`() =
+        runBlocking {
+            FixtureExchange().use { fx ->
+                fx.accounts[calleeDid] = "callee.example"
+                fx.putEndpoint(calleeDid, "home", homeEndpoint)
+
+                val out = Admit.campToken(
+                    UrlHttpJson,
+                    admitBase = fx.base,
+                    endpointId = homeEndpoint,
+                    serviceAuthJwt = campProof(fx),
+                )
+                val camp = CampAdmission.action(out, nowMs = now)
+                assertTrue(camp is CampAdmission.Action.Camp)
+                // No words anywhere in the success path.
+                assertEquals(null, CampAdmission.failureNote(kotlinx.coroutines.CancellationException()))
+            }
+        }
+
+    /**
+     * Holding a pass is NOT being camped, and the screen must not conflate
+     * them. Measured on hardware 2026-08-28: the phone held a valid
+     * production pass while the staging enforce listener refused every
+     * attach (wrong signing key), and the honest line has to follow
+     * reachability — `Endpoint.online()` — not possession of a token and not
+     * the configured relay url.
+     */
+    @Test
+    fun `a held pass is not a camped claim — a refused attach still reads NOT camped`() =
+        runBlocking {
+            FixtureExchange().use { fx ->
+                fx.accounts[calleeDid] = "callee.example"
+                fx.putEndpoint(calleeDid, "home", homeEndpoint)
+
+                val out = Admit.campToken(
+                    UrlHttpJson,
+                    admitBase = fx.base,
+                    endpointId = homeEndpoint,
+                    serviceAuthJwt = campProof(fx),
+                )
+                val camp = CampAdmission.action(out, nowMs = now) as CampAdmission.Action.Camp
+                assertTrue(camp.authToken.isNotEmpty())
+
+                // The relay refuses the attach anyway: online() never resolves.
+                val refusedLine = ing.croft.call.net.CampPresence.line(
+                    ing.croft.call.net.CampPresence.attachedRelay(
+                        online = false,
+                        relayUrl = "https://relay.croft.ing:8444",
+                    ),
+                )
+                assertEquals(
+                    "ready — NOT camped on relay; calls cannot reach this device",
+                    refusedLine,
+                )
+                // …and when the attach succeeds, the same pass reads camped.
+                assertEquals(
+                    "ready, camped on relay",
+                    ing.croft.call.net.CampPresence.line(
+                        ing.croft.call.net.CampPresence.attachedRelay(
+                            online = true,
+                            relayUrl = "https://relay.croft.ing:8443",
+                        ),
+                    ),
+                )
+            }
+        }
 }
