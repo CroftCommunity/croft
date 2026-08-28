@@ -59,7 +59,8 @@ yet carries them between two phones. Start at
 Still owed: the lost-race scenario and the departure/token-return arc, both of
 which need that second device. The **android
 app** — the inherited croftcall client — builds, launches, and is published as
-**`v0.4.0`** (Latest): camps on **our relay** (`relay.croft.ing:8443`),
+**`v0.5.0`** (Latest, 2026-08-28 — call-time admission end to end; the
+prior **`v0.4.0`**): camps on **our relay** (`relay.croft.ing:8443`),
 reports the live connection path, redeems exchange invite links (Phase 11
 M1, contract §6), and proves caller identity via **atproto OAuth**
 (Phase 11 M3: sign-in from the This-device card → durable `provenDid` →
@@ -100,7 +101,7 @@ real admit key — **the bake is live** — and §13 steps 2+4 RAN: the
 first PRODUCTION camp mint (silent success; the relay's attributed
 `usage` line is the instrument — silence is not failure), the
 `endpoint_unbound` caller posture live, the first attributed production
-call. E135(a) (screen honesty) landed under tests but is **DEVICE-OPEN**: measured 2026-08-28 against staging enforce, `relayUrl()` keeps returning the configured relay after a REFUSED attach, so a refused phone still reads "ready, camped on relay" (runbook §13 step 3) — fix before the flip; the
+call. E135(a) (screen honesty) is FIXED and device-verified both ways 2026-08-28: `Endpoint.online()` is the reachability truth (`addr().relayUrl()` and `watchHomeRelay` were refuted on hardware — JOURNAL 2026-08-28); the
 **enforcement scenario matrix** is landed and gated in BOTH repos
 (`docs/ENFORCEMENT-SCENARIOS.md` here + croft-stack's, each walked by a
 test). Remaining: the bake days → the owner's one-word enforce flip

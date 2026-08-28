@@ -83,7 +83,13 @@ build, never reuse.
   honestly camped on production, a call born relayed on
   `relay.croft.ing:8443` and upgraded to direct both ways, and the
   endings verbatim — "you ended the call" / "call ended: closed by peer:
-  hangup (code 0)". rc.1 and rc.2 are pruned. Why rc.2 exists: rc.1's
+  hangup (code 0)". rc.1 is pruned. **Process note, recorded rather than
+  tidied:** rc.2 was never published as a prerelease — it was built,
+  installed on both phones, validated, and then published directly as
+  this release's asset. The gate's substance held (the binary that
+  passed IS the binary that shipped, same file) but the ritual differed
+  from the diagram above; do it the normal way unless there is a reason
+  not to. Why rc.2 exists at all: rc.1's
   E135(a) fix was proven blind on hardware (§13 step 3) — it polled
   `addr().relayUrl()`, which reports the configured relay even while the
   relay refuses every attach — so promoting rc.1 would have shipped a
