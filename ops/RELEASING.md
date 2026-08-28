@@ -104,7 +104,7 @@ build, never reuse.
   call, E129 endings verbatim (runbook §13 results). **Promotion to
   v0.5.0 is unblocked; the promote itself is the owner's call** (§13
   step 1).
-- `v0.4.0` (Latest) — Phase 11 M2+M3: identity proof (atproto OAuth
+- `v0.4.0` — Phase 11 M2+M3: identity proof (atproto OAuth
   sign-in → `provenDid`) and the derived callability line on the callee
   card. Promoted 2026-08-18 from `v0.4.0-rc.1`, which was cut 2026-08-17
   from the same-day on-device validation: live OAuth against the
