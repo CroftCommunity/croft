@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import computer.iroh.*
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Owns the iroh endpoint: bind with a persistent identity, run the accept
@@ -80,13 +81,20 @@ class CallPeer(
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state
 
-    /** The endpoint's HOME RELAY url, polled while bound — null when the
-     *  relay attach has not succeeded (E130: under enforce a refused camp
-     *  must not read as camped). Poll, not watchHomeRelay(): the ffi's
-     *  callbacks need a Tokio reactor this process does not run (the
-     *  conn.watchPaths() lesson, runbook 2026-08-17). */
+    /** The endpoint's HOME RELAY url — null when the relay attach has not
+     *  succeeded (E135(a): under enforce a refused camp must not read as
+     *  camped). Fed by `watchHomeRelay`, NOT by polling `addr().relayUrl()`:
+     *  measured on hardware 2026-08-28 (runbook §13 step 3), `addr()` keeps
+     *  reporting the CONFIGURED relay while an enforcing relay refuses every
+     *  attach, so the poll could never tell the two apart. The earlier
+     *  poll-not-watch note here cited the `conn.watchPaths()` reactor failure
+     *  (JOURNAL 2026-08-17) — that lesson is about a Connection watcher; this
+     *  Endpoint watcher is verified separately on-device, and its
+     *  registration is guarded so a reactor failure degrades honestly instead
+     *  of breaking bind. */
     private val _homeRelay = MutableStateFlow<String?>(null)
     val homeRelay: StateFlow<String?> = _homeRelay
+    /** Drives the reachability probe (E135(a)); see `_homeRelay`. */
     private var relayPoll: Job? = null
 
     private var endpoint: Endpoint? = null
@@ -216,14 +224,34 @@ class CallPeer(
                 endpoint = ep
                 _state.value = State.Ready(ep.id().toString())
                 relayPoll?.cancel()
+                _homeRelay.value = null
                 relayPoll = scope.launch(Dispatchers.IO) {
                     while (endpoint === ep) {
-                        val url = try { ep.addr().relayUrl() } catch (t: Throwable) { null }
+                        // `online()` is the reachability truth: it returns
+                        // promptly once the endpoint has its home relay and
+                        // blocks while the relay refuses the attach. The
+                        // timeout is what turns "still blocked" into an
+                        // answer; it only bites when NOT online, because an
+                        // online endpoint returns immediately.
+                        val online = try {
+                            withTimeoutOrNull(ONLINE_PROBE_TIMEOUT_MS) { ep.online() } != null
+                        } catch (c: kotlinx.coroutines.CancellationException) {
+                            // Rebind/stop cancelled us: honor it rather than
+                            // reporting a refusal we did not observe.
+                            throw c
+                        } catch (t: Throwable) {
+                            Log.w(TAG, "online probe failed: ${t.message}")
+                            false
+                        }
+                        val url = CampPresence.attachedRelay(
+                            online = online,
+                            relayUrl = try { ep.addr().relayUrl() } catch (t: Throwable) { null },
+                        )
                         if (_homeRelay.value != url) {
                             Log.i(TAG, "home relay: ${url ?: "NOT ATTACHED"}")
                             _homeRelay.value = url
                         }
-                        delay(3_000)
+                        delay(ONLINE_PROBE_INTERVAL_MS)
                     }
                 }
                 acceptLoop(ep)
@@ -320,5 +348,8 @@ class CallPeer(
 
     private companion object {
         const val TAG = "CroftCall"
+        /** Long enough that a slow-but-succeeding attach is not called a refusal. */
+        const val ONLINE_PROBE_TIMEOUT_MS = 6_000L
+        const val ONLINE_PROBE_INTERVAL_MS = 5_000L
     }
 }

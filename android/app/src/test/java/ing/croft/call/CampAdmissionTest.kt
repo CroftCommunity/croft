@@ -143,4 +143,25 @@ class CampAdmissionTest {
         val tokenless = action as CampAdmission.Action.CampTokenless
         assertTrue(tokenless.note!!.isNotEmpty())
     }
+
+    // Device runs 2026-08-28 showed the words "camping pass setup failed: Job
+    // was cancelled" reaching the SCREEN whenever a rebind cancelled the camp
+    // coroutine — a lifecycle event rendered as a failure the user can do
+    // nothing about. Cancellation is not a refusal and must not speak.
+
+    @Test
+    fun `a cancelled camp is not a failure and says nothing`() {
+        assertEquals(
+            null,
+            CampAdmission.failureNote(kotlinx.coroutines.CancellationException("Job was cancelled")),
+        )
+    }
+
+    @Test
+    fun `a real failure still says what went wrong`() {
+        assertEquals(
+            "camping pass setup failed: boom",
+            CampAdmission.failureNote(IllegalStateException("boom")),
+        )
+    }
 }
