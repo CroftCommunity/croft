@@ -29,11 +29,13 @@ croft-admit + its private store ACTIVATED on the box, production relay
 promoted to the v0.2.0 candidate in OPEN mode verifying the REAL admit
 key — **the bake is live** — and `admit.croft.ing` answered its first
 phones. **§13 steps 2 + 4 RAN 2026-08-26** with the published rc.1 APK
-on both devices (runbook §13 results): the callee's first PRODUCTION
-camp mint (silent success — the relay's attributed `usage` line is the
-instrument), the `endpoint_unbound` caller posture with its words in
-both places, and the first attributed production call, ended with
-E129's words verbatim. Remaining: the bake days, then the owner's
+on both devices (runbook §13 results): a production camp mint, the
+`endpoint_unbound` caller posture with its words in both places, and an
+attributed production call, ended with E129's words verbatim. **Corrected
+2026-08-28 (E150): the attributed `usage` lines cited there prove a token
+was PRESENTED, not admitted — the relay attributes denials too. The
+production relay in fact REJECTS both phones' passes, no pass has ever
+been admitted there, and the enforce flip is blocked until one is.** Remaining: the bake days, then the owner's
 one-word enforce flip (croft-stack `TODO.md`), plus E135(b) —
 caller-side camp posture (filed as "E130" in this repo's earlier notes;
 the roadmap renumbered it when openprices claimed E130).

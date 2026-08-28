@@ -558,3 +558,45 @@ production with its pass and attributing. Both phones now hold passes.
 refuses — signed out, session expired, endpoint unpublished — will show
 "ready, camped on relay" while being unreachable. E135(a) should be treated as
 OPEN, and fixing it before the flip is the honest sequencing.
+
+### §13 CORRECTION — 2026-08-28: the attributed lines never meant admission
+
+Everything recorded above under §13 happened, but **the evidence was read
+wrong**, and the correction matters more than the run did.
+
+The §13 results cite attributed `usage` lines — a line naming an `endpoint_id`
+rather than `unattributed` — as proof that a camping pass was minted and
+accepted. It proves only that a token was **presented**. The relay completes
+the token→connection join *before* acting on the verdict, on purpose ("a denied
+handshake still has an authenticated endpoint worth attributing",
+`croft-relay-bin/src/main.rs`), so a REFUSED pass attributes exactly like an
+accepted one.
+
+When the production log filter was widened (E148, 2026-08-28) the verdicts
+became visible for the first time, and they say:
+
+```
+denied  endpoint_id=14af214d8c reason="invalid_token" detail=SignatureOrMalformed
+admitted without token endpoint_id=14af214d8c mode="open"
+```
+
+Both phones, every rebind carrying a pass. **No `admitted sponsorship=` line
+has ever appeared on production.** So:
+
+- "the callee's first PRODUCTION camp mint" — the mint succeeded (the admit
+  really does issue a valid pass; one minted by hand verifies against the
+  relay's configured key). **The relay never accepted it.**
+- "the first attributed production call" — the call connected, over a relay in
+  OPEN mode that admits tokenless clients. It was not an admitted-by-pass call.
+- The §12 rehearsal is unaffected: staging already ran `croft_relay=debug`, so
+  its `admitted sponsorship=` lines were real. What travelled wrongly was the
+  word "device-validated" moving from staging to production.
+
+**Under enforce, both phones would be refused today.** Tracked as E150
+(croft-stack `TODO.md`, full trail in
+`croft-stack/sessions/2026-08-28-e150-tokens-never-verified.md`). The flip is
+blocked until a real phone earns an `admitted sponsorship=` line on production.
+
+**Method note for future rungs:** a signal is evidence only once you know the
+case where it shows green and the property is false. For attribution, that case
+was one `grep` away in the code that emits it.
