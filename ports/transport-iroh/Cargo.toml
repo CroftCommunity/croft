@@ -1,0 +1,49 @@
+# The transport realization: iroh-gossip, device to device.
+#
+# P7 S2, Q2 (owner, 2026-08-26 — reaffirmed 2026-08-27 after the premise below
+# was found false). It sits under ports/ beside keylayer-openmls and store-redb
+# and, like store-redb, implements no core trait: there is no transport port in
+# social-tree-core, and inventing one for a single implementor would be the
+# same mistake P0-1 declined to make for storage. Recorded as a deliberate
+# ADR-0003 deviation; the revisit trigger is a second transport.
+#
+# **The premise Q2 was decided on was wrong, and this is where it is recorded.**
+# The plan and the S2 runbook both say the gossip transport is "wiring rather
+# than a new dependency — the app already carries iroh on both sides of the
+# FFI". Neither half held: this Rust workspace had no iroh at all, and the
+# Kotlin artifact the CALLING app carries (`computer.iroh:iroh:1.0.0`) ships
+# 402 classes and **zero** gossip classes. `computer.iroh` publishes only
+# `iroh` and `iroh-android` on Maven Central; 1.1.0 has no gossip either. So
+# gossip on this stack is a new native dependency wherever it goes, and the
+# owner chose (2026-08-27) to put it here in Rust rather than reshape Q2 into a
+# direct point-to-point link.
+#
+# The version skew the discovery corpus carried as open residue
+# (`beta/RE-WEIGHTINGS.md` RW-c9: "iroh-gossip's manifest still pins an iroh
+# rc") is genuinely gone at 0.101.0, which asks for `iroh ^1` and so resolves
+# against stable 1.1.0. 0.100.0 still pinned `=1.0.0-rc.1`. That is the whole
+# reason the floor here is 0.101 and not "latest".
+[package]
+name = "transport-iroh"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "iroh-gossip realization of the croft device-to-device transport"
+
+[dependencies]
+thiserror = "1"
+iroh = "1.1"
+iroh-gossip = { version = "0.101", features = ["net"] }
+# The runtime is owned INSIDE this port, not handed across the FFI. uniffi can
+# generate async Kotlin, but that would put the runtime's lifetime in the
+# shell's hands in two languages at once; a sync surface over a runtime this
+# crate starts and stops is one lifetime, in one language, testable at Rust
+# speed.
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+n0-future = "0.3"
+blake3 = "1"
+tracing = "0.1"
+data-encoding = "2"
+
+[dev-dependencies]
+tracing-subscriber = "0.3"
