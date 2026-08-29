@@ -592,7 +592,7 @@ has ever appeared on production.** So:
   its `admitted sponsorship=` lines were real. What travelled wrongly was the
   word "device-validated" moving from staging to production.
 
-**Under enforce, both phones would be refused today.** Tracked as E150
+**Under enforce, both phones would be refused today.** Tracked as E153
 (croft-stack `TODO.md`, full trail in
 `croft-stack/sessions/2026-08-28-e150-tokens-never-verified.md`). The flip is
 blocked until a real phone earns an `admitted sponsorship=` line on production.
