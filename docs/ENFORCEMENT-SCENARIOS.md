@@ -40,7 +40,7 @@ House truths the rows encode:
 
 | Scenario | Outcome | Pinned by |
 |---|---|---|
-| Signed in, device published | MUST CAMP WITH PASS (silently) | PIN:CampAdmissionTest.kt::`a mint camps with the token and caches it by the wire's expiresIn` · arc PIN:CampJourneyTest.kt::`oauth session to camping pass to expiry re-mint — the full arc` — **DEVICE-OPEN (E150)**: the mint works on production, but the relay REJECTS the resulting pass (`invalid_token`), so no pass has ever been admitted there. The §13 "live" citation rested on attributed `usage` lines, which prove presentation, not admission. |
+| Signed in, device published | MUST CAMP WITH PASS (silently) | PIN:CampAdmissionTest.kt::`a mint camps with the token and caches it by the wire's expiresIn` · arc PIN:CampJourneyTest.kt::`oauth session to camping pass to expiry re-mint — the full arc` — **DEVICE-OPEN (E153)**: the mint works on production, but the relay REJECTS the resulting pass (`invalid_token`), so no pass has ever been admitted there. The §13 "live" citation rested on attributed `usage` lines, which prove presentation, not admission. |
 | Signed out | MUST DEGRADE (tokenless, silent — v0.4.0 shape) | PIN:CampAdmissionTest.kt::`signed-out camps tokenless with no note` |
 | Signed in, no cached pass | MUST MINT | PIN:CampAdmissionTest.kt::`signed-in with no cached pass mints` |
 | Live cached pass | MUST REUSE (the token is the cache) | PIN:CampAdmissionTest.kt::`a live cached pass is reused — the token is the cache` |
