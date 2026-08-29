@@ -10,6 +10,10 @@ to the environment and why*.
 
 ## [Unreleased]
 
+_Nothing since 0.5.0._
+
+## [0.5.0] — 2026-08-27
+
 Phase 11 **M4 — the client side is complete and device-validated**
 (plan: `plans/2026-08-20-1-plan-m4-call-time-admission.md`). M4a + M4b
 landed 2026-08-20; M4c (mint-at-dial) and M4d's first device runs landed
@@ -40,7 +44,7 @@ one-word enforce flip (croft-stack `TODO.md`), plus E135(b) —
 caller-side camp posture (filed as "E130" in this repo's earlier notes;
 the roadmap renumbered it when openprices claimed E130).
 
-### Added (M4, unreleased)
+### Added (M4)
 - **The camped line is honest (E135(a)).** The screen no longer claims
   "camped on relay" the app cannot see — a refused attach reads "NOT
   camped on relay; calls cannot reach this device". Landed 2026-08-25
@@ -86,13 +90,13 @@ the roadmap renumbered it when openprices claimed E130).
   rows and revocation stories via mutable fixture state).
 - `Redeem` retains the ticket secret (the call-time possession proof).
 
-### Changed (M4, unreleased)
+### Changed (M4)
 - OAuth scope is now `atproto transition:generic` — under OAuth,
   `getServiceAuth` requires an RPC permission the bare scope lacks, and
   bsky.social does not yet advertise granular `rpc:` scopes (plan O2,
   resolved from PDS source). Existing sessions must re-sign-in to mint.
 
-### Fixed (M4, unreleased)
+### Fixed (M4)
 - **The camped claim is now device-true (E135(a)).** The screen said
   "ready, camped on relay" while an enforcing relay refused every
   attach — the earlier fix polled `addr().relayUrl()`, which reports the
