@@ -94,19 +94,26 @@ words verbatim on both screens, and the sign-out negative. The run's
 find — a refresh-token race between the foreground refresh and the camp
 mint — was reproduced in the harness and fixed the same session
 (single-use rotation in the fixture, `freshAccessToken` serialized).
-The operational distance then closed (2026-08-25/26): **v0.5.0-rc.1 is
-published and on both phones**, croft-admit is ACTIVE on the box,
-production relay runs the v0.2.0 candidate in OPEN mode verifying the
-real admit key — **the bake is live** — and §13 steps 2+4 RAN: the
-first PRODUCTION camp mint (silent success; the relay's attributed
-`usage` line is the instrument — silence is not failure), the
-`endpoint_unbound` caller posture live, the first attributed production
-call. E135(a) (screen honesty) is FIXED and device-verified both ways 2026-08-28: `Endpoint.online()` is the reachability truth (`addr().relayUrl()` and `watchHomeRelay` were refuted on hardware — JOURNAL 2026-08-28); the
+The operational distance then closed (2026-08-25/26): **v0.5.0 is
+released** (promoted from rc.2 2026-08-28 after the published APK passed
+the two-device production test), croft-admit is ACTIVE on the box, and
+§13 steps 2+4 RAN. E153 (2026-08-28/30) then corrected the record: the
+attributed `usage` lines proved tokens were PRESENTED, not verified —
+production was silently running relay v0.1.1, which refused every pass.
+Fixed (the genuine v0.2.0 converged, `8e287cb7…`), and the same night —
+**2026-08-30 — THE ENFORCE FLIP: production `relay.croft.ing:8443` runs
+`admission = "enforce"`**, flipped on fresh evidence (a production-minted
+pass admitted via probe AND a real 0.5.0-rc.2 client refusing→minting→
+`admitted … sponsorship=`) and verified live after (tokenless refused
+with words; signed-in re-mint admitted; signed-out honestly unreachable).
+Tokenless clients (≤v0.4.0) no longer reach the relay — v0.5.0
+camp-at-attach is the client. Full record:
+croft-stack `sessions/2026-08-30-enforce-flip.md`.
+E135(a) (screen honesty) is FIXED and device-verified both ways 2026-08-28: `Endpoint.online()` is the reachability truth (`addr().relayUrl()` and `watchHomeRelay` were refuted on hardware — JOURNAL 2026-08-28); the
 **enforcement scenario matrix** is landed and gated in BOTH repos
 (`docs/ENFORCEMENT-SCENARIOS.md` here + croft-stack's, each walked by a
-test). Remaining: the bake days → the owner's one-word enforce flip
-(croft-stack `TODO.md`); §13 steps 1 (rc promote) + 3 (staging honesty
-check); E135(b) caller-side camp posture; E125–E128. Do not
+test). Remaining: §13 step 3 (staging honesty check); E135(b)
+caller-side camp posture; E125–E128. Do not
 describe anything else here as working until it has been run.
 
 ## Read before writing code

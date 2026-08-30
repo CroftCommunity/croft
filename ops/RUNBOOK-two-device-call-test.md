@@ -594,9 +594,42 @@ has ever appeared on production.** So:
 
 **Under enforce, both phones would be refused today.** Tracked as E153
 (croft-stack `TODO.md`, full trail in
-`croft-stack/sessions/2026-08-28-e150-tokens-never-verified.md`). The flip is
+`croft-stack/sessions/2026-08-28-e153-tokens-never-verified.md`). The flip is
 blocked until a real phone earns an `admitted sponsorship=` line on production.
+*(Superseded by §14: the cause was found and fixed, the line was earned, and
+the flip landed 2026-08-30.)*
 
 **Method note for future rungs:** a signal is evidence only once you know the
 case where it shows green and the property is false. For attribution, that case
 was one `grep` away in the code that emits it.
+
+## §14 — E153 resolved and THE ENFORCE FLIP (2026-08-30; owner-authorized)
+
+The §13-finding's cause was infrastructural, not the client: production had
+silently run relay **v0.1.1** since the 2026-08-25 "promotion" (the v0.2.0
+tarball was fetched, checksum-verified, and never unpacked — an ansible
+`creates:` guard keyed on the binary; croft-stack
+`docs/ANSIBLE-HYGIENE.md`). With the genuine v0.2.0 converged
+(`8e287cb7…`), passes verified on production for the first time, and the
+flip followed the same night with the evidence gate met, not waived:
+
+- **Pre-flip (open):** a production-minted pass admitted via the rust
+  `attach_probe`; then a REAL CLIENT — this app, **0.5.0-rc.2** on an
+  emulator, OAuth-signed-in as the second test account, endpoint record
+  bound — walked the M4e arc live: `denied reason="no_token"` →
+  **`admitted endpoint_id=b729d675… sponsorship=BudgetBytes(262144)`**.
+- **The flip:** `admission = "enforce"` committed + converged
+  (croft-stack `sessions/2026-08-30-enforce-flip.md`).
+- **Post-flip, all verified live:** tokenless probe refused with words;
+  the minted pass admitted; the signed-in app killed + relaunched
+  re-minted and was admitted **under enforcement**; signed out, the app
+  was refused and the screen said the true thing — "ready — NOT camped on
+  relay; calls cannot reach this device" (E135(a) honesty, now proven
+  against a real refusal).
+
+**Remaining for the next phone session:** the two physical phones have not
+yet camped under enforce — expected to re-mint on next launch (v0.5.0
+camp-at-attach; the emulator proved the arc), but per this runbook's rule
+that is a prediction, not a result, until a phone earns its
+`admitted sponsorship=` line on the enforcing relay. Clients ≤v0.4.0 are
+refused by design.

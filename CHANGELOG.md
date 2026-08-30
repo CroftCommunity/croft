@@ -39,10 +39,15 @@ attributed production call, ended with E129's words verbatim. **Corrected
 2026-08-28 (E153): the attributed `usage` lines cited there prove a token
 was PRESENTED, not admitted — the relay attributes denials too. The
 production relay in fact REJECTS both phones' passes, no pass has ever
-been admitted there, and the enforce flip is blocked until one is.** Remaining: the bake days, then the owner's
-one-word enforce flip (croft-stack `TODO.md`), plus E135(b) —
-caller-side camp posture (filed as "E130" in this repo's earlier notes;
-the roadmap renumbered it when openprices claimed E130).
+been admitted there, and the enforce flip is blocked until one is.**
+**Resolved 2026-08-30: the cause was production silently running relay
+v0.1.1 (the v0.2.0 tarball fetched but never unpacked); the genuine
+v0.2.0 converged, passes verified on production for the first time —
+probe AND a real 0.5.0-rc.2 client — and THE ENFORCE FLIP LANDED the
+same night (croft-stack `sessions/2026-08-30-enforce-flip.md`).
+This app version is the one that camps through it.** Still open:
+E135(b) — caller-side camp posture (filed as "E130" in this repo's
+earlier notes; the roadmap renumbered it when openprices claimed E130).
 
 ### Added (M4)
 - **The camped line is honest (E135(a)).** The screen no longer claims
