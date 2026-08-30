@@ -12,7 +12,7 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
 
 ## Open
 
-- [ ] **Adopt openmls 0.9.0 / openmls_rust_crypto 0.6.0 — ordinary work, not urgent.**
+- [ ] **Adopt openmls 0.9.0 / openmls_rust_crypto 0.6.0 — ordinary work, not urgent.** [device: android]
   Our pins are exact and deliberate (`=0.8.1`, `=0.5.1`, "the exact versions the
   experiments resolved"). The 0.9 line landed 2026-08-25 and brings `hpke-rs` 0.7.0,
   which pins `libcrux-sha3 =0.0.10` and retires most of `osv-scanner.toml`.
