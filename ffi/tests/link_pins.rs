@@ -7,6 +7,7 @@
 
 use croft_ffi::link::{GossipLink, PairingCode};
 use croft_ffi::FfiError;
+use transport_iroh::testing::SwarmLock;
 
 fn topic() -> Vec<u8> {
     vec![0x5A; 32]
@@ -14,6 +15,7 @@ fn topic() -> Vec<u8> {
 
 #[test]
 fn a_link_starts_and_offers_a_dial_card_with_somewhere_to_dial() {
+    let _swarm = SwarmLock::acquire();
     let link = GossipLink::start(vec![1u8; 32], topic(), vec![]).expect("a link starts");
 
     let card = link.dial_card();
@@ -28,6 +30,7 @@ fn a_link_starts_and_offers_a_dial_card_with_somewhere_to_dial() {
 
 #[test]
 fn a_signing_key_of_the_wrong_length_is_refused_with_its_length() {
+    let _swarm = SwarmLock::acquire();
     let err =
         GossipLink::start(vec![1u8; 31], topic(), vec![]).expect_err("a 31-byte key is refused");
 
@@ -45,6 +48,7 @@ fn a_signing_key_of_the_wrong_length_is_refused_with_its_length() {
 
 #[test]
 fn a_topic_of_the_wrong_length_is_refused_with_its_length() {
+    let _swarm = SwarmLock::acquire();
     let err = GossipLink::start(vec![1u8; 32], vec![0x5A; 16], vec![])
         .expect_err("a 16-byte topic is refused");
 
@@ -60,6 +64,7 @@ fn a_topic_of_the_wrong_length_is_refused_with_its_length() {
 /// empty, so a shell rendering `e.message` renders nothing at all.
 #[test]
 fn every_link_refusal_crosses_with_its_words() {
+    let _swarm = SwarmLock::acquire();
     let refusals = vec![
         GossipLink::start(vec![1u8; 3], topic(), vec![]).unwrap_err(),
         GossipLink::start(vec![1u8; 32], vec![0u8; 2], vec![]).unwrap_err(),
@@ -76,6 +81,7 @@ fn every_link_refusal_crosses_with_its_words() {
 
 #[test]
 fn a_pairing_code_round_trips_through_the_boundary_types() {
+    let _swarm = SwarmLock::acquire();
     let link = GossipLink::start(vec![2u8; 32], topic(), vec![]).expect("a link starts");
     let key_package = vec![0xAB; 200];
 
@@ -93,6 +99,7 @@ fn a_pairing_code_round_trips_through_the_boundary_types() {
 /// words, not in a type name.
 #[test]
 fn a_mistyped_pairing_code_is_refused_in_words_a_person_can_act_on() {
+    let _swarm = SwarmLock::acquire();
     let link = GossipLink::start(vec![3u8; 32], topic(), vec![]).expect("a link starts");
     let code = link.pairing_code(vec![0xCD; 100]).unwrap();
 
@@ -113,6 +120,7 @@ fn a_mistyped_pairing_code_is_refused_in_words_a_person_can_act_on() {
 
 #[test]
 fn a_link_with_no_peer_reports_no_neighbours_and_hears_nothing() {
+    let _swarm = SwarmLock::acquire();
     let link = GossipLink::start(vec![4u8; 32], topic(), vec![]).expect("a link starts");
 
     assert_eq!(link.neighbour_count(), 0);
@@ -128,6 +136,7 @@ fn a_link_with_no_peer_reports_no_neighbours_and_hears_nothing() {
 /// during a device run.
 #[test]
 fn a_timeout_is_none_rather_than_a_refusal() {
+    let _swarm = SwarmLock::acquire();
     let link = GossipLink::start(vec![5u8; 32], topic(), vec![]).expect("a link starts");
 
     let got = link.next_artifact(100);

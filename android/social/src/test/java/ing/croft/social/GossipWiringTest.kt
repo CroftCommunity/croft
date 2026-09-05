@@ -5,6 +5,8 @@ import uniffi.croft_ffi.ArtifactBox
 import uniffi.croft_ffi.ChatSession
 import uniffi.croft_ffi.FfiException
 import uniffi.croft_ffi.GossipLink
+import uniffi.croft_ffi.Intent
+import uniffi.croft_ffi.TreeRow
 import uniffi.croft_ffi.readPairingCode
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -51,53 +53,86 @@ class GossipWiringTest {
         )
 
     /**
-     * The whole arc. A founds a group and shows a code; B reads it, is invited,
-     * and the two exchange sealed messages in both directions over gossip.
+     * The whole arc, end to end: pair over a code, seat the joiner in BOTH
+     * halves, and hold a conversation that lands in each other's timeline.
+     *
+     * The record step in the middle is the one that was missing. Without it B
+     * decrypts everything and folds nothing, which on a phone looks like an
+     * empty screen and logs nothing anyone would find.
      */
     @Test
-    fun `two devices pair over a code and hold a sealed conversation`() {
+    fun `two devices pair, seat each other in the record, and converse`() {
         val a = sessionAt("a", 1)
         val b = sessionAt("b", 2)
 
-        val groupId = a.createGroup("supper club")
+        a.createGroup("supper club")
         assertTrue(a.hasMlsGroup(), "founding a group seats real MLS")
 
-        // B's half of the pairing: its key package, offered through its own link.
+        // B offers its key package through its own link; A reads the code.
         val linkB = GossipLink.start(ByteArray(32) { 22 }, groupIdBytes, emptyList())
-        val codeFromB = linkB.pairingCode(b.mlsKeyPackage())
-
-        // A reads B's code: now it knows where to dial and who to invite.
-        val readByA = readPairingCode(codeFromB)
+        val readByA = readPairingCode(linkB.pairingCode(b.mlsKeyPackage()))
         val linkA = GossipLink.start(ByteArray(32) { 11 }, groupIdBytes, listOf(readByA.card))
 
+        // Both sides. Gossip does not retransmit, so a Welcome sent while the
+        // far side's membership is still forming is delivered to nobody and
+        // reports success.
         assertTrue(linkA.waitForPeer(patienceMs), "the swarm must form before A invites")
+        assertTrue(linkB.waitForPeer(patienceMs), "and B must have joined it")
 
-        // The invite is minted from the folded state and enacted by MLS, then
-        // carried by the transport rather than by the test.
-        val welcome = a.invite(readByA.keyPackage)
-        linkA.broadcastWelcome(welcome)
+        // The invite: the key to the lockbox, and the record.
+        linkA.broadcastWelcome(a.invite(readByA.keyPackage))
+        linkA.broadcastRecord(a.recordOffer())
 
-        val onB = assertNotNull(linkB.nextArtifact(patienceMs), "B receives the Welcome")
-        assertEquals(ArtifactBox.WELCOME, onB.kind, "it arrives labelled as a Welcome")
-        b.acceptInvite(onB.payload)
-        assertTrue(b.hasMlsGroup(), "B is seated from the Welcome")
-        assertEquals(a.mlsEpoch(), b.mlsEpoch(), "both members land on the same epoch")
+        // B takes delivery of both, in whatever order they arrive.
+        var welcome: ByteArray? = null
+        var record: ByteArray? = null
+        while (welcome == null || record == null) {
+            val next = assertNotNull(linkB.nextArtifact(patienceMs), "both artifacts must arrive")
+            when (next.kind) {
+                ArtifactBox.WELCOME -> welcome = next.payload
+                ArtifactBox.RECORD -> record = next.payload
+                ArtifactBox.SEALED -> error("no sealed message is due yet")
+            }
+        }
 
-        // A -> B
-        linkA.broadcastSealed(a.seal("from A".toByteArray()))
-        val sealedOnB = assertNotNull(linkB.nextArtifact(patienceMs), "B hears A")
-        assertEquals(ArtifactBox.SEALED, sealedOnB.kind)
-        assertEquals("from A", String(b.openSealed(sealedOnB.payload)))
+        b.acceptInvite(welcome)
+        assertTrue(b.hasMlsGroup(), "B is seated in the lockbox")
 
-        // B -> A. One direction would pass with a broken receive path on the
-        // quiet side, which is the runbook's own argument for rung 5.
-        linkB.broadcastSealed(b.seal("from B".toByteArray()))
-        val sealedOnA = assertNotNull(linkA.nextArtifact(patienceMs), "A hears B")
-        assertEquals("from B", String(a.openSealed(sealedOnA.payload)))
+        // The bounded exchange: B sees what the record CLAIMS before taking it.
+        val claims = b.readRecord(record)
+        assertTrue(claims.wouldSeatMe, "B can see this record would seat him")
+        assertTrue(claims.seats.isNotEmpty(), "and who else it seats")
+        assertEquals(
+            0,
+            b.view().tree.rows.size,
+            "reading must fold nothing — the judgment has not happened yet",
+        )
+
+        // ...and only then accepts. This is the recorded output of a decision.
+        b.acceptRecord(record)
+        assertTrue(b.view().tree.rows.isNotEmpty(), "now B has the group")
+
+        // A -> B, and it arrives as a LINE WITH AN AUTHOR, not as bytes.
+        a.dispatch(Intent.SelectGroup(firstGroupId(a)))
+        "bring bread".forEach { a.dispatch(Intent.TypeChar(it.toString())) }
+        linkA.broadcastSealed(a.sendSealed())
+
+        val onB = assertNotNull(linkB.nextArtifact(patienceMs), "B hears A")
+        assertEquals(ArtifactBox.SEALED, onB.kind)
+        assertTrue(b.receiveSealed(onB.payload), "B folds it")
+
+        b.dispatch(Intent.SelectGroup(firstGroupId(b)))
+        val line = b.view().timeline.lines.firstOrNull { it.body == "bring bread" }
+        assertNotNull(line, "Alice's message is a line in Bob's timeline")
+        assertTrue(line.author.isNotEmpty(), "and Bob knows who said it")
+        assertTrue(!line.pending, "it is folded, not an optimistic local echo")
 
         linkA.shutdown()
         linkB.shutdown()
     }
+
+    private fun firstGroupId(s: ChatSession): ByteArray =
+        (s.view().tree.rows.first() as TreeRow.Group).v1.id
 
     /**
      * The kind is what tells the shell which method to call. Getting it wrong

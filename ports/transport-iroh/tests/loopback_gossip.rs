@@ -16,6 +16,7 @@
 use std::time::Duration;
 
 use transport_iroh::frame::ArtifactKind;
+use transport_iroh::testing::SwarmLock;
 use transport_iroh::{GossipTransport, TopicKey};
 
 /// Long enough for a swarm to form on loopback under a loaded machine, short
@@ -48,6 +49,7 @@ fn topic(seed: u8) -> TopicKey {
 /// front would be testing a rig that does not exist.
 #[test]
 fn a_welcome_crosses_from_the_device_that_minted_it() {
+    let _swarm = SwarmLock::acquire();
     let a = GossipTransport::start(&[1u8; 32], topic(0xAA), &[]).expect("A starts");
     let card = a.dial_card();
 
@@ -73,6 +75,7 @@ fn a_welcome_crosses_from_the_device_that_minted_it() {
 /// argument the runbook makes for rung 5.
 #[test]
 fn sealed_messages_cross_in_both_directions() {
+    let _swarm = SwarmLock::acquire();
     let a = GossipTransport::start(&[3u8; 32], topic(0xBB), &[]).expect("A starts");
     let b = GossipTransport::start(&[4u8; 32], topic(0xBB), &[a.dial_card()]).expect("B starts");
     assert!(
@@ -96,6 +99,7 @@ fn sealed_messages_cross_in_both_directions() {
 /// receiver calls a different key-layer method for each.
 #[test]
 fn the_kind_survives_the_crossing() {
+    let _swarm = SwarmLock::acquire();
     let a = GossipTransport::start(&[5u8; 32], topic(0xCC), &[]).expect("A starts");
     let b = GossipTransport::start(&[6u8; 32], topic(0xCC), &[a.dial_card()]).expect("B starts");
     assert!(
@@ -119,6 +123,7 @@ fn the_kind_survives_the_crossing() {
 /// cheapest place to prove that is here rather than on two phones.
 #[test]
 fn a_transport_on_a_different_topic_hears_nothing() {
+    let _swarm = SwarmLock::acquire();
     let a = GossipTransport::start(&[7u8; 32], topic(0xD1), &[]).expect("A starts");
     let card = a.dial_card();
 
@@ -149,6 +154,7 @@ fn a_transport_on_a_different_topic_hears_nothing() {
 /// between group admission and fabric admission has stopped being structural.
 #[test]
 fn no_address_this_transport_offers_is_relay_shaped() {
+    let _swarm = SwarmLock::acquire();
     let a = GossipTransport::start(&[10u8; 32], topic(0xEE), &[]).expect("A starts");
 
     let card = a.dial_card();
@@ -171,6 +177,7 @@ fn no_address_this_transport_offers_is_relay_shaped() {
 /// path must at least be clean.
 #[test]
 fn a_transport_can_be_shut_down_and_another_started_after_it() {
+    let _swarm = SwarmLock::acquire();
     let a = GossipTransport::start(&[11u8; 32], topic(0xF1), &[]).expect("A starts");
     a.shutdown();
 

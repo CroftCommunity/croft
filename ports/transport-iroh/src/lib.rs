@@ -21,6 +21,8 @@ pub mod frame;
 pub mod pairing;
 /// A group's record, offered to a joining device.
 pub mod record;
+/// A cross-process lock so only one test at a time forms a swarm.
+pub mod testing;
 /// The transport: one endpoint, one topic, a sync surface.
 pub mod transport;
 
