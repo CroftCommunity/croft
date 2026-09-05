@@ -42,12 +42,46 @@ use store_redb::{local, read};
 
 use crate::error::SessionError;
 
+/// What an offered record claims, before anything is folded.
+///
+/// Deliberately has no group TITLE. Titles are local truth on each device
+/// (`store_redb::local`, roadmap row E141) and are never folded, so a record
+/// cannot carry one and a joining device names the group itself. The two phones
+/// showing different names for one group is expected, not a defect.
+// No `Eq`: `Role` does not implement it, and deriving a weaker bound here than
+// the core offers would be the tail wagging the dog.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecordClaims {
+    /// The group every assertion in the record belongs to.
+    pub group: GroupId,
+    /// Who authored the genesis, if the record carries one.
+    pub founder: Option<PrincipalId>,
+    /// Who the record would seat, and in what role.
+    pub seats: Vec<(PrincipalId, social_tree_core::model::Role)>,
+    /// Whether this device's own principal is among them.
+    pub would_seat_me: bool,
+    /// How many assertions the record carries.
+    pub assertion_count: usize,
+    /// Whether this device has already folded state for this group.
+    pub already_folded: bool,
+}
+
 /// Everything one local identity needs to hold a conversation.
 ///
 /// `Debug` is derived on nothing here and implemented by hand below: the signer
 /// holds secret key material, so the derived form would print it into any log
 /// line or test failure that touched a session.
 pub struct Session {
+    /// The credential registry this session's fold resolves against.
+    ///
+    /// Held so that accepting a record can register the authors it introduces.
+    /// The fold has its own handle to the same registry — it is an `Arc`
+    /// inside — so registering here is visible there.
+    resolver: RegistryCredentialResolver,
+    /// The canonical bytes of the most recently authored envelope.
+    ///
+    /// See `author` for why this exists rather than being returned.
+    last_authored: Option<Vec<u8>>,
     db: Arc<Db>,
     fold: DerivedFold<Ed25519Verifier, RegistryCredentialResolver>,
     signer: Ed25519Signer,
@@ -125,7 +159,7 @@ impl Session {
             reason: e.to_string(),
         })?;
         let next_lamport = max_lamport_for_device(&db, &device)?.map_or(0, |m| m + 1);
-        let fold = DerivedFold::new(Arc::clone(&db), Ed25519Verifier, resolver);
+        let fold = DerivedFold::new(Arc::clone(&db), Ed25519Verifier, resolver.clone());
 
         let mut session = Session {
             db,
@@ -136,6 +170,8 @@ impl Session {
             next_lamport,
             model: Model::default(),
             keys,
+            resolver,
+            last_authored: None,
         };
         // A session that opens onto an empty screen and fills in later is a
         // session that shows the user nothing for a beat, and it is also one
@@ -314,6 +350,11 @@ impl Session {
         };
         env.signature = self.signer.sign(&env.canonical_bytes());
         self.fold.ingest(&env)?;
+        // Kept because the pond's effect loop has no return channel: `perform`
+        // returns `()`, so `send_sealed` cannot be handed the envelope it needs
+        // to seal. Overwritten on every author and read at most once, by the
+        // send that caused it.
+        self.last_authored = Some(env.canonical_bytes_with_sig());
         // Advanced only after the ingest succeeds. Advancing first would burn a
         // lamport on every refused assertion, leaving gaps that read as missing
         // history rather than as nothing having happened.
@@ -477,6 +518,299 @@ impl Session {
             "sealed",
         );
         Ok(out)
+    }
+
+    /// This group's governance record, as replayable envelopes.
+    ///
+    /// What an inviter offers a joining device. See
+    /// [`store_redb::read::governance_record`] for why it is envelopes rather
+    /// than derived state.
+    ///
+    /// # Errors
+    /// [`SessionError::NoGroupSelected`] with no group; storage errors from the
+    /// read.
+    pub fn group_record(&self) -> Result<Vec<Vec<u8>>, SessionError> {
+        let group = self
+            .model
+            .selected_group
+            .or_else(|| self.model.groups.first().map(|g| g.id))
+            .ok_or(SessionError::NoGroupSelected)?;
+        Ok(read::governance_record(&self.db, &group)?)
+    }
+
+    /// What an offered record CLAIMS, without folding any of it.
+    ///
+    /// **This must not change anything, and that is the design.** Accepting a
+    /// group's record is not something a scan does to you: it is a bounded
+    /// exchange — scan, see who this is and what they claim, accept — whose
+    /// output is a trust judgment in a relationship. This call is the middle of
+    /// that exchange, so it verifies and reports and touches neither the store
+    /// nor the credential registry. [`Session::accept_record`] is the other
+    /// half, and the person is what goes between them.
+    ///
+    /// Every signature is checked here. That check is self-contained: a device
+    /// id IS an Ed25519 public key, so a valid signature proves possession of
+    /// that device's key without anyone having to vouch for it first. What it
+    /// does NOT prove is that the device may act for the principal it names —
+    /// that is the credential question, and answering it is exactly what
+    /// accepting the record decides.
+    ///
+    /// # Errors
+    /// [`SessionError::Refused`] when the offer is malformed, points elsewhere,
+    /// or carries an envelope whose signature does not hold.
+    pub fn read_record(&self, offer: &[u8]) -> Result<RecordClaims, SessionError> {
+        use social_tree_core::ports::Verifier;
+
+        let offered = transport_iroh::record::decode_offer(offer).map_err(|e| {
+            self.refuse(SessionError::Refused {
+                reason: e.to_string(),
+            })
+        })?;
+
+        let raws = match offered {
+            transport_iroh::record::RecordOffer::Inline(envelopes) => envelopes,
+            // Decoded, understood, and refused — which is the whole reason the
+            // form is on the wire before anything can fetch it. A generic parse
+            // error here would send whoever reads the log hunting for damage.
+            transport_iroh::record::RecordOffer::Elsewhere(where_to) => {
+                return Err(self.refuse(SessionError::Refused {
+                    reason: format!(
+                        "this invite points elsewhere for its record ({where_to}), and this build \
+                         cannot fetch one"
+                    ),
+                }))
+            }
+        };
+
+        let verifier = Ed25519Verifier;
+        let mut group = None;
+        let mut seats = Vec::new();
+        let mut founder = None;
+
+        for (i, raw) in raws.iter().enumerate() {
+            let env = social_tree_core::wire::decode_envelope_from_canonical(raw).map_err(|e| {
+                self.refuse(SessionError::Refused {
+                    reason: format!("assertion {i} in this record does not decode: {e}"),
+                })
+            })?;
+
+            verifier
+                .verify(
+                    &PortDeviceId(*env.author_device.as_bytes()),
+                    &env.canonical_bytes(),
+                    &env.signature,
+                )
+                .map_err(|e| {
+                    self.refuse(SessionError::Refused {
+                        reason: format!("assertion {i} in this record is not properly signed: {e}"),
+                    })
+                })?;
+
+            // One record describes one group. A mixed offer is either a bug or
+            // an attempt to smuggle a second group past the person deciding.
+            match group {
+                None => group = Some(env.group),
+                Some(g) if g == env.group => {}
+                Some(_) => {
+                    return Err(self.refuse(SessionError::Refused {
+                        reason: "this record mixes assertions from more than one group".to_string(),
+                    }))
+                }
+            }
+
+            if env.assertion_type == AssertionType::GroupGenesis {
+                founder = Some(env.author_principal);
+            }
+            if env.assertion_type == AssertionType::MembershipAdd {
+                if let Some((principal, role)) =
+                    store_redb::payload::decode_membership_add_payload(&env.payload)
+                {
+                    seats.push((principal, role));
+                }
+            }
+        }
+
+        let group = group.ok_or_else(|| {
+            self.refuse(SessionError::Refused {
+                reason: "this record names no group".to_string(),
+            })
+        })?;
+
+        Ok(RecordClaims {
+            group,
+            founder,
+            would_seat_me: seats.iter().any(|(p, _)| *p == self.principal),
+            seats,
+            assertion_count: raws.len(),
+            already_folded: read::group_state(&self.db, &group)?.is_some(),
+        })
+    }
+
+    /// Accept an offered record: register its authors and fold it.
+    ///
+    /// The recorded output of the judgment [`Session::read_record`] informed.
+    /// Everything that call verifies is verified again here rather than trusted
+    /// across the gap — the person may have taken a while to decide, and a
+    /// second read of the same bytes costs nothing next to folding the wrong
+    /// ones.
+    ///
+    /// **What accepting means, stated plainly.** It registers that the record's
+    /// authors may act for the principals their assertions name, for this group.
+    /// That is trust on first use: the courier is not proving they are entitled
+    /// to say this, the person is deciding to proceed. The exposure is bounded
+    /// to this group, and the envelopes are re-verified by this device's own
+    /// fold rather than taken on the sender's word.
+    ///
+    /// Returns how many assertions were newly folded. Zero is a normal answer:
+    /// gossip delivers the same artifact more than once whenever the swarm has
+    /// more than one path, so a repeat accept is an ordinary event.
+    ///
+    /// # Errors
+    /// Whatever [`Session::read_record`] refuses, plus a fold refusal naming
+    /// which assertion would not go in.
+    pub fn accept_record(&mut self, offer: &[u8]) -> Result<usize, SessionError> {
+        let claims = self.read_record(offer)?;
+
+        let raws = match transport_iroh::record::decode_offer(offer) {
+            Ok(transport_iroh::record::RecordOffer::Inline(e)) => e,
+            // read_record already refused both other cases.
+            _ => unreachable!("read_record accepted this offer"),
+        };
+
+        let mut folded = 0usize;
+        for (i, raw) in raws.iter().enumerate() {
+            let env = social_tree_core::wire::decode_envelope_from_canonical(raw)
+                .map_err(|e| SessionError::Refused { reason: e })?;
+
+            // The credential this record asks us to accept. Registered before
+            // the ingest because the fold resolves it during verification, and
+            // only for authors of THIS record.
+            self.resolver.register(
+                PortDeviceId(*env.author_device.as_bytes()),
+                PortPrincipalId(*env.author_principal.as_bytes()),
+            );
+
+            match self.fold.ingest(&env) {
+                Ok(_) => folded += 1,
+                Err(e) => {
+                    // An assertion already folded is the repeat-delivery case
+                    // and is not a failure; anything else is, and names its
+                    // index so the offer can be inspected.
+                    let said = e.to_string();
+                    if said.contains("duplicate") || said.contains("already") {
+                        continue;
+                    }
+                    return Err(self.refuse(SessionError::Refused {
+                        reason: format!("assertion {i} in this record would not fold: {said}"),
+                    }));
+                }
+            }
+        }
+
+        tracing::debug!(
+            target: "croft.ffi",
+            group = ?claims.group,
+            folded,
+            offered = raws.len(),
+            "accepted a record",
+        );
+        self.refresh()?;
+        Ok(folded)
+    }
+
+    /// Send the current draft as a SEALED ASSERTION, returning the wire bytes.
+    ///
+    /// This is the method a conversation is actually made of, and it is not
+    /// `seal(plaintext)`. What crosses is the **assertion envelope**: authored,
+    /// signed, folded locally, then sealed whole. Three consequences, all of
+    /// them the point:
+    ///
+    /// - the far device learns the AUTHOR from inside the envelope, so rung 5's
+    ///   "with the sender's short principal" needs nothing from the transport;
+    /// - the line is folded here BEFORE it is sealed, so the sender sees their
+    ///   own message immediately rather than waiting on an acknowledgement that
+    ///   this transport will never send;
+    /// - the envelope keeps its signature, so a member cannot be impersonated
+    ///   by whoever happens to be able to reach the swarm.
+    ///
+    /// Sealing a bare plaintext would lose all three and is why `seal` stays a
+    /// lower-level primitive rather than becoming this.
+    ///
+    /// # Errors
+    /// [`SessionError::NoGroupSelected`], [`SessionError::EmptyDraft`], or
+    /// [`SessionError::Refused`] when governance or MLS refuses.
+    pub fn send_sealed(&mut self) -> Result<Vec<u8>, SessionError> {
+        // Dispatch does the refusing, the authoring and the folding, so the
+        // local half of a sealed send is exactly the local send — one path, not
+        // two that can drift.
+        self.last_authored = None;
+        self.dispatch(Intent::SendMessage)?;
+
+        let envelope = self.last_authored.take().ok_or_else(|| {
+            // Unreachable while `Effect::Send` authors, and worth a refusal
+            // rather than an unwrap: if the pond ever stops emitting that
+            // effect, this says so instead of panicking on a phone.
+            self.refuse(SessionError::Refused {
+                reason: "the send produced no assertion to seal".to_string(),
+            })
+        })?;
+
+        let sealed = self.seal(&envelope)?;
+        tracing::debug!(
+            target: "croft.ffi",
+            epoch = self.keys.epoch(),
+            bytes = sealed.len(),
+            "sealed an assertion for the swarm",
+        );
+        Ok(sealed)
+    }
+
+    /// Open a sealed assertion from the swarm and fold it in.
+    ///
+    /// Returns whether the fold accepted it. `false` is not an error: a
+    /// duplicate is the normal consequence of gossip, which delivers a message
+    /// to a member more than once whenever the swarm has more than one path.
+    /// Treating that as a failure would fill the screen with refusals during a
+    /// perfectly healthy run.
+    ///
+    /// # Errors
+    /// [`SessionError::Refused`] when MLS will not open it — a stranger's
+    /// traffic, or an epoch this device cannot reach — or when what comes out
+    /// is not an envelope this build can read.
+    pub fn receive_sealed(&mut self, wire: &[u8]) -> Result<bool, SessionError> {
+        let raw = self.open_sealed(wire)?;
+
+        // The ONE decoder (`social_tree_core::wire`). The corpus once carried
+        // three copies and one of them silently mis-parsed v2, which is the
+        // reason that module exists and the reason this does not hand-roll it.
+        let envelope =
+            social_tree_core::wire::decode_envelope_from_canonical(&raw).map_err(|e| {
+                self.refuse(SessionError::Refused {
+                    reason: format!("that was not an assertion this build can read: {e}"),
+                })
+            })?;
+
+        let group = envelope.group;
+        let accepted = match self.fold.ingest(&envelope) {
+            Ok(_) => true,
+            Err(e) => {
+                // A refused envelope is logged and reported, never folded and
+                // never silently dropped: on two phones this is the difference
+                // between "they never sent it" and "we would not take it".
+                tracing::warn!(
+                    target: "croft.ffi",
+                    error = %e,
+                    "the fold refused an assertion from the swarm",
+                );
+                false
+            }
+        };
+
+        if accepted {
+            let channel = self.model.selected_channel;
+            self.reload_timeline(group, channel)?;
+        }
+        Ok(accepted)
     }
 
     /// Open a sealed message from the seated group.

@@ -43,6 +43,14 @@ pub enum ArtifactKind {
     Welcome,
     /// A sealed application message.
     Sealed,
+    /// A group's governance record, offered to a joining device.
+    ///
+    /// Added after the first two, which is why the frame version did not move:
+    /// the bump policy above says a NEW kind byte does not bump, because an old
+    /// build refuses an unknown kind by number and keeps reading the kinds it
+    /// does know. That policy was written before there was a third kind and is
+    /// what made adding one a non-event.
+    Record,
 }
 
 impl ArtifactKind {
@@ -55,6 +63,7 @@ impl ArtifactKind {
         match self {
             ArtifactKind::Welcome => 1,
             ArtifactKind::Sealed => 2,
+            ArtifactKind::Record => 3,
         }
     }
 
@@ -64,6 +73,7 @@ impl ArtifactKind {
         match b {
             1 => Some(ArtifactKind::Welcome),
             2 => Some(ArtifactKind::Sealed),
+            3 => Some(ArtifactKind::Record),
             _ => None,
         }
     }
@@ -127,6 +137,7 @@ impl ArtifactKind {
         match self {
             ArtifactKind::Welcome => "welcome",
             ArtifactKind::Sealed => "sealed message",
+            ArtifactKind::Record => "record",
         }
     }
 }

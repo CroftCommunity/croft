@@ -19,6 +19,8 @@
 pub mod frame;
 /// The pairing blob a person carries between two phones.
 pub mod pairing;
+/// A group's record, offered to a joining device.
+pub mod record;
 /// The transport: one endpoint, one topic, a sync surface.
 pub mod transport;
 
@@ -106,6 +108,21 @@ pub enum TransportError {
     BadPairingCode {
         /// What was wrong, in words for the person pairing.
         reason: String,
+    },
+    /// A record offer carried no envelopes and no locator.
+    #[error("a record that carries nothing would seat a device in name only")]
+    EmptyRecord,
+    /// A record offer named a form this build does not know.
+    #[error("unknown record form byte {got}")]
+    UnknownRecordForm {
+        /// The form byte that arrived.
+        got: u8,
+    },
+    /// A record offer was truncated.
+    #[error("this record offer is cut short at {got} bytes")]
+    ShortRecord {
+        /// How many bytes actually arrived.
+        got: usize,
     },
     /// A dial card could not be turned into something dialable.
     ///
