@@ -126,6 +126,16 @@ impl GossipLink {
         }
     }
 
+    /// Teach this link about a peer learned after it started.
+    ///
+    /// What reading a pairing code does. Takes the card by value because uniffi
+    /// records cross by value; the transport's own method borrows.
+    pub fn add_peer(&self, card: DialCard) -> Result<(), FfiError> {
+        let guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let transport = guard.as_ref().ok_or_else(Self::gone)?;
+        Ok(transport.add_peer(&card.into())?)
+    }
+
     /// The full pairing code: this device's dial card plus `key_package`.
     pub fn pairing_code(&self, key_package: Vec<u8>) -> Result<String, FfiError> {
         let guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());

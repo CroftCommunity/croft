@@ -295,11 +295,28 @@ impl GossipTransport {
         }
     }
 
-    /// Teach this transport about a peer learned after start.
+    /// Teach this transport about a peer learned after start, and dial them.
+    ///
+    /// **Both halves, and the second one is easy to forget.** Registering the
+    /// address tells the endpoint WHERE the peer is; it does not put them in
+    /// the gossip swarm. Bootstrap peers are otherwise only supplied at
+    /// `start`, so a device that pairs *after* starting its link would sit with
+    /// a perfectly good address and never connect — which is exactly what a
+    /// person scanning a code does, and exactly how the shell journey test
+    /// caught this: both sides waited out a full sixty seconds for a swarm
+    /// neither had asked for.
     pub fn add_peer(&self, card: &DialCard) -> Result<(), TransportError> {
         let addr = card.to_endpoint_addr()?;
+        let id = addr.id;
         self.lookup.add_endpoint_info(addr);
-        Ok(())
+        self.runtime.block_on(async {
+            self.sender
+                .join_peers(vec![id])
+                .await
+                .map_err(|e| TransportError::Subscribe {
+                    reason: e.to_string(),
+                })
+        })
     }
 
     /// How many direct neighbours this device currently has on the topic.
