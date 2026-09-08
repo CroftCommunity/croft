@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -51,7 +52,13 @@ fun SocialScreen(
     pairingCode: String? = null,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.fillMaxSize().padding(12.dp)) {
+    // systemBarsPadding, found at rung 5 on hardware. Without it the composer
+    // row is laid out UNDER the gesture navigation bar: on the Samsung the Send
+    // button occupied y 2199-2256 while the nav bar began at 2205, leaving six
+    // reachable pixels. No JVM test can see this, and the emulator's default
+    // navigation does not reproduce it either — it takes a real phone with
+    // gesture nav, which is the whole argument for the device tier.
+    Column(modifier = modifier.fillMaxSize().systemBarsPadding().padding(12.dp)) {
         Text("Croft Social (dev)", style = MaterialTheme.typography.titleMedium)
 
         // The fork banner sits ABOVE everything and is not dismissible. It is

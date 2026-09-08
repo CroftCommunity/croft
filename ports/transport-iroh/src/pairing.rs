@@ -36,7 +36,7 @@ use crate::{DialCard, TransportError};
 /// Separate from the frame's version because the two travel differently: a
 /// frame crosses between two running builds, a blob crosses between a screen
 /// and a camera. They can and will need to change at different times.
-pub const BLOB_VERSION: u8 = 1;
+pub const BLOB_VERSION: u8 = 2;
 
 /// How many bytes of blake3 ride along as the checksum.
 ///
@@ -46,12 +46,28 @@ pub const BLOB_VERSION: u8 = 1;
 const CHECKSUM_LEN: usize = 4;
 
 /// Everything one device needs to admit another.
+///
+/// **Version 2 added `group_id`, and the device run is what demanded it.** The
+/// topic a conversation rides on IS the group id, so a joining device cannot
+/// join the swarm until it knows one — and until v2 the only place a group id
+/// appeared was inside the record, which arrives over that very swarm. The JVM
+/// tier never noticed because the test handed the group id from one surface to
+/// the other directly; two phones have no such channel.
+///
+/// So pairing is a two-way exchange, which is also the honester shape: the host
+/// shows a code carrying the group, the joiner shows one carrying its key
+/// package, and each side has seen something of the other before anything is
+/// admitted.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PairingBlob {
     /// Who to dial, and where.
     pub card: DialCard,
     /// The MLS key package, opaque to this crate.
     pub key_package: Vec<u8>,
+    /// The group whose swarm to join, when this code is a host's invitation to
+    /// one. Empty in a joiner's code, which names no group because the joiner
+    /// does not have one yet.
+    pub group_id: Vec<u8>,
 }
 
 /// Render a blob as the text a QR code or a paste buffer carries.
@@ -129,12 +145,14 @@ pub fn decode_blob(text: &str) -> Result<PairingBlob, TransportError> {
 /// The body layout, once, so encode and decode cannot drift:
 ///
 /// ```text
-/// endpoint_id : 32 bytes
-/// n_addrs     : 1 byte
+/// endpoint_id  : 32 bytes
+/// n_addrs      : 1 byte
 /// for each addr:
-///   len       : 1 byte
-///   utf8      : len bytes
-/// key_package : the rest
+///   len        : 1 byte
+///   utf8       : len bytes
+/// group_len    : 1 byte   (0 or 32)   <- added in blob v2
+/// group_id     : group_len bytes
+/// key_package  : the rest
 /// ```
 fn encode_body(blob: &PairingBlob) -> Result<Vec<u8>, TransportError> {
     let id = data_encoding::HEXLOWER
@@ -163,6 +181,17 @@ fn encode_body(blob: &PairingBlob) -> Result<Vec<u8>, TransportError> {
         body.push(len);
         body.extend_from_slice(bytes);
     }
+    let group_len = u8::try_from(blob.group_id.len()).map_err(|_| TransportError::BadDialCard {
+        reason: format!("a group id is 32 bytes, got {}", blob.group_id.len()),
+    })?;
+    if group_len != 0 && group_len != 32 {
+        return Err(TransportError::BadDialCard {
+            reason: format!("a group id is 32 bytes or absent, got {group_len}"),
+        });
+    }
+    body.push(group_len);
+    body.extend_from_slice(&blob.group_id);
+
     body.extend_from_slice(&blob.key_package);
     Ok(body)
 }
@@ -198,6 +227,22 @@ fn decode_body(body: &[u8]) -> Result<PairingBlob, TransportError> {
         cursor += len;
     }
 
+    if cursor >= body.len() {
+        return Err(short());
+    }
+    let group_len = body[cursor] as usize;
+    cursor += 1;
+    if group_len != 0 && group_len != 32 {
+        return Err(TransportError::BadPairingCode {
+            reason: format!("a group id is 32 bytes or absent, got {group_len}"),
+        });
+    }
+    if cursor + group_len > body.len() {
+        return Err(short());
+    }
+    let group_id = body[cursor..cursor + group_len].to_vec();
+    cursor += group_len;
+
     let key_package = body[cursor..].to_vec();
     if key_package.is_empty() {
         return Err(TransportError::BadPairingCode {
@@ -208,6 +253,7 @@ fn decode_body(body: &[u8]) -> Result<PairingBlob, TransportError> {
     Ok(PairingBlob {
         card: DialCard { endpoint_id, addrs },
         key_package,
+        group_id,
     })
 }
 

@@ -102,14 +102,41 @@ class SocialSurface private constructor(
      * The group id IS the topic seed, so two devices that agree on the group
      * agree on the topic without another exchange.
      */
-    fun startLink(group: ByteArray) = guard {
-        if (link == null) {
+    fun startLink(group: ByteArray) {
+        if (link != null) return
+        // Not `guard`: a refusal here is wiped by the next successful guarded
+        // call, because guard clears the notice on success. Starting a link is
+        // the one step whose failure must survive to the screen.
+        try {
             link = GossipLink.start(deviceKey, group, emptyList())
+            linkedGroup = group
+        } catch (e: FfiException) {
+            notice = FfiRefusal.words(e)
+            android.util.Log.w("croft.social", "link refused: ${FfiRefusal.words(e)}", e)
+        } catch (e: Throwable) {
+            notice = "the swarm could not be joined: ${e.message}"
+            android.util.Log.w("croft.social", "link failed: ${e.message}", e)
         }
     }
 
-    /** The code to show the other phone, or null before a link exists. */
-    fun pairingCode(): String? = guard { link?.pairingCode(session.mlsKeyPackage()) }
+    /**
+     * The code to show the other phone, or null before a link exists.
+     *
+     * A HOST's code names its group, because the topic is the group id and a
+     * joining device cannot reach the swarm without it. A JOINER's names none —
+     * it has no group yet — and carries only its key package, which is what the
+     * host needs to seat it. Two codes, one each way; found on hardware, where
+     * the JVM tier had been handing the group id between surfaces directly.
+     */
+    fun pairingCode(): String? = guard {
+        link?.pairingCode(session.mlsKeyPackage(), linkedGroup ?: ByteArray(0))
+    }
+
+    /** The group this device's link is on, if any. */
+    private var linkedGroup: ByteArray? = null
+
+    /** Whether a link exists — for a log line during a device run. */
+    fun hasLink(): Boolean = link != null
 
     /**
      * Read a code the other phone showed, and dial them.
@@ -120,7 +147,17 @@ class SocialSurface private constructor(
     fun pairWith(code: String) = guard {
         val read = readPairingCode(code)
         pairedPeer = read
-        link?.addPeer(read.card)
+
+        // A code that names a group, read by a device that has none, is a host
+        // inviting a joiner: join THEIR swarm, bootstrapped to them. Otherwise
+        // it is a joiner's code and this device is the host — remember them, so
+        // the invite knows whose key package to seat.
+        if (read.groupId.isNotEmpty() && link == null) {
+            link = GossipLink.start(deviceKey, read.groupId, listOf(read.card))
+            linkedGroup = read.groupId
+        } else {
+            link?.addPeer(read.card)
+        }
         Unit
     }
 
@@ -232,6 +269,8 @@ class SocialSurface private constructor(
             notice = notice,
             peerCount = link?.neighbourCount()?.toInt() ?: 0,
             offeredRecord = offered?.claims,
+            hasMlsGroup = session.hasMlsGroup(),
+            mlsEpoch = session.mlsEpoch()?.toLong(),
         )
     }
 
@@ -299,6 +338,18 @@ data class SurfaceState(
      * decline. Nothing has been folded.
      */
     val offeredRecord: RecordClaimsView? = null,
+    /** Whether a real MLS group is seated on this device. */
+    val hasMlsGroup: Boolean = false,
+    /**
+     * The seated group's MLS epoch, or null when none is seated.
+     *
+     * On screen and in every log line because an MLS desync is unreadable
+     * without it: two devices that disagree about the epoch look, from either
+     * one alone, like a device that is simply not receiving. The plan asks for
+     * epoch transitions to be observable for exactly this reason, and the S2
+     * runbook's rung 4 is stated as "the epoch advances 0 -> 1".
+     */
+    val mlsEpoch: Long? = null,
 )
 
 /** A group row. */

@@ -22,6 +22,7 @@ fn a_blob() -> PairingBlob {
             addrs: vec!["192.168.50.235:55348".to_string()],
         },
         key_package: vec![0xAB; 300],
+        group_id: vec![0x7C; 32],
     }
 }
 
@@ -179,4 +180,47 @@ fn surrounding_whitespace_and_lowercase_are_tolerated() {
 
     let got = decode_blob(&messy).expect("a pasted, lowercased code still pairs");
     assert_eq!(got, a_blob());
+}
+
+/// The gap the device run found. A joining device cannot join a swarm until it
+/// knows the group, because the topic IS the group id — and until blob v2 the
+/// only place a group id appeared was inside the record, which arrives over
+/// that very swarm. The JVM tier missed it by handing the id between surfaces
+/// directly; two phones have no such channel.
+#[test]
+fn a_hosts_code_carries_the_group_so_a_joiner_can_reach_its_swarm() {
+    let blob = a_blob();
+
+    let got = decode_blob(&encode_blob(&blob).unwrap()).unwrap();
+
+    assert_eq!(got.group_id, blob.group_id, "the group survives the code");
+    assert_eq!(got.group_id.len(), 32);
+}
+
+/// A joiner's code names no group, because the joiner has not got one. That has
+/// to round-trip as cleanly as the host's, or the reply half of the exchange
+/// cannot be encoded at all.
+#[test]
+fn a_joiners_code_carries_no_group_and_still_round_trips() {
+    let mut blob = a_blob();
+    blob.group_id = Vec::new();
+
+    let got = decode_blob(&encode_blob(&blob).unwrap()).unwrap();
+
+    assert!(got.group_id.is_empty());
+    assert_eq!(
+        got.key_package, blob.key_package,
+        "the key package survives"
+    );
+}
+
+/// A group id is 32 bytes or absent. Anything else is a malformed code, and
+/// accepting it would put a truncated id into a topic derivation, which fails
+/// later and somewhere else.
+#[test]
+fn a_group_id_of_the_wrong_length_is_refused_at_encode() {
+    let mut blob = a_blob();
+    blob.group_id = vec![0x01; 7];
+
+    assert!(encode_blob(&blob).is_err());
 }

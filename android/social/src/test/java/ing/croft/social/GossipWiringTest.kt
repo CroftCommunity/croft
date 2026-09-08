@@ -70,7 +70,7 @@ class GossipWiringTest {
 
         // B offers its key package through its own link; A reads the code.
         val linkB = GossipLink.start(ByteArray(32) { 22 }, groupIdBytes, emptyList())
-        val readByA = readPairingCode(linkB.pairingCode(b.mlsKeyPackage()))
+        val readByA = readPairingCode(linkB.pairingCode(b.mlsKeyPackage(), ByteArray(0)))
         val linkA = GossipLink.start(ByteArray(32) { 11 }, groupIdBytes, listOf(readByA.card))
 
         // Both sides. Gossip does not retransmit, so a Welcome sent while the
@@ -146,7 +146,7 @@ class GossipWiringTest {
         a.createGroup("kinds")
 
         val linkB = GossipLink.start(ByteArray(32) { 44 }, groupIdBytes, emptyList())
-        val code = readPairingCode(linkB.pairingCode(b.mlsKeyPackage()))
+        val code = readPairingCode(linkB.pairingCode(b.mlsKeyPackage(), ByteArray(0)))
         val linkA = GossipLink.start(ByteArray(32) { 33 }, groupIdBytes, listOf(code.card))
         assertTrue(linkA.waitForPeer(patienceMs))
 
@@ -188,7 +188,7 @@ class GossipWiringTest {
     @Test
     fun `a mistyped pairing code refuses with words a person can read`() {
         val link = GossipLink.start(ByteArray(32) { 66 }, groupIdBytes, emptyList())
-        val good = link.pairingCode(ByteArray(200) { 7 })
+        val good = link.pairingCode(ByteArray(200) { 7 }, ByteArray(0))
         val mistyped = good.replaceRange(4, 5, if (good[4] == 'A') "B" else "A")
 
         val e = assertFailsWith<FfiException.BadPairingCode> { readPairingCode(mistyped) }

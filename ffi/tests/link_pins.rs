@@ -86,12 +86,13 @@ fn a_pairing_code_round_trips_through_the_boundary_types() {
     let key_package = vec![0xAB; 200];
 
     let code = link
-        .pairing_code(key_package.clone())
+        .pairing_code(key_package.clone(), vec![0x7C; 32])
         .expect("a code is made");
     let read = PairingCode::read(&code).expect("the code reads back");
 
     assert_eq!(read.key_package, key_package);
     assert_eq!(read.card, link.dial_card());
+    assert_eq!(read.group_id, vec![0x7C; 32], "the group survives the code");
     link.shutdown();
 }
 
@@ -101,7 +102,7 @@ fn a_pairing_code_round_trips_through_the_boundary_types() {
 fn a_mistyped_pairing_code_is_refused_in_words_a_person_can_act_on() {
     let _swarm = SwarmLock::acquire();
     let link = GossipLink::start(vec![3u8; 32], topic(), vec![]).expect("a link starts");
-    let code = link.pairing_code(vec![0xCD; 100]).unwrap();
+    let code = link.pairing_code(vec![0xCD; 100], vec![0x7C; 32]).unwrap();
 
     // Flip one character, the way a person reading it aloud would.
     let mut chars: Vec<char> = code.chars().collect();

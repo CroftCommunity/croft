@@ -173,6 +173,23 @@ impl Session {
             resolver,
             last_authored: None,
         };
+        // Re-derive the credentials this device's own record justifies.
+        //
+        // The registry is in memory and starts holding only this identity, so
+        // without this a restart forgets every person this device ever
+        // admitted — and then silently refuses everything they send, with no
+        // local symptom at all. That is the same failure as never registering
+        // them, moved one process boundary later, and it is what rung 6 would
+        // have hit.
+        //
+        // Re-derived from the FOLD rather than persisted separately. A
+        // MembershipAdd is already the record of who is seated, so reading it
+        // back keeps exactly one source of truth and guarantees a credential
+        // cannot outlive the membership that justified it. Persisting the
+        // registry would create a second place for that answer to live, and
+        // the two would eventually disagree.
+        session.reregister_seated_credentials()?;
+
         // A session that opens onto an empty screen and fills in later is a
         // session that shows the user nothing for a beat, and it is also one
         // whose first refresh is untested. Load now.
@@ -360,6 +377,21 @@ impl Session {
         // history rather than as nothing having happened.
         self.next_lamport += 1;
         Ok(envelope_hash(&env))
+    }
+
+    /// Register a credential for every principal this device's record seats.
+    ///
+    /// See `open` for why this is re-derived rather than persisted.
+    fn reregister_seated_credentials(&self) -> Result<(), SessionError> {
+        for group in read::groups_for_principal(&self.db, &self.principal)? {
+            for (principal, _role, _since) in read::members_of_group(&self.db, &group)? {
+                self.resolver.register(
+                    PortDeviceId(*principal.as_bytes()),
+                    PortPrincipalId(*principal.as_bytes()),
+                );
+            }
+        }
+        Ok(())
     }
 
     /// Re-read the whole visible world into the model.
@@ -865,6 +897,26 @@ impl Session {
             .map_err(|e| SessionError::Refused {
                 reason: e.to_string(),
             })?;
+
+        // The credential for the person being admitted, registered at the one
+        // moment this device actually decides to admit them.
+        //
+        // Without it the host can never fold anything the JOINER authors: the
+        // record carries the host's own credential to the joiner, but nothing
+        // carries the joiner's the other way, because the host WROTE that
+        // record. The result on two phones is perfectly asymmetric and
+        // perfectly silent — the joiner sees both sides of the conversation,
+        // the host sees only itself, and neither device says a word. Found at
+        // S2 rung 5 on hardware, reproduced at Rust grade in seconds once seen.
+        //
+        // Here rather than anywhere later because this IS the decision: the
+        // principal came out of the key package the host is about to seat, so
+        // the device is trusting exactly the person it just admitted, and no
+        // one else.
+        self.resolver.register(
+            PortDeviceId(*invitee.as_bytes()),
+            PortPrincipalId(*invitee.as_bytes()),
+        );
 
         // 1. The governance decision, folded. Without this the slip cannot be
         //    minted at all — `authorize_invite_enactment` reads the folded

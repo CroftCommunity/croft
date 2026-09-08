@@ -1,11 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      P7 S2. The social app had no permissions at all until now, and correctly
+      so: S1 was store-only and never touched a socket. S2's transport binds
+      real UDP for iroh, and without INTERNET the bind fails with
+      "could not bind an endpoint: Failed to bind sockets" — a refusal that is
+      perfectly clear once read and impossible for any JVM test to produce,
+      because a desktop JVM has no permission model. Found on hardware at rung 3.
+
+      ACCESS_NETWORK_STATE is here because iroh watches for network changes to
+      re-probe its local addresses; without it that watcher is blind and a phone
+      that changes WiFi keeps advertising an address it no longer has.
+
+      Deliberately NOT here: anything about the relay, location, or nearby
+      devices. S2 dials explicit LAN addresses carried in a pairing code, with
+      RelayMode::Disabled and no discovery service, so there is nothing to
+      discover and no relay to reach. A permission we cannot justify is a
+      permission that makes the next reviewer wonder what this app really does.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <application
         android:label="Croft Social (dev)"
         android:theme="@style/Theme.CroftSocial">
+        <!--
+          adjustResize, found at rung 5 on hardware. Without it the window does
+          not shrink for the keyboard, so the composer sits BEHIND the keyboard
+          that tapping the composer just opened — the field is unreachable by
+          the only gesture that would reach it. Invisible to every JVM test,
+          because a JVM has no soft keyboard.
+        -->
         <activity
             android:name=".SocialActivity"
-            android:exported="true">
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

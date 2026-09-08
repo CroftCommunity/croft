@@ -365,9 +365,15 @@ fn removing_a_queued_proposal_actually_takes_it_off_the_queue() {
     let group = TestKey(b"g".to_vec());
 
     store
-        .queue_proposal(&group, &TestKey(b"ref-1".to_vec()), &TestValue(b"p1".to_vec()))
+        .queue_proposal(
+            &group,
+            &TestKey(b"ref-1".to_vec()),
+            &TestValue(b"p1".to_vec()),
+        )
         .expect("queue");
-    store.remove_proposal(&group, &TestKey(b"ref-1".to_vec())).expect("remove");
+    store
+        .remove_proposal(&group, &TestKey(b"ref-1".to_vec()))
+        .expect("remove");
 
     let refs: Vec<TestKey> = store.queued_proposal_refs(&group).expect("read refs");
     assert!(
@@ -388,14 +394,12 @@ fn removing_one_queued_proposal_leaves_the_others_alone() {
 
     for name in [b"ref-1", b"ref-2", b"ref-3"] {
         store
-            .queue_proposal(
-                &group,
-                &TestKey(name.to_vec()),
-                &TestValue(name.to_vec()),
-            )
+            .queue_proposal(&group, &TestKey(name.to_vec()), &TestValue(name.to_vec()))
             .expect("queue");
     }
-    store.remove_proposal(&group, &TestKey(b"ref-2".to_vec())).expect("remove");
+    store
+        .remove_proposal(&group, &TestKey(b"ref-2".to_vec()))
+        .expect("remove");
 
     let refs: Vec<TestKey> = store.queued_proposal_refs(&group).expect("read refs");
     assert_eq!(

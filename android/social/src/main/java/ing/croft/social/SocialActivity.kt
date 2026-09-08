@@ -83,7 +83,6 @@ class SocialViewModel(app: Application) : AndroidViewModel(app) {
     fun selectGroup(id: ByteArray) = act {
         surface.selectGroup(id)
         surface.startLink(id)
-        pairingCode.value = surface.pairingCode()
     }
 
     fun send() = act { surface.send() }
@@ -139,17 +138,25 @@ class SocialViewModel(app: Application) : AndroidViewModel(app) {
         val s = state.value
         Log.d(
             TAG,
-            "state: groups=${s.groups.size} timeline=${s.timeline.size} " +
-                "peers=${s.peerCount} offered=${s.offeredRecord != null}",
+            "pump: groups=${s.groups.size} timeline=${s.timeline.size} " +
+                "peers=${s.peerCount} mls=${s.hasMlsGroup} epoch=${s.mlsEpoch} " +
+                "offered=${s.offeredRecord != null}",
         )
     }
 
     private inline fun act(block: () -> Unit) {
         block()
+        // Refreshed after EVERY action, not just group selection. A JOINER
+        // never selects a group — it has none — so a code computed only there
+        // left the joining device with nothing to show, and the exchange is
+        // two-way. Found on hardware at rung 4.
+        pairingCode.value = surface.pairingCode()
+        Log.d(TAG, "link: started=${surface.hasLink()} code=${pairingCode.value?.length ?: -1}")
         state.value = surface.state()
         val s = state.value
         Log.d(TAG, "state: groups=${s.groups.size} selected=${s.groups.count { it.selected }} " +
             "timeline=${s.timeline.size} members=${s.members.size} peers=${s.peerCount} " +
+            "mls=${s.hasMlsGroup} epoch=${s.mlsEpoch} " +
             "offered=${s.offeredRecord != null} draft='${s.draft}'")
         s.notice?.let { Log.w(TAG, "refused: $it") }
     }

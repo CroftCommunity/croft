@@ -38,6 +38,12 @@ pub struct PairingCode {
     pub card: DialCard,
     /// The MLS key package the code carried.
     pub key_package: Vec<u8>,
+    /// The group whose swarm to join, or empty in a joiner's code.
+    ///
+    /// A joining device cannot reach a group's swarm without this: the topic IS
+    /// the group id. Found on hardware, because the JVM tier had handed the id
+    /// between surfaces directly and two phones cannot.
+    pub group_id: Vec<u8>,
 }
 
 /// Which of the two artifact kinds arrived.
@@ -136,13 +142,20 @@ impl GossipLink {
         Ok(transport.add_peer(&card.into())?)
     }
 
-    /// The full pairing code: this device's dial card plus `key_package`.
-    pub fn pairing_code(&self, key_package: Vec<u8>) -> Result<String, FfiError> {
+    /// The full pairing code: this device's dial card, key package, and group.
+    ///
+    /// `group_id` empty means "I have no group to offer" — a joiner's code.
+    pub fn pairing_code(
+        &self,
+        key_package: Vec<u8>,
+        group_id: Vec<u8>,
+    ) -> Result<String, FfiError> {
         let guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let transport = guard.as_ref().ok_or_else(Self::gone)?;
         Ok(encode_blob(&PairingBlob {
             card: transport.dial_card(),
             key_package,
+            group_id,
         })?)
     }
 
@@ -258,6 +271,7 @@ pub fn read_pairing_code(code: &str) -> Result<PairingCode, FfiError> {
     Ok(PairingCode {
         card: blob.card.into(),
         key_package: blob.key_package,
+        group_id: blob.group_id,
     })
 }
 

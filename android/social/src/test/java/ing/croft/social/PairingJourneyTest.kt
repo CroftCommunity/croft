@@ -41,11 +41,20 @@ class PairingJourneyTest {
             val group = host.state().groups[0]
             host.selectGroup(group.id)
 
-            // The joiner shows a code. The host reads it — that is the scan.
-            joiner.startLink(group.id)
-            val code = assertNotNull(joiner.pairingCode(), "the joiner has a code to show")
+            // The real two-code exchange, and it must stay real here: an
+            // earlier version of this test handed the host's group id straight
+            // to the joiner, which no phone can do, and that is exactly how the
+            // gap reached hardware unnoticed.
+            //
+            // The host's code names its group. The joiner reads it and joins
+            // that swarm; only then does the joiner have a code of its own to
+            // show, carrying the key package the host needs.
             host.startLink(group.id)
-            host.pairWith(code)
+            val hostCode = assertNotNull(host.pairingCode(), "the host offers its group")
+            joiner.pairWith(hostCode)
+
+            val joinerCode = assertNotNull(joiner.pairingCode(), "the joiner answers")
+            host.pairWith(joinerCode)
 
             assertTrue(host.awaitPeer(patience), "the swarm must form before inviting")
             assertTrue(joiner.awaitPeer(patience), "and the joiner must have joined it")
@@ -97,8 +106,8 @@ class PairingJourneyTest {
             val group = host.state().groups[0]
             host.selectGroup(group.id)
 
-            joiner.startLink(group.id)
             host.startLink(group.id)
+            joiner.pairWith(assertNotNull(host.pairingCode()))
             host.pairWith(assertNotNull(joiner.pairingCode()))
             assertTrue(host.awaitPeer(patience))
             assertTrue(joiner.awaitPeer(patience))

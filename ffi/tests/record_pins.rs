@@ -48,8 +48,8 @@ fn group_of(s: &Session) -> social_tree_core::model::GroupId {
 
 /// Alice founds a group and invites Bob: MLS seats him, and she offers her
 /// record. Bob has not accepted anything yet.
-fn alice_and_bob() -> (Session, Session, Vec<u8>) {
-    let mut alice = Session::open(&temp("alice"), &[1u8; 32]).expect("Alice opens");
+fn alice_and_bob_at(alice_path: &std::path::Path) -> (Session, Session, Vec<u8>) {
+    let mut alice = Session::open(alice_path, &[1u8; 32]).expect("Alice opens");
     let mut bob = Session::open(&temp("bob"), &[2u8; 32]).expect("Bob opens");
 
     alice.create_group("supper club").expect("Alice founds it");
@@ -59,6 +59,10 @@ fn alice_and_bob() -> (Session, Session, Vec<u8>) {
 
     let offer = encode_inline(&alice.group_record().expect("Alice's record")).expect("it encodes");
     (alice, bob, offer)
+}
+
+fn alice_and_bob() -> (Session, Session, Vec<u8>) {
+    alice_and_bob_at(&temp("alice"))
 }
 
 #[test]
@@ -185,5 +189,89 @@ fn accepting_the_same_record_twice_is_not_a_failure() {
     assert!(
         again.is_ok(),
         "a repeated record must not be an error: {again:?}"
+    );
+}
+
+/// **The reverse direction, which the device run found missing.**
+///
+/// The host learns nothing about the joiner from the record — it wrote that
+/// record itself. So when the joiner authors its own first message, the host
+/// has no credential for the joiner's device and the fold refuses it. On two
+/// phones this is perfectly asymmetric and perfectly silent: the joiner sees
+/// both messages, the host sees only its own, and neither device reports
+/// anything wrong.
+///
+/// The credential belongs at the moment of the invite. The host already
+/// extracts the invitee's principal from their key package in order to seat
+/// them; registering it there is the same act, and it means the host trusts
+/// exactly the person it just decided to admit.
+#[test]
+fn what_the_joiner_sends_lands_in_the_hosts_timeline_too() {
+    let (mut alice, mut bob, offer) = alice_and_bob();
+    bob.accept_record(&offer).expect("Bob accepts");
+
+    bob.dispatch(Intent::SelectGroup(group_of(&bob))).unwrap();
+    for c in "and cheese".chars() {
+        bob.dispatch(Intent::TypeChar(c)).unwrap();
+    }
+    let wire = bob.send_sealed().expect("Bob sends");
+
+    let accepted = alice
+        .receive_sealed(&wire)
+        .expect("Alice opens what Bob sealed");
+    assert!(
+        accepted,
+        "the host must fold the joiner's message — it admitted them, so it \
+         knows who they are"
+    );
+
+    alice
+        .dispatch(Intent::SelectGroup(group_of(&alice)))
+        .unwrap();
+    let line = alice
+        .view()
+        .timeline
+        .lines
+        .into_iter()
+        .find(|l| l.body == "and cheese")
+        .expect("the host's timeline carries the joiner's message");
+    assert!(!line.author.is_empty(), "and knows who said it");
+}
+
+/// **Rung 6's shape at Rust grade: credentials have to survive a restart too.**
+///
+/// Registering the invitee at invite time fixes the live case and nothing else:
+/// the registry is in memory, and `Session::open` starts a fresh one holding
+/// only this device's own credential. So a host that restarts forgets everyone
+/// it ever admitted, and goes silent on them with no local symptom whatsoever —
+/// the same failure as before, one process boundary later.
+///
+/// The answer is not to persist the registry. The fold already knows who is
+/// seated, because that is what a MembershipAdd IS; opening a session can read
+/// its own record back and re-register from it. That keeps exactly one source
+/// of truth, and it means a credential can never outlive the membership that
+/// justified it.
+#[test]
+fn a_host_that_restarts_can_still_fold_what_its_member_sends() {
+    let alice_path = temp("alice-restart");
+    let (alice, mut bob, offer) = alice_and_bob_at(&alice_path);
+    bob.accept_record(&offer).expect("Bob accepts");
+
+    drop(alice); // the app closed, mid-conversation
+
+    bob.dispatch(Intent::SelectGroup(group_of(&bob))).unwrap();
+    for c in "still here".chars() {
+        bob.dispatch(Intent::TypeChar(c)).unwrap();
+    }
+    let wire = bob.send_sealed().expect("Bob sends");
+
+    let mut alice = Session::open(&alice_path, &[1u8; 32]).expect("Alice restarts");
+    let accepted = alice
+        .receive_sealed(&wire)
+        .expect("Alice opens what Bob sealed after she restarted");
+
+    assert!(
+        accepted,
+        "a restarted host must still know the people its own record seats",
     );
 }
