@@ -12,6 +12,38 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
 
 ## Open
 
+- [ ] **A dial drops the caller's camp — reachability lost on every Connect.** [device: android x2]
+  Found on hardware 2026-09-08 under enforcement (`ops/RUNBOOK-two-device-call-test.md`
+  §15.3). One Connect tap tears down the caller's camped relay connection — the relay
+  logs `actor errored "Stream terminated, exiting"` and a `usage` close one second
+  after the tap — and the phone then re-attaches. **The re-attach is not reliable:**
+  observed recovering with its pass in 4 s, and on the first dial going **tokenless**,
+  refused ~20 times with `no_token` over four minutes, recovering only on a full app
+  restart. The never-dialled callee held one admitted connection for 14 minutes in the
+  same window, so this is the dial path, not the network or the relay.
+
+  Under open mode this was invisible (a tokenless re-attach was admitted anyway); under
+  enforce it costs real reachability. Fix before v0.5.0 can be called complete under
+  enforcement. The dial should reuse the camped connection, or at minimum re-present the
+  cached pass on the re-attach it causes.
+
+- [ ] **`dial failed: null` — a refusal with no words.** Observed 2026-09-08 (§15.3).
+  `docs/ENFORCEMENT-SCENARIOS.md` Dial posture requires "MUST REFUSE — never dials,
+  words on screen"; `null` is not words, and the matrix walk cannot catch it because the
+  mapping it pins is correct — the message never arrives. Same shape as the P7 S1 uniffi
+  finding (a fieldless error variant crossing FFI with an empty `message`); check that
+  cause first. The call never connected this run, so everything below it is unproven.
+
+- [ ] **A dead OAuth refresh token still reads `Signed in`.** [device: android]
+  Observed 2026-09-08 (§15.2): after ~10 days idle the refresh token was invalid
+  (`invalid_grant` from `bsky.social/oauth/token`), camp setup never ran, and the phone
+  was unreachable under enforce — while the account card said `Signed in` with the right
+  DID. The camp line was honest ("NOT camped … calls cannot reach this device"); the two
+  lines contradict each other and only one is actionable. This is the concrete case the
+  **E135(b)** wording decision should be made against, and it also refutes the prepared
+  step-0 check ("shows the handle field instead of Signed in") — that cannot see this
+  state.
+
 - [ ] **Adopt openmls 0.9.0 / openmls_rust_crypto 0.6.0 — ordinary work, not urgent.** [device: android]
   Our pins are exact and deliberate (`=0.8.1`, `=0.5.1`, "the exact versions the
   experiments resolved"). The 0.9 line landed 2026-08-25 and brings `hpke-rs` 0.7.0,

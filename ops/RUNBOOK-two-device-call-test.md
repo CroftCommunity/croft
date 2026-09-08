@@ -633,3 +633,139 @@ camp-at-attach; the emulator proved the arc), but per this runbook's rule
 that is a prediction, not a result, until a phone earns its
 `admitted sponsorship=` line on the enforcing relay. Clients ≤v0.4.0 are
 refused by design.
+
+## §15 — both phones camped under ENFORCE, and the dial that breaks the camp (RUN 2026-09-08)
+
+Both physical phones earned their `admitted … sponsorship=` line on the
+enforcing production relay — the result §14 left as a prediction. The call
+that was supposed to follow **failed**, and failed in a way no tier below
+two devices could reach: **dialling tears down the caller's camping
+connection.** The callee is unaffected. Recorded here in the order it was
+found, including the two wrong turns.
+
+Rig: Samsung `R5GL712H75Y` (callee, `14af214d8c…`, `ngvalidation2112`) and
+Pixel `51021FDAP000RF` (caller, `631277dda5…`, `bobzmudacroft`), both on the
+released v0.5.0 (versionCode 6, verified by `dumpsys`, not by the changelog).
+Relay artifact verified before anything else: `/opt/iroh-relay/current/croft-relay`
+sha256 `8e287cb7020bc83bea25d1dc5dc41778ab97b05c47a426a7fcc8af814df9e2c7`,
+marker `.installed-0.2.0`, tarball `ba935f32…` matching the declared value,
+unit up since the 2026-08-30 flip converge with no restart since.
+
+### 1. The callee — the line, earned (DEVICE-VERIFIED)
+
+Force-stop, relaunch, watch the relay:
+
+```
+20:35:26  (app launched)
+20:35:28  denied   endpoint_id=14af214d8c reason="no_token"
+20:35:28  denied   endpoint_id=14af214d8c reason="no_token"
+20:35:32  admitted endpoint_id=14af214d8c sponsorship=BudgetBytes(262144)
+```
+
+Screen agrees: the same endpoint id, `Signed in`, **"ready, camped on relay"**.
+The M4e arc — attach tokenless, be refused, mint, be admitted — in six seconds
+against a relay that is genuinely refusing. **The one connection then stayed open
+for the next fourteen minutes with zero further verdicts.** That stability is the
+control for §15.3 below.
+
+### 2. The caller — a dead OAuth session that the screen called "Signed in"
+
+The Pixel came up **"ready — NOT camped on relay; calls cannot reach this
+device"** while its account card read `Signed in` with the right DID. The relay
+saw it attaching tokenless. The client said why:
+
+```
+access token stale; refreshing
+foreground token refresh failed: HTTP 400 from https://bsky.social/oauth/token
+    after nonce retry: {"error":"invalid_grant","error_description":"Invalid refresh token"}
+camp setup failed:          HTTP 400 … {"error":"invalid_grant","error_description":"Invalid refresh token"}
+```
+
+Idle since 2026-08-28, the refresh token was dead. Camp setup never ran, so the
+attach went tokenless and enforce refused it — correctly.
+
+**Two findings here, not one.**
+
+- The camp line was **honest** (E135(a) working: "NOT camped … calls cannot
+  reach this device"), but the account card above it said `Signed in`. Both
+  lines are true about different things and the pair reads as a contradiction.
+  A dead refresh token is indistinguishable on screen from a live session.
+- **The prepared step-0 check is wrong.** "If a phone shows the handle field
+  instead of 'Signed in', re-sign-in is step 0" cannot see this state — the
+  phone showed `Signed in` throughout. The detectable signal is the camp line
+  or `camp setup failed` in logcat, never the account card.
+
+Re-signed in via Playwright over the phone's DevTools socket (handle prefilled,
+password from `CroftC/.env`, consent authorized, "Login complete"). The phone
+then minted and was admitted:
+
+```
+20:40:21  denied   endpoint_id=631277dda5 reason="no_token"
+20:40:25  admitted endpoint_id=631277dda5 sponsorship=BudgetBytes(262144)
+```
+
+**Both phones have now earned the line under enforcement.**
+
+### 3. The call — FAILED, and the dial is what breaks the camp
+
+Deep link (`grant=m3registered`, quoted) populated the callee card correctly
+(`@samsung-callee`, the right endpoint). Tap Connect → `dialing…` →
+**`dial failed: null`**. The Samsung never rang.
+
+Worse than the failure: **the dial dropped the caller's camp and it did not come
+back for four minutes.** From the tap at 20:41:39, the relay refused the Pixel
+~20 times with `no_token`, backing off to ~30 s intervals, until a full app
+restart at 20:45:45 restored it. For those four minutes the phone was
+unreachable.
+
+Reproduced deliberately, one tap, with the relay watched from both sides:
+
+```
+20:48:54  screen: ready, camped on relay
+20:48:57  <- ONE Connect tap
+20:48:58  relay: actor errored "Stream terminated, exiting" (connection_id=19145)
+20:48:58  relay: usage endpoint_id=631277dda5 … duration_ms=76701   <- the camp closed
+20:49:00  screen: ready — NOT camped on relay; calls cannot reach this device
+20:49:02  relay: admitted endpoint_id=631277dda5 sponsorship=…      <- re-attach
+20:49:05  screen: ready, camped on relay
+```
+
+The dial tears down the camped relay connection rather than reusing it. The
+recovery is **not reliable**: here it re-attached with its pass in 4 s; on the
+first dial the re-attach went **tokenless** and stayed refused for four minutes.
+
+**Isolation is clean.** The Samsung — same build, same relay, same window, never
+dialled — held one connection for fourteen minutes with no denials. The caller
+lost its camp on every dial. This is the dial path, not the network and not the
+relay.
+
+Three defects, ranked:
+
+1. **A dial drops the caller's camp** (above). Under enforce this costs
+   reachability for seconds at best, minutes at worst.
+2. **`dial failed: null`** — a refusal with no words. The matrix requires
+   "MUST REFUSE — never dials, words on screen"; `null` is not words. Same shape
+   as the P7 S1 uniffi finding (a fieldless variant crossing with an empty
+   message), and worth checking for that cause first.
+3. **The call never connected at all**, so rungs below it are unproven this run.
+
+### 4. E135(a) — both states now seen on hardware, without the staging repoint
+
+The prepared step 4 (repoint a phone at the staging enforce listener on a debug
+build) was **not needed and was not run.** Production refusals supplied the
+negative state for free: the Pixel read "NOT camped … calls cannot reach this
+device" while genuinely refused, and "camped" while genuinely admitted, on the
+released APK against the real relay. That is a better test than the staging
+repoint — same evidence, no debug build, no risk of leaving a phone pointed at
+the wrong listener. **Prefer this shape.**
+
+### 5. What this says about the flip
+
+The flip is sound for **receiving**: a signed-in phone with a published record
+camps and stays camped. It is **not** sound for **calling** — every dial risks
+the caller's own reachability, and the failure is silent (`null`). Finding 1
+should gate any claim that v0.5.0 is complete under enforcement.
+
+Not run this session: the two-sided call, the E129 endings (blocked by 3), and
+E135(b)'s wording decision (its case is now concrete — see the `Signed in` /
+"NOT camped" contradiction in §15.2).

@@ -40,7 +40,7 @@ House truths the rows encode:
 
 | Scenario | Outcome | Pinned by |
 |---|---|---|
-| Signed in, device published | MUST CAMP WITH PASS (silently) | PIN:CampAdmissionTest.kt::`a mint camps with the token and caches it by the wire's expiresIn` · arc PIN:CampJourneyTest.kt::`oauth session to camping pass to expiry re-mint — the full arc` — **DEVICE-OPEN (E153)** — cause FIXED 2026-08-30: production had been running relay v0.1.1 through a deploy-guard bug and refused every pass; it now admits, proven with the rust `attach_probe`. The row stays open because **no phone has earned an `admitted sponsorship=` line yet**, and the claim this row makes is about phones. The §13 "live" citation rested on attributed `usage` lines, which prove presentation, not admission. |
+| Signed in, device published | MUST CAMP WITH PASS (silently) | PIN:CampAdmissionTest.kt::`a mint camps with the token and caches it by the wire's expiresIn` · arc PIN:CampJourneyTest.kt::`oauth session to camping pass to expiry re-mint — the full arc` — **DEVICE-VERIFIED 2026-09-08** (runbook §15): both physical phones earned `admitted endpoint_id=… sponsorship=BudgetBytes(262144)` on the ENFORCING production relay, each through the full arc (attach → `denied reason="no_token"` → mint → admitted), with the screen reading "ready, camped on relay" and the negative state — a genuinely refused attach reading "NOT camped" — observed on the same hardware in the same session. The callee held one admitted connection for 14 minutes with no further verdicts. Prior E153 history: production silently ran relay v0.1.1 through a deploy-guard bug and refused every pass until 2026-08-30; the §13 "live" citation rested on attributed `usage` lines, which prove presentation, not admission. |
 | Signed out | MUST DEGRADE (tokenless, silent — v0.4.0 shape) | PIN:CampAdmissionTest.kt::`signed-out camps tokenless with no note` |
 | Signed in, no cached pass | MUST MINT | PIN:CampAdmissionTest.kt::`signed-in with no cached pass mints` |
 | Live cached pass | MUST REUSE (the token is the cache) | PIN:CampAdmissionTest.kt::`a live cached pass is reused — the token is the cache` |
@@ -86,6 +86,29 @@ House truths the rows encode:
 | No home relay (refused attach) | MUST SAY NOT camped and what it costs — never silence | PIN:CampPresenceTest.kt::`no home relay says NOT camped and what it costs — never silence` · input pinned by PIN:CampPresenceTest.kt::`not online is not attached however loudly the url claims otherwise` — **DEVICE-VERIFIED 2026-08-28**: refused attach on the staging enforce listener reads "NOT camped", the same build on production reads "camped". The truth source is `Endpoint.online()`, not `addr().relayUrl()` (which reports the configured relay under refusal) and not `watchHomeRelay` (which throws "no reactor running"). |
 | Session staleness and rotation | MUST SURVIVE the arc (single-use rotation; the §12 race) | PIN:SessionJourneyTest.kt::`sign-in, staleness, and rotation — the whole session arc over real sockets` |
 | A successful mint | IS SILENT — stated, not fixed | runbook §13 results; the relay's attributed `usage` line is the instrument (no client test can see a server journal; the row exists so silence is never re-read as failure) |
+
+## Open defects these rows do not yet cover (runbook §15, 2026-09-08)
+
+Recorded as prose, not rows, because a `PIN:` naming a test that does not exist
+fails the walk — each needs its test written before it earns a row.
+
+- **A dial drops the caller's camp.** One Connect tap tears down the caller's
+  camped relay connection (relay: `actor errored "Stream terminated"` then a
+  `usage` close, 1 s after the tap). The re-attach is unreliable: observed
+  recovering with its pass in 4 s, and on the first dial going **tokenless** and
+  staying refused for four minutes until the app was restarted. Under enforce
+  that is lost reachability, and nothing on screen frames it as a consequence of
+  dialling. The never-dialled callee held its camp throughout the same window,
+  which isolates it to the dial path.
+- **`dial failed: null`** — a dial refusal reaching the screen with no words,
+  against the "words on screen" requirement in the Dial posture table. Same
+  shape as the P7 S1 uniffi finding (a fieldless error variant crossing FFI with
+  an empty message); check that cause first.
+- **A dead OAuth refresh token reads as `Signed in`.** The account card claims a
+  session while the refresh token is invalid, so the camp line ("NOT camped …")
+  and the card contradict each other. Both are individually true; the pair is
+  the defect, and it is the concrete case E135(b)'s wording decision should be
+  made against.
 
 ## Change discipline
 
