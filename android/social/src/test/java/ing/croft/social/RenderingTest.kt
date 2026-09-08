@@ -113,3 +113,38 @@ class RenderingTest {
         }
     }
 }
+
+/**
+ * What an Accept reports (R0b — the honesty invariant's reporting half).
+ *
+ * Accepting a record you already hold folds nothing: gossip delivers the same
+ * record once per path, and every assertion in it is already in the fold. Until
+ * this existed, that case rendered exactly like an accept that folded the whole
+ * record — the surface discarded the count and read "no exception thrown" as
+ * success. That is the no-op Accept the S2 device run flagged as an open UI
+ * question, and it is the same lie as `Signed in` over a dead session: the
+ * human believes an effect happened and nothing did.
+ *
+ * Silence is right when something DID fold — the group appears, which is its own
+ * evidence. Words are owed only when nothing happened.
+ */
+class AcceptOutcomeTest {
+
+    @org.junit.Test
+    fun `an accept that folds nothing says so — you were already in this group`() {
+        org.junit.Assert.assertEquals(
+            "You were already in this group — nothing new was added.",
+            Rendering.acceptOutcome(folded = 0u),
+        )
+    }
+
+    @org.junit.Test
+    fun `an accept that folds is silent — the group appearing is the evidence`() {
+        org.junit.Assert.assertEquals(null, Rendering.acceptOutcome(folded = 3u))
+    }
+
+    @org.junit.Test
+    fun `a single folded assertion is still a real effect`() {
+        org.junit.Assert.assertEquals(null, Rendering.acceptOutcome(folded = 1u))
+    }
+}

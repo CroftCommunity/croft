@@ -349,4 +349,21 @@ Then update, in the same commit as the results:
   Do not "fix" it here.
 - The **lost-race scenario** carried from S1: two concurrent admissions and the
   losing side's rendering. This run is the first time it can be staged for
-  real. It is still owed.
+  real. It is still owed — the 2026-09-08 run had two live devices in one group
+  and did not stage it, recorded as a miss rather than dropped.
+- **RESOLVED 2026-09-08 — "you are already in this group" is a distinct
+  outcome.** Raised after the S2 run as a UI question: should it be its own
+  result, or is an Accept that no-ops good enough? It is its own result, and the
+  reason is not taste. The no-op was **not** cosmetic: `accept_record` matched
+  `Ok(_)` over `IngestResult`, so `Duplicate` was counted as folded and a repeat
+  accept returned the record's full assertion count — indistinguishable from a
+  first accept at the API, not merely in the rendering. The shell could not have
+  told the truth even had it tried, because the signal did not exist. Both
+  halves are fixed and pinned (`record_pins.rs::a_repeat_accept_folds_nothing…`,
+  `RenderingTest.kt::AcceptOutcomeTest`), and the `said.contains("duplicate")`
+  branch it hid behind was dead code for the case its comment claimed.
+
+  The pre-accept notice ("You are already in this group.") already existed on
+  the offer; what was missing was the outcome. Filed while doing it: `FoldError`
+  is matched by string text rather than a typed variant, which is fragile and
+  should become a typed error.

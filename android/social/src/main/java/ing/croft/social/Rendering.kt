@@ -17,6 +17,23 @@ package ing.croft.social
 object Rendering {
 
     /**
+     * What an Accept reports, given how much it actually folded.
+     *
+     * The count is the live signal. Accepting a record you already hold folds
+     * nothing — gossip delivers the same record once per path, so every
+     * assertion in it is already in the fold — and before this the surface
+     * discarded the count and read "no exception thrown" as success. A fold of
+     * nothing then rendered exactly like a fold of everything, which is the
+     * no-op Accept the S2 device run flagged, and the same shape as `Signed in`
+     * over a dead session: a person believes an effect happened and none did.
+     *
+     * Null when something folded. The group appearing is its own evidence, and
+     * a notice on every success is how notices stop being read.
+     */
+    fun acceptOutcome(folded: UInt): String? =
+        if (folded == 0u) "You were already in this group — nothing new was added." else null
+
+    /**
      * How a member's standing reads in the membership panel.
      *
      * Seated members get no words at all — the label is for the exceptions, and

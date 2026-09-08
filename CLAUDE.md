@@ -160,6 +160,36 @@ describe anything else here as working until it has been run.
   principal* seam. If you find yourself integrating calling into a specific
   pond's core, stop — that is the wrong seam and it will multiply.
 
+- **A surface never claims a capability it has not confirmed, and never reports
+  an outcome it did not observe.** Two halves of one rule, and both halves have
+  cost us device runs.
+
+  *Claiming.* Derive the claim from a live signal, never from stored intent.
+  `Endpoint.online()` is reachability; `addr().relayUrl()` is the relay we
+  *asked* for and keeps saying so while an enforcing relay refuses every attach
+  (E135(a), refuted on hardware 2026-08-28). A cached OAuth session is not a
+  session — a dead refresh token still rendered as `Signed in` while the phone
+  was unreachable (§15.2).
+
+  *Reporting.* The absence of an error is not evidence of an effect. An
+  operation that returns a count must have that count read: an Accept that folds
+  nothing is a different outcome from an Accept that folds everything, and
+  rendering them the same is the same lie in miniature.
+
+  **Why this is a rule and not four bug fixes.** Four defects across two
+  independent sessions share one shape — the device with the problem believes it
+  is fine and the peer experiences only absence (P7 S2: a Welcome-seated phone
+  that forgot its group on restart, a host with no credential for its own
+  invitee; §15: the two above). Every one cost a two-device run to find, because
+  a surface reporting from its own optimism is green at every tier below
+  hardware. Calling learned this and has the rule; the social side met the same
+  shape twice without it.
+
+  **How to satisfy it.** Ask what would be true if the capability had silently
+  lapsed, and make the surface read *that*. If the answer is "nothing observable
+  would differ", the signal does not exist yet and building it is the work — do
+  not paper it with a stored flag.
+
 ## Commit gates — a ratchet, not a wall
 
 Gates here **tighten as the repo gains the capability to enforce them**. Writing a
