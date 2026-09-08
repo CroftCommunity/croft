@@ -93,3 +93,26 @@ id = "RUSTSEC-2024-0384"
 ignoreUntil = 2026-11-29
 reason = """`instant` is unmaintained (superseded by web-time). Transitive; no
 vulnerability, no fix to apply from here. Retires when the dependent crate moves."""
+
+# Added 2026-09-08 with P7 S2's transport. `paste` arrives with iroh — the chain is
+# netlink-packet-core -> netdev/netwatch -> iroh -> iroh-gossip -> transport-iroh.
+# Dated to the SAME 2026-11-29 sweep as the entries above rather than three months
+# from today: aligning it costs nothing and keeps this file to one review date, and
+# a later expiry would be buying time nobody asked for.
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0436"
+ignoreUntil = 2026-11-29
+reason = """`paste` is unmaintained (the author archived the repo; `pastey` is the
+suggested fork). Checked against the advisory's own metadata on osv.dev, not its
+headline: NO severity and an EMPTY affected-functions list — it is a maintenance
+advisory, not a vulnerability, so rule 5's fourth rung is vacuous, there being no
+affected function to reach.
+
+It is also a proc macro (`cargo metadata` reports targets `[["proc-macro"], ...]`),
+so like proc-macro-error2 above it runs on the build host and ships no code in the
+APK — even though `cargo tree -p croft-ffi -i paste --edges normal --target
+aarch64-linux-android` does put it on the normal-edge path, which is why the gate
+could not decide rung 2 mechanically and asked.
+
+Not fixable from here: it is transitive through iroh, and retiring it needs upstream
+to move to `pastey`. Retire by: that upstream move, or dropping the iroh dependency."""
