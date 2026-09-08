@@ -81,4 +81,40 @@ object DialAdmission {
         )
         Admit.Outcome.BadRequest -> Action.Refuse("client error building the admission request")
     }
+
+    /** What a dial must do to the endpoint's currently bound relay token. */
+    sealed interface Rebind {
+        /**
+         * Leave the endpoint alone. Either the wanted token is already bound,
+         * or binding the wanted token would *lower* our admission.
+         */
+        data object Keep : Rebind
+
+        /** Bind [token]; the endpoint stops and re-attaches, and the camp gaps. */
+        data class Swap(val token: String?) : Rebind
+    }
+
+    /**
+     * A dial never lowers the endpoint's admission (§15.3).
+     *
+     * The relay auth token belongs to the *endpoint*, so changing it costs a
+     * `stop()`/`start()` — the camped connection dies and re-attaches. Swapping
+     * one admitting token for another is the designed M4c path and pays that
+     * cost deliberately. Dropping to tokenless while holding a pass pays it for
+     * nothing: a camped endpoint is already admitted, and under enforce the
+     * tokenless re-attach is refused by definition.
+     *
+     * Measured before this existed (runbook §15.3, a physical phone on the
+     * enforcing relay): the tokenless path called `rebindWithToken(null)` over a
+     * live camping pass, the re-attach was refused ~20 times with `no_token`,
+     * and the phone stayed unreachable for four minutes until it was restarted.
+     * Open mode had hidden it completely — a tokenless re-attach was admitted
+     * anyway.
+     */
+    fun rebind(current: String?, wanted: String?): Rebind = when {
+        wanted == current -> Rebind.Keep
+        // The only downgrade available: giving up a token we already hold.
+        wanted == null -> Rebind.Keep
+        else -> Rebind.Swap(wanted)
+    }
 }

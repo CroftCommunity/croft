@@ -10,7 +10,23 @@ to the environment and why*.
 
 ## [Unreleased]
 
-_Nothing since 0.5.0._
+### Fixed
+
+- **calling: a dial no longer tears down the caller's camping pass.** Under
+  enforcement, one Connect tap dropped the caller off the relay and the
+  re-attach went tokenless — measured on a physical phone as four minutes of
+  unreachability, recovering only on an app restart (runbook §15.3). The relay
+  auth token belongs to the endpoint, so changing it costs a rebind; the
+  tokenless dial path was discarding a live pass for nothing, since a camped
+  endpoint is already admitted. A dial now never lowers admission
+  (`DialAdmission.rebind`). Open mode had hidden this entirely.
+- **calling: a dial refusal says what happened.** `dial failed: null` reached a
+  real screen — a fieldless uniffi variant crossing with an empty message. The
+  refusal now names the failure, and a dial whose endpoint could not be bound
+  stops with words instead of dialling a dead endpoint.
+
+Both are unit-pinned and **not yet re-run on hardware**; the camp row in
+`docs/ENFORCEMENT-SCENARIOS.md` stays DEVICE-OPEN until a phone proves it.
 
 ## [0.5.0] — 2026-08-27
 

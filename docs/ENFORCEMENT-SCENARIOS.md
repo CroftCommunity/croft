@@ -67,6 +67,9 @@ House truths the rows encode:
 | v1 callee (no grant params) | MUST DIAL tokenless, silently (compat) | PIN:DialAdmissionTest.kt::`no grant means the v1 tokenless dial, silently` |
 | Grant but no usable proof | MUST DEGRADE with a sign-in nudge, mint untouched | PIN:DialAdmissionTest.kt::`a grant with no usable proof dials tokenless with a sign-in nudge` · PIN:DialCompositionJourneyTest.kt::`signed out with no secret nudges and never touches the mint` |
 | Client defect (bad request) | MUST REFUSE and say it is ours | PIN:DialAdmissionTest.kt::`a bad request is a client defect and blocks the dial` |
+| Dialling while holding a live camping pass | MUST KEEP the pass — a dial never lowers admission | PIN:RebindPolicyTest.kt::`a tokenless dial keeps a live camping pass — reachability is never lowered` · PIN:RebindPolicyTest.kt::`the same token is not a rebind` — **DEVICE-OPEN**: fixed and unit-pinned 2026-09-08, not yet re-run on hardware |
+| Dialling with a minted call token | MUST SWAP (M4c), accepting the camp gap | PIN:RebindPolicyTest.kt::`a minted call token swaps — a different admitting token is the M4c path` · PIN:RebindPolicyTest.kt::`an unbound endpoint binds the minted token` |
+| The endpoint cannot be bound at dial time | MUST NOT DIAL, and say so | `MainViewModel.REBIND_FAILED`; dialling a dead endpoint is what produced `dial failed: null` (§15.3). No pure test — the guard is at the shell, and the arc it protects needs a real endpoint |
 
 ## Callability honesty (M2 — advisory layer; the gate wins)
 
@@ -92,18 +95,22 @@ House truths the rows encode:
 Recorded as prose, not rows, because a `PIN:` naming a test that does not exist
 fails the walk — each needs its test written before it earns a row.
 
-- **A dial drops the caller's camp.** One Connect tap tears down the caller's
-  camped relay connection (relay: `actor errored "Stream terminated"` then a
-  `usage` close, 1 s after the tap). The re-attach is unreliable: observed
-  recovering with its pass in 4 s, and on the first dial going **tokenless** and
-  staying refused for four minutes until the app was restarted. Under enforce
-  that is lost reachability, and nothing on screen frames it as a consequence of
-  dialling. The never-dialled callee held its camp throughout the same window,
-  which isolates it to the dial path.
-- **`dial failed: null`** — a dial refusal reaching the screen with no words,
-  against the "words on screen" requirement in the Dial posture table. Same
-  shape as the P7 S1 uniffi finding (a fieldless error variant crossing FFI with
-  an empty message); check that cause first.
+- ~~**A dial drops the caller's camp.**~~ **FIXED 2026-09-08 — unit-pinned,
+  DEVICE-OPEN.** Cause was `rebindWithToken`: the relay auth token belongs to the
+  endpoint, so changing it means `stop()`/`start()`, and the tokenless dial path
+  called `rebindWithToken(null)` over a live camping pass — a strict downgrade,
+  refused by definition under enforce. `DialAdmission.rebind` now decides, and a
+  dial never lowers admission; rows are in the Dial posture table above.
+  **Not yet re-run on hardware.** That gap is the whole point of §15: the last
+  unit-green screen-honesty fix was device-BROKEN, and this row does not close
+  until a phone dials without losing its camp.
+- ~~**`dial failed: null`**~~ **FIXED 2026-09-08.** It was the P7 S1 uniffi
+  finding met again — a fieldless generated variant crosses with an empty
+  message, and `"dial failed: ${t.message}"` rendered that verbatim. The catch
+  now falls back to a sentence naming the exception type. The second half of the
+  same defect: a failed rebind returned `null` and the dial proceeded against a
+  dead endpoint, so both call sites now stop and say so
+  (`MainViewModel.REBIND_FAILED`).
 - **A dead OAuth refresh token reads as `Signed in`.** The account card claims a
   session while the refresh token is invalid, so the camp line ("NOT camped …")
   and the card contradict each other. Both are individually true; the pair is
