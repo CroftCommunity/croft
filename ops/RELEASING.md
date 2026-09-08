@@ -77,7 +77,25 @@ build, never reuse.
 
 ## Current
 
-- `v0.5.0-rc.1` — Phase 11 M4: call-time admission, client side complete
+- `v0.5.0` (Latest) — Phase 11 M4: call-time admission, client side
+  complete. Promoted 2026-08-28 from `v0.5.0-rc.2` (versionCode 6) on the
+  same-day two-device validation with the PUBLISHED APK: both phones
+  honestly camped on production, a call born relayed on
+  `relay.croft.ing:8443` and upgraded to direct both ways, and the
+  endings verbatim — "you ended the call" / "call ended: closed by peer:
+  hangup (code 0)". rc.1 is pruned. **Process note, recorded rather than
+  tidied:** rc.2 was never published as a prerelease — it was built,
+  installed on both phones, validated, and then published directly as
+  this release's asset. The gate's substance held (the binary that
+  passed IS the binary that shipped, same file) but the ritual differed
+  from the diagram above; do it the normal way unless there is a reason
+  not to. Why rc.2 exists at all: rc.1's
+  E135(a) fix was proven blind on hardware (§13 step 3) — it polled
+  `addr().relayUrl()`, which reports the configured relay even while the
+  relay refuses every attach — so promoting rc.1 would have shipped a
+  build that says "camped" to an unreachable phone. rc.2 carries the
+  `Endpoint.online()` signal, device-verified in BOTH states.
+- ~~`v0.5.0-rc.1`~~ (pruned; superseded by rc.2) — Phase 11 M4: call-time admission, client side complete
   (mint-at-dial, camp-at-attach with the pass as the cache, the three
   call-endings with words, the refresh-rotation race fix). Cut 2026-08-24
   from the same-day §12 enforce rehearsal: every rung green on hardware —
@@ -92,7 +110,7 @@ build, never reuse.
   call, E129 endings verbatim (runbook §13 results). **Promotion to
   v0.5.0 is unblocked; the promote itself is the owner's call** (§13
   step 1).
-- `v0.4.0` (Latest) — Phase 11 M2+M3: identity proof (atproto OAuth
+- `v0.4.0` — Phase 11 M2+M3: identity proof (atproto OAuth
   sign-in → `provenDid`) and the derived callability line on the callee
   card. Promoted 2026-08-18 from `v0.4.0-rc.1`, which was cut 2026-08-17
   from the same-day on-device validation: live OAuth against the

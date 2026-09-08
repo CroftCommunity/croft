@@ -10,6 +10,10 @@ to the environment and why*.
 
 ## [Unreleased]
 
+_Nothing since 0.5.0._
+
+## [0.5.0] — 2026-08-27
+
 Phase 11 **M4 — the client side is complete and device-validated**
 (plan: `plans/2026-08-20-1-plan-m4-call-time-admission.md`). M4a + M4b
 landed 2026-08-20; M4c (mint-at-dial) and M4d's first device runs landed
@@ -20,29 +24,37 @@ revocation refused with words, identity-proof mint on-device). M4e
 every rung green on hardware**: the signed-out camp refused, sign-in →
 self-minted camping pass → admitted with attribution, the first call
 with both sides holding passes on an enforcing relay, the endings'
-words verbatim on both screens, and the sign-out negative. versionCode 5,
-versionName 0.5.0 — published as **v0.5.0-rc.1** 2026-08-24.
+words verbatim on both screens, and the sign-out negative. versionCode 5 / versionName 0.5.0 published as **v0.5.0-rc.1**
+2026-08-24; **versionCode 6** re-cut as **rc.2** 2026-08-28 carrying the
+E135(a) device fix below.
 
 Then the operational distance closed almost entirely (2026-08-25/26):
 croft-admit + its private store ACTIVATED on the box, production relay
 promoted to the v0.2.0 candidate in OPEN mode verifying the REAL admit
 key — **the bake is live** — and `admit.croft.ing` answered its first
 phones. **§13 steps 2 + 4 RAN 2026-08-26** with the published rc.1 APK
-on both devices (runbook §13 results): the callee's first PRODUCTION
-camp mint (silent success — the relay's attributed `usage` line is the
-instrument), the `endpoint_unbound` caller posture with its words in
-both places, and the first attributed production call, ended with
-E129's words verbatim. Remaining: the bake days, then the owner's
-one-word enforce flip (croft-stack `TODO.md`), plus E135(b) —
-caller-side camp posture (filed as "E130" in this repo's earlier notes;
-the roadmap renumbered it when openprices claimed E130).
+on both devices (runbook §13 results): a production camp mint, the
+`endpoint_unbound` caller posture with its words in both places, and an
+attributed production call, ended with E129's words verbatim. **Corrected
+2026-08-28 (E153): the attributed `usage` lines cited there prove a token
+was PRESENTED, not admitted — the relay attributes denials too. The
+production relay in fact REJECTS both phones' passes, no pass has ever
+been admitted there, and the enforce flip is blocked until one is.**
+**Resolved 2026-08-30: the cause was production silently running relay
+v0.1.1 (the v0.2.0 tarball fetched but never unpacked); the genuine
+v0.2.0 converged, passes verified on production for the first time —
+probe AND a real 0.5.0-rc.2 client — and THE ENFORCE FLIP LANDED the
+same night (croft-stack `sessions/2026-08-30-enforce-flip.md`).
+This app version is the one that camps through it.** Still open:
+E135(b) — caller-side camp posture (filed as "E130" in this repo's
+earlier notes; the roadmap renumbered it when openprices claimed E130).
 
-### Added (M4, unreleased)
-- **The camped line is polled truth (E135(a), was "E130(a)").** The
-  screen's camped claim now derives from `endpoint.addr().relayUrl()` —
-  a refused attach reads "NOT camped on relay; calls cannot reach this
-  device", never a comfortable lie. Landed under tests 2026-08-25;
-  device semantics are §13 step 3 (staging), still to run.
+### Added (M4)
+- **The camped line is honest (E135(a)).** The screen no longer claims
+  "camped on relay" the app cannot see — a refused attach reads "NOT
+  camped on relay; calls cannot reach this device". Landed 2026-08-25
+  against `addr().relayUrl()`, which §13 step 3 then proved blind; see
+  the Fixed entry below for the signal that actually works.
 - **The enforcement scenario matrix, client half**
   (`docs/ENFORCEMENT-SCENARIOS.md` + `EnforcementMatrixTest` riding
   `testDebugUnitTest`): ~30 posture rows — what must dial, camp, degrade
@@ -83,13 +95,27 @@ the roadmap renumbered it when openprices claimed E130).
   rows and revocation stories via mutable fixture state).
 - `Redeem` retains the ticket secret (the call-time possession proof).
 
-### Changed (M4, unreleased)
+### Changed (M4)
 - OAuth scope is now `atproto transition:generic` — under OAuth,
   `getServiceAuth` requires an RPC permission the bare scope lacks, and
   bsky.social does not yet advertise granular `rpc:` scopes (plan O2,
   resolved from PDS source). Existing sessions must re-sign-in to mint.
 
-### Fixed (M4, unreleased)
+### Fixed (M4)
+- **The camped claim is now device-true (E135(a)).** The screen said
+  "ready, camped on relay" while an enforcing relay refused every
+  attach — the earlier fix polled `addr().relayUrl()`, which reports the
+  CONFIGURED relay in both states, so its (correct) mapping was fed a
+  blind input. The truth source is `Endpoint.online()`, chosen by
+  refuting the alternatives on hardware: `watchHomeRelay` throws "there
+  is no reactor running" exactly as `conn.watchPaths()` does, and
+  `stats()`'s `relay_home_change` reads 1 whether attached or refused.
+  Verified both ways on a phone — refused → "NOT camped on relay; calls
+  cannot reach this device", attached → "camped" (runbook §13 step 3,
+  `ops/JOURNAL.md` 2026-08-28).
+- **A cancelled camp no longer speaks.** A rebind mid-mint rendered
+  "camping pass setup failed: Job was cancelled" on screen; cancellation
+  is a lifecycle event, not a refusal, and now propagates untouched.
 - **The refresh-token race the §12 run earned.** The foreground
   best-effort refresh and the camp mint's before-mint refresh raced the
   SINGLE-USE refresh token; the entryway answered 400 invalid_grant

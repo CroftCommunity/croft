@@ -602,7 +602,7 @@ prompt at the gate); and returner-side "admission voided" legibility using
 E108's exact words, returning `null` on success because the obligation is
 legibility on the failure, not chatter on the happy path.
 
-**Still owed by S1, and honestly so:** the lost-race UX debt (two concurrent
+**Still owed by S1, and honestly so:** the lost-race UX debt (two concurrent [device: android x2]
 admissions, the losing side's rendering) has its *renderings* in place but no
 scenario test driving two real admissions into a race — that needs the second
 device S2 brings, and forcing it here would mean testing a fiction. Carried

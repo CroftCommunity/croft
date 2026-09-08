@@ -1,0 +1,95 @@
+# osv-scanner exceptions for croft.
+#
+# Rule and why: CroftC/.claude/SUPPLY-CHAIN.md rule 9 — every exception is dated,
+# reasoned, and expires. An undated ignore is indistinguishable from a decision
+# nobody made.
+#
+# All entries below were settled on 2026-08-29 by reading each advisory's own
+# `[affected.functions]` metadata and checking call sites, NOT by reading severity
+# scores. Every one of these carries CVSS 4.0 `VC:N/VI:N/VA:H` — no confidentiality
+# impact, no integrity impact, availability only. They are correctness and panic
+# bugs, not key-compromise bugs, and the 8.2 headline says otherwise to anyone who
+# reads only the number.
+#
+# Re-review trigger: adopting openmls 0.9.0 / openmls_rust_crypto 0.6.0, which pulls
+# hpke-rs 0.7.0 and with it libcrux-sha3 0.0.10. That upgrade retires most of this
+# file. It is filed as ordinary planned work in TODO.md, deliberately not as an
+# emergency — see each reason below.
+
+# ── libcrux-sha3 0.0.8 — COMPILED and in the shipped APK, affected functions NOT reached
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0207"
+ignoreUntil = 2026-11-29
+reason = """Affects the INCREMENTAL SHAKE XOF API — Shake128Xof::squeeze and
+Shake256Xof::squeeze — when squeezing across multiple calls at lengths not divisible
+by RATE. Our only consumer is hpke-rs 0.6.1, which calls the ONE-SHOT const-generic
+API: `libcrux_sha3::shake256::<32>(ikm)` and `::<64>(ikm)` (hpke-rs-0.6.1/src/kem.rs
+:154,:158). The incremental type is never constructed. Crate is reachable; the
+affected functions are not. Retire by: the openmls 0.9 upgrade (TODO.md)."""
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0208"
+ignoreUntil = 2026-11-29
+reason = """Affects libcrux_sha3::avx2::x4::shake256 — an AVX2 path, which is x86-64
+only. The shipped APK carries arm64-v8a ONLY (ops/RUNBOOK-two-device-call-test.md
+"ABI note"; the devices report ro.product.cpu.abi = arm64-v8a). The affected code
+cannot be executed on the target we ship. Note this exception becomes INVALID the day
+croft ships an x86_64 artifact — a desktop shell or an emulator-targeted build — so
+re-check it before adding a target, not only before the expiry date."""
+
+# ── libcrux-secrets 0.0.5 — COMPILED, aarch64 IS our target, functions NOT reached
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0212"
+ignoreUntil = 2026-11-29
+reason = """The one that needed real checking: it affects constant-time
+libcrux_secrets::Select::select and Swap::swap on aarch64, and aarch64 IS the shipped
+target. But those functions have ZERO call sites in either crate that pulls
+libcrux-secrets into our tree — libcrux-traits 0.0.6 and libcrux-sha3 0.0.8 both
+import only the `U8` secret-typing newtype and `Classify`, never Select or Swap
+(grepped for `.select(`/`.swap(`/trait bounds: 0 hits in both). The dependency exists
+for its type wrappers, not its constant-time primitives."""
+
+# ── libcrux-aead tree — IN THE LOCKFILE, NEVER COMPILED
+# hpke-rs 0.6.1 declares hpke-rs-libcrux as `optional = true`. Our enabled feature set
+# is {hazmat, serde, serialization} (cargo tree -e features -i hpke-rs), so
+# hpke-rs-libcrux is never activated — and with it libcrux-aead, libcrux-aesgcm and
+# libcrux-chacha20poly1305 are never built. Cargo still records unenabled optional
+# dependencies in Cargo.lock, so a lockfile-based scanner reports them. `cargo tree -i
+# <crate> --target all` prints "nothing to print" for every one: they are in no
+# resolved tree on any target.
+#
+# This is a general property worth stating once: THE LOCKFILE OVER-REPORTS. It is a
+# resolution record, not a build manifest.
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0209"
+ignoreUntil = 2026-11-29
+reason = "libcrux-aesgcm is an unenabled optional dependency — in Cargo.lock, in no resolved tree on any target, never compiled into the APK. See the block comment above."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0210"
+ignoreUntil = 2026-11-29
+reason = "libcrux-aesgcm is an unenabled optional dependency — in Cargo.lock, in no resolved tree on any target, never compiled into the APK. See the block comment above."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0211"
+ignoreUntil = 2026-11-29
+reason = "libcrux-aesgcm is an unenabled optional dependency — in Cargo.lock, in no resolved tree on any target, never compiled into the APK. See the block comment above."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0124"
+ignoreUntil = 2026-11-29
+reason = "libcrux-chacha20poly1305 is an unenabled optional dependency — in Cargo.lock, in no resolved tree on any target, never compiled into the APK. See the block comment above."
+
+# ── unmaintained-crate advisories (no vulnerability, no fix to apply)
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0173"
+ignoreUntil = 2026-11-29
+reason = """proc-macro-error2 is unmaintained. It is a build-time proc macro: it runs
+on the build host and ships no code in the APK. Retires when the dependent crate moves
+off it; not actionable here."""
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0384"
+ignoreUntil = 2026-11-29
+reason = """`instant` is unmaintained (superseded by web-time). Transitive; no
+vulnerability, no fix to apply from here. Retires when the dependent crate moves."""
