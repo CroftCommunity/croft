@@ -54,13 +54,23 @@ no such rule**, and its two silent defects are what the absence produces.
 
 ```
               CALLING (M4)                        SOCIAL (P7)
-directory     ing.croft.iroh.endpoint records     a 669-char code carried by hand
-              on atproto, per-device              (no discovery service, by design)
+directory     ing.croft.iroh.endpoint records     a 669-char code carried by hand;
+              on atproto, per-device — the        the NON-local case is UNBUILT,
+              LOCAL case is UNBUILT               not refused
 rendezvous    our relay, admission-gated          gossip, RelayMode::Disabled,
                                                   no relay by construction
 capability    sponsorship/scope passes; minting;  governance tokens (E117);
               live revocation, device-validated   token return on departure — NOT BUILT
 ```
+
+**The directory row is a mirrored diagonal, and reading it wrong is easy.** Each side built
+one case and neither built the other's — chat has local, calling has non-local. An earlier
+draft of this plan mistook chat's missing half for a deliberate refusal and asked the owner
+to choose a privacy posture; the owner corrected it (2026-09-08): QR-or-code is the
+intended *local* baseline and stays, and chat being more restrictive than calling **for the
+social tree** is not intended, merely unbuilt. R6 and R8 build the two missing cells. The
+`RelayMode::Disabled` guarantee is real and is about **transport**, not about whether a
+person can be found — treating it as the latter is a layer-collapse.
 
 The capability row is the sharpest: calling's revocation is built and device-validated,
 social's token return (rung 7) is unbuilt, and building it twice is how the two drift.
@@ -83,8 +93,9 @@ R4  one FFI + shell/'s first occupant (macOS)─┘
          │
          ▼
 R5  the rendered-principal seam: call from a chat member list   ← the product moment
-R6  QR over desktop for first contact
+R6  first contact LOCAL — one QR card, chat + calling
 R7  capability convergence: rung 7 built once, not twice
+R8  first contact NON-LOCAL — reaching someone through the social tree
 ```
 
 **R0 — fix the dial defect first.** §15: one Connect tap tears down the caller's camped
@@ -104,20 +115,70 @@ implementations so a row passing in one and failing in the other is the finding.
 **R5 — the seam.** Calling reachable from a rendered principal. This is what the merge is
 *for*; everything above it is cost.
 
-**R6 — first contact.** A desktop can show a QR that a phone scans, which is the ergonomic
-fix for the 669-character paste and answers P7's open question about whether rung 4 should
-exercise a camera. Note what the blob actually carries:
+**R6 — first contact, local: one card, both capabilities.** A desktop shows a QR that a
+phone scans — the ergonomic fix for the 669-character paste, and P7's open question about
+whether rung 4 should exercise a camera. **And it carries calling contact information too**
+(owner, 2026-09-08): exchanging who-to-call in the same in-the-room way should not require
+going through atproto.
+
+The gap this stream closes is a mirrored diagonal, not a one-sided hole:
+
+|  | local (QR / carried code) | non-local (social tree, atproto) |
+|---|---|---|
+| **chat** | **BUILT** — the pairing blob | **MISSING** → R8 (no key-package record exists) |
+| **calling** | **MISSING** → this phase | **BUILT** — `ing.croft.iroh.endpoint`, published |
+
+Each side built one case; neither built the other's. What chat already carries locally:
 
 ```rust
 pub struct PairingBlob {
-    pub card: DialCard,        // who to dial, and where  ← calling already publishes this
-    pub key_package: Vec<u8>,  // MLS key package         ← the bulk of the 669 characters
+    pub card: DialCard,        // who to dial, and where — chat's iroh endpoint
+    pub key_package: Vec<u8>,  // MLS key package — the bulk of the 669 characters
     pub group_id: Vec<u8>,     // the invitation
 }
 ```
 
+**The two halves cost very different amounts, and the plan should not pretend otherwise.**
+Calling's local card is close to already existing: `croftcall://call?endpoint=…&handle=…&grant=…`
+is a calling contact card in URL form, it is already handled by `DeepLink`, and §13/§15
+drove real calls from it. A QR is an *encoding* of that, plus a scanner — largely UI work,
+no new protocol. R8, by contrast, needs a new record type and a lexicon investigation.
+Sequence accordingly rather than treating "first contact" as one uniform job.
+
+Open question for R6, not settled here: whether the two capabilities travel as **one card**
+carrying both reachabilities, or two artifacts scanned separately. One card is the better
+product and makes the shell's job simpler; two is easier to ship incrementally and avoids
+coupling chat's pairing format to calling's contract version (`docs/VERSIONING.md` clock 2
+governs the second). Decide when R6 is picked up, with the deep-link contract in hand.
+
 **R7 — capability convergence.** Rung 7 (departure and token return) built against the same
 primitive as calling's revocation, informed by the half that is already device-validated.
+
+**R8 — first contact, non-local: reaching someone through the social tree.** R6 and R8 are
+the two cases of one feature ("how a person joins a group"), and only R6 exists today.
+
+Measured state, 2026-09-08: `ing.croft.iroh.endpoint` is published and public — it is how
+calling reaches a device — while an MLS **key package exists only inside the carried
+pairing blob**, with no record type at all. That asymmetry is the whole of the gap.
+
+- **What it needs:** a published key-package record, so a person can be invited without
+  being handed 669 characters. That is a new `ing.croft.*` type and therefore
+  `LEXICONS.md`'s four acts, **investigate first** — search the official lexicons *and*
+  `community.lexicon.*` *and* what we already consume, and record what was checked. MLS has
+  a Delivery Service concept and a published-key-package shape may already exist; minting
+  ours before looking is the failure that document exists to prevent. Validate on the way
+  **in**: a real PDS accepted a record missing every required field.
+- **What it does NOT need: the ring walker.** Worth stating because the two look alike and
+  are not. *Inviting a specific person is a point lookup* — handle → DID → their key
+  package — exactly the shape calling already uses to resolve a callee. *Browsing your
+  tree* is a graph walk, and that is the ring walker
+  (`discovery/alpha/research/ring-walk-sans-relay-2026-09.md`, owner decisions 2026-09-08:
+  TypeScript, a package inside croft-pwa, consumed by forage / pdsview / the social-tree
+  site). Dragging a browser-side TS package into a native Rust client to invite one person
+  would be building a walk where a lookup was wanted. If the native client ever wants to
+  *browse*, that is a separate decision with the cross-repo constraint below.
+- **Bar:** no more restrictive than calling. Not more open either — calling's reachability
+  is already public and R8 should match it, not exceed it.
 
 **How code in this stream is allowed to travel** (`CroftC/.claude/SHARED-CODE.md`, landed
 2026-09-08 while this plan was being written). R1–R5 are unaffected: `call-core`,
@@ -173,26 +234,25 @@ same misreading §13 made with attributed `usage` lines:
 
 ## Open decisions
 
-### DS1 — where does first contact's directory live? *(spans both; nobody can settle it alone)*
+### DS1 — RETIRED as posed. It was a missing feature, not a decision.
 
-**Options.** (a) Keep the carried code — status quo, no lookup, nothing leaks. (b) Publish
-key packages as atproto records, as calling already publishes endpoint records. (c)
-**Group-as-directory**: carried code for first contact only; afterwards the sealed group
-*is* the channel, and calling endpoint information travels inside it — no lookup, no code.
+**An earlier draft of this plan asked which privacy posture the merged product should
+commit to**, having observed that calling publishes `ing.croft.iroh.endpoint` records
+publicly while chat refuses even a lookup. **The owner corrected the premise
+(2026-09-08):** QR-or-code is the intended *local* baseline and stays; chat being *more
+restrictive than calling for the social tree* is **not** intended — that case simply has
+not been built.
 
-**No recommendation is recorded here, deliberately.** (b) is the obvious-looking win and
-carries a real cost: contacting a PDS to resolve a key package leaks *"A is interested in
-B"* to that PDS, which is exactly the metadata the carried-code design refuses to leak, and
-that refusal was a deliberate choice (Q2, honoured in Rust 2026-08-27 at a measured cost of
-`libcroft_ffi.so` 6.3 MB → 29.6 MB). Trading it away silently, for ergonomics, would be the
-kind of decision this estate writes plans to avoid.
+So there is no posture to choose. There is a second case to build (R8), and the bar it
+must meet is *no more restrictive than calling*, which already reaches people through
+atproto identity and the graph.
 
-(c) looks like it dissolves most of the pain without the leak, but it is unprobed. **Probe
-before deciding:** whether relay admission can be satisfied for a peer known only through
-a group — calling's admit currently requires a *published* `ing.croft.iroh.endpoint`
-record (this is what `endpoint_unbound` means), so (c) may reduce to (b) for the calling
-half regardless of what chat does. If it does, say so rather than shipping a design that
-quietly re-introduces the lookup.
+Recording the mistake because the shape recurs: **an unbuilt path read as a deliberate
+refusal.** The evidence for "deliberate" was real but partial — `RelayMode::Disabled` and
+the 23 MB paid for it are genuine, and they are about *transport*, not about whether a
+person can be found. Reading a constraint at one layer as a policy at another is the
+layer-collapse this estate keeps writing rules against, and it produced a plan section that
+asked the owner to decide something nobody had proposed.
 
 ### DS2 — inherited from the child plan, restated because it now spans both
 
