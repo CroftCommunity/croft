@@ -145,11 +145,38 @@ drove real calls from it. A QR is an *encoding* of that, plus a scanner — larg
 no new protocol. R8, by contrast, needs a new record type and a lexicon investigation.
 Sequence accordingly rather than treating "first contact" as one uniform job.
 
-Open question for R6, not settled here: whether the two capabilities travel as **one card**
-carrying both reachabilities, or two artifacts scanned separately. One card is the better
-product and makes the shell's job simpler; two is easier to ship incrementally and avoids
-coupling chat's pairing format to calling's contract version (`docs/VERSIONING.md` clock 2
-governs the second). Decide when R6 is picked up, with the deep-link contract in hand.
+**Decided (owner, 2026-09-08): one card, with either capability omittable.** Default is
+both; a person may choose to share only chat or only calling. Note what that is *not* — it
+is not two artifacts. It is **one card format with two optional sections**, so "share only
+one" is omitting a section: one encoder, one scanner, one version clock, and the
+coupling worry that made two artifacts tempting disappears (each section carries its own
+version, so chat's pairing format is not pinned to the calling contract's clock).
+
+This is the user-facing expression of a rule this repo already holds — *calling is a
+capability, not a pond*. Chat membership and callability are different capabilities and a
+person may reasonably grant one without the other: add someone to a group without handing
+them the equivalent of a phone number, or be callable by someone you are not in groups
+with.
+
+Three consequences, each of which shapes the phase:
+
+- **The card must say what it grants, before it is shown.** R0b's honesty invariant has a
+  dual: a surface that *claims* a capability must confirm it, and a surface that *grants*
+  capabilities must name them. A QR that silently carries more than the person meant to
+  share is the same defect class as `Signed in` over a dead session — the human believes
+  one thing and the artifact does another. This is a words-on-screen requirement, and it
+  belongs in the matrix.
+- **Do not offer to share a capability that cannot be revoked, or say plainly that it
+  cannot.** Calling has live revocation, device-validated in §11. Chat's token return
+  (rung 7) is **unbuilt**, so sharing the chat half today grants something with no
+  take-back. That makes **R7 a gate on shipping the chat half of R6**, not an unrelated
+  later phase — and it is the sort of asymmetry that stays invisible until a UI offers the
+  two side by side.
+- **The split has a practical payoff beyond consent.** The chat section is the bulk of the
+  669 characters (the MLS key package dominates); the calling section is small. A
+  calling-only card is therefore a far lower-density QR and will scan more reliably in bad
+  light at arm's length — which is precisely the in-the-room case R6 exists for. Worth
+  measuring during the phase rather than assuming.
 
 **R7 — capability convergence.** Rung 7 (departure and token return) built against the same
 primitive as calling's revocation, informed by the half that is already device-validated.
