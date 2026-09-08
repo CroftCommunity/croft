@@ -260,7 +260,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 when (val plan = DialAdmission.plan(c, signedIn = auth.provenDid.value != null)) {
                     is DialAdmission.Plan.DialTokenless -> {
                         plan.note?.let { _dialStatus.value = it }
-                        peer.rebindWithToken(null)
+                        // Keeps a live camping pass (§15.3); only binds when
+                        // the endpoint is genuinely unbound.
+                        if (peer.rebindWithToken(null) == null) {
+                            _dialStatus.value = REBIND_FAILED
+                            return@launch
+                        }
                         peer.dial(c.endpointId, callerLabel = "croftcall-android")
                     }
                     is DialAdmission.Plan.Mint -> {
@@ -295,7 +300,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                             }
                             is DialAdmission.Action.Dial -> {
                                 _dialStatus.value = action.note
-                                peer.rebindWithToken(action.authToken)
+                                if (peer.rebindWithToken(action.authToken) == null) {
+                                    _dialStatus.value = REBIND_FAILED
+                                    return@launch
+                                }
                                 peer.dial(c.endpointId, callerLabel = "croftcall-android")
                             }
                         }
@@ -330,4 +338,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Hang up the live call (E129); the peer lands the Ended state. */
     fun hangUp() = peer.hangUp()
+
+    private companion object {
+        /**
+         * The endpoint could not be bound, so there is nothing to dial from.
+         * Dialing anyway is what produced "dial failed: null" on a real screen
+         * (runbook §15.3) — the endpoint was dead and its refusal carried no
+         * message.
+         */
+        const val REBIND_FAILED =
+            "could not reach the relay to place this call — not connected"
+    }
+
 }

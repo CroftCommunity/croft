@@ -1,6 +1,7 @@
 package ing.croft.call.net
 
 import android.util.Log
+import ing.croft.call.DialAdmission
 import ing.croft.call.identity.IdentityStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -186,8 +187,12 @@ class CallPeer(
      */
     suspend fun rebindWithToken(token: String?): String? {
         val before = (state.value as? State.Ready)?.endpointId
-        if (token == authToken && before != null) return before // already bound so
-        authToken = token
+        // A dial never lowers our admission (§15.3). Keeping a live pass costs
+        // nothing; dropping it costs the camp, and under enforce that is real
+        // unreachability. The policy is pure and pinned by RebindPolicyTest.
+        val decision = DialAdmission.rebind(current = authToken, wanted = token)
+        if (decision is DialAdmission.Rebind.Keep && before != null) return before
+        if (decision is DialAdmission.Rebind.Swap) authToken = decision.token
         stop()
         // stop() flips to Idle asynchronously; wait for it before rebinding.
         state.first { it is State.Idle }
@@ -300,7 +305,14 @@ class CallPeer(
                 val hello = readHello(bi)
                 connected(conn, peerEndpointId, "outgoing", hello)
             } catch (t: Throwable) {
-                _state.value = State.Failed("dial failed: ${t.message}")
+                // uniffi builds a generated exception's message from the
+                // variant's FIELDS, so a fieldless variant crosses with an
+                // EMPTY message (the P7 S1 finding, met again here). "dial
+                // failed: null" reached a real screen on 2026-09-08 (§15.3);
+                // the matrix requires words, and null is not words.
+                val why = t.message?.takeIf { it.isNotBlank() }
+                    ?: "the connection was refused and gave no reason (${t.javaClass.simpleName})"
+                _state.value = State.Failed("dial failed: $why")
             }
         }
     }

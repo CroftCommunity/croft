@@ -12,7 +12,21 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
 
 ## Open
 
-- [ ] **A dial drops the caller's camp — reachability lost on every Connect.** [device: android x2]
+- [x] **A dial drops the caller's camp — reachability lost on every Connect.** FIXED 2026-09-08, unit-pinned, DEVICE-OPEN. [device: android x2]
+
+  **The fix:** the relay auth token belongs to the endpoint, so changing it costs
+  a `stop()`/`start()`. `rebindWithToken` swapped unconditionally, and the
+  tokenless dial path called `rebindWithToken(null)` over a live camping pass — a
+  strict downgrade that enforce refuses by definition. `DialAdmission.rebind` is
+  now a pure decision (`RebindPolicyTest`, 5 rows): a dial never lowers
+  admission. Two adjacent faults fixed with it — a failed rebind returned `null`
+  and the dial proceeded against a dead endpoint (both call sites now stop and
+  say so), and the resulting refusal rendered as `dial failed: null`.
+
+  **Still owed: the device run.** 177 unit tests green proves the mapping, not
+  the phone. §15's own lesson is that a unit-green screen-honesty fix was
+  device-BROKEN; this row stays DEVICE-OPEN until a phone dials without losing
+  its camp and the relay journal shows no `no_token` after a Connect tap.
   Found on hardware 2026-09-08 under enforcement (`ops/RUNBOOK-two-device-call-test.md`
   §15.3). One Connect tap tears down the caller's camped relay connection — the relay
   logs `actor errored "Stream terminated, exiting"` and a `usage` close one second
@@ -27,7 +41,7 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
   enforcement. The dial should reuse the camped connection, or at minimum re-present the
   cached pass on the re-attach it causes.
 
-- [ ] **`dial failed: null` — a refusal with no words.** Observed 2026-09-08 (§15.3).
+- [x] **`dial failed: null` — a refusal with no words.** FIXED 2026-09-08. Observed 2026-09-08 (§15.3).
   `docs/ENFORCEMENT-SCENARIOS.md` Dial posture requires "MUST REFUSE — never dials,
   words on screen"; `null` is not words, and the matrix walk cannot catch it because the
   mapping it pins is correct — the message never arrives. Same shape as the P7 S1 uniffi
