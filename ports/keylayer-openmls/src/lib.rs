@@ -253,6 +253,21 @@ impl<P: openmls_traits::OpenMlsProvider + store::Bookkeeping> OpenMlsKeyLayer<P>
         .into_group(&self.persona.provider)
         .map_err(|e| KeyLayerError::Process(e.to_string()))?;
         let epoch = g.epoch().as_u64();
+        // The same hook `create_group` uses, and it was missing here — which is
+        // a different bug from forgetting to persist, because openmls DID write
+        // every row. What was missing was the id to find them by, and openmls
+        // has no enumeration API, so a group whose id nobody kept is a group
+        // nobody can open however complete the store is.
+        //
+        // Found on two phones (S2 rung 5), not by any test above: every restart
+        // test before this one restarted the device that CREATED the group, and
+        // creators take the other path. The joiner came back with its
+        // governance record intact and no MLS group, which looks from the host
+        // like a device that has simply gone quiet.
+        self.persona
+            .provider
+            .remember_group_id(g.group_id().as_slice())
+            .map_err(KeyLayerError::Process)?;
         self.group = Some(g);
         Ok(MergedEpoch { epoch })
     }

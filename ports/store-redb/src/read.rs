@@ -16,7 +16,10 @@ use social_tree_core::model::{
 };
 
 use crate::fold_derived::FoldError;
-use crate::tables::{Db, EdgeMeta, EdgeType, AUTH_ASSERTIONS, IDX_EDGES_OUT, STATE_GROUP};
+use crate::tables::{
+    encode_gov_log_key, Db, EdgeMeta, EdgeType, AUTH_ASSERTIONS, AUTH_GOV_LOG, IDX_EDGES_OUT,
+    STATE_GROUP,
+};
 
 /// One message as the store holds it.
 ///
@@ -188,6 +191,79 @@ fn edges_out(
             .map_err(|e| FoldError::StorageError(e.to_string()))?;
         let meta = EdgeMeta::from_bytes(v.value())?;
         out.push((target, meta));
+    }
+    Ok(out)
+}
+
+/// The group's governance record: every genesis and membership assertion that
+/// seats it, as replayable envelopes in sequence order.
+///
+/// **What this is for (P7 S2).** A device seated by an MLS Welcome holds key
+/// material and nothing else — it does not know the group exists, who is in it,
+/// or that the inviter is entitled to act for the principal their assertions
+/// name. Handing it this record is what closes that gap, and the joining device
+/// folds these exactly as if it had received them itself.
+///
+/// **Envelopes, not derived state, and that is the whole design.** The folded
+/// tables carry no signatures, so a joiner given derived state would have to
+/// take the sender's word for all of it. Given the envelopes it re-verifies
+/// every one against its own fold — the sender is a courier, not an authority.
+///
+/// Governance only: messages are not in the governance log and do not belong in
+/// an invite. They arrive over the wire, sealed, as they are sent.
+///
+/// A group this device has never folded reads as an EMPTY record rather than an
+/// error, the same choice [`members_of_group`] makes and for the same reason: it
+/// is a true answer, and an error would make an ordinary startup look like a
+/// fault.
+///
+/// # Errors
+/// [`FoldError::StorageError`] when a log entry points at an assertion the store
+/// does not hold — a torn store, which must be said out loud rather than
+/// silently yielding a shorter record that would strand the joiner.
+pub fn governance_record(db: &Db, group: &GroupId) -> Result<Vec<Vec<u8>>, FoldError> {
+    let read_txn = db
+        .inner()
+        .begin_read()
+        .map_err(|e| FoldError::StorageError(e.to_string()))?;
+    let log = read_txn
+        .open_table(AUTH_GOV_LOG)
+        .map_err(|e| FoldError::StorageError(e.to_string()))?;
+    let assertions = read_txn
+        .open_table(AUTH_ASSERTIONS)
+        .map_err(|e| FoldError::StorageError(e.to_string()))?;
+
+    // Prefix scan over GroupId(32) || gov_seq(8, big-endian). Big-endian is
+    // what makes lexicographic key order equal numeric sequence order, so this
+    // range is already in replay order and must not be re-sorted.
+    let start = encode_gov_log_key(group, 0);
+    let end = encode_gov_log_key(group, u64::MAX);
+
+    let mut out = Vec::new();
+    for entry in log
+        .range(start.as_slice()..=end.as_slice())
+        .map_err(|e| FoldError::StorageError(e.to_string()))?
+    {
+        let (_key, value) = entry.map_err(|e| FoldError::StorageError(e.to_string()))?;
+        let hash = value.value().to_vec();
+        let raw = assertions
+            .get(hash.as_slice())
+            .map_err(|e| FoldError::StorageError(e.to_string()))?
+            .ok_or_else(|| {
+                FoldError::StorageError(format!(
+                    "governance log points at assertion {hash:?}, which is not in the store"
+                ))
+            })?
+            .value()
+            .to_vec();
+        if raw.is_empty() {
+            return Err(FoldError::StorageError(
+                "stored assertion record is empty".to_string(),
+            ));
+        }
+        // Strip the record's own version byte; what remains is
+        // `canonical_bytes_with_sig`, which is what a joiner replays.
+        out.push(raw[1..].to_vec());
     }
     Ok(out)
 }

@@ -1,9 +1,13 @@
 package ing.croft.social
 
+import uniffi.croft_ffi.ArtifactBox
 import uniffi.croft_ffi.ChatSession
 import uniffi.croft_ffi.FfiException
+import uniffi.croft_ffi.GossipLink
 import uniffi.croft_ffi.Intent
+import uniffi.croft_ffi.RecordClaimsView
 import uniffi.croft_ffi.TreeRow
+import uniffi.croft_ffi.readPairingCode
 
 /**
  * The social surface's state holder: a thin skin over the Rust session.
@@ -20,10 +24,27 @@ import uniffi.croft_ffi.TreeRow
  */
 class SocialSurface private constructor(
     private val session: ChatSession,
+    private val deviceKey: ByteArray,
 ) : AutoCloseable {
 
     /** The last thing that went wrong, in the session's own words, or null. */
     private var notice: String? = null
+
+    /**
+     * This device's join to the selected group's swarm, once started.
+     *
+     * Held beside the session rather than inside it, mirroring the split in the
+     * FFI: the session owns MLS state and the store, the link owns a socket. A
+     * phone that has state and no swarm is the ordinary case after a restart,
+     * and rung 6 is precisely that moment.
+     */
+    private var link: GossipLink? = null
+
+    /** The peer this device paired with, kept so an invite knows who to seat. */
+    private var pairedPeer: uniffi.croft_ffi.PairingCode? = null
+
+    /** A record offered and not yet judged. */
+    private var offered: OfferedRecord? = null
 
     companion object {
         /**
@@ -35,7 +56,7 @@ class SocialSurface private constructor(
          */
         @JvmStatic
         fun open(path: String, signingKey: ByteArray): SocialSurface =
-            SocialSurface(ChatSession.open(path, signingKey))
+            SocialSurface(ChatSession.open(path, signingKey), signingKey)
     }
 
     /** Found a group, named locally on this device. */
@@ -52,11 +73,175 @@ class SocialSurface private constructor(
     /** Delete the last draft character. */
     fun backspace() = guard { session.dispatch(Intent.Backspace) }
 
-    /** Send the draft. */
-    fun send() = guard { session.dispatch(Intent.SendMessage) }
+    /**
+     * Send the draft — sealed to the swarm when there is one.
+     *
+     * With a link, this is `sendSealed`: the assertion is authored, folded
+     * locally so the sender sees their own line at once, then sealed WHOLE and
+     * broadcast, so the far device learns the author from inside the envelope.
+     * Without a link it is an ordinary local send, which is what a group of one
+     * is.
+     */
+    fun send() = guard {
+        val l = link
+        if (l != null && session.hasMlsGroup()) {
+            l.broadcastSealed(session.sendSealed())
+        } else {
+            session.dispatch(Intent.SendMessage)
+        }
+    }
 
     /** Re-read the world from the store. */
     fun refresh() = guard { session.dispatch(Intent.Refresh) }
+
+    // -- the swarm ---------------------------------------------------------
+
+    /**
+     * Join the swarm for [group], if not already on it.
+     *
+     * The group id IS the topic seed, so two devices that agree on the group
+     * agree on the topic without another exchange.
+     */
+    fun startLink(group: ByteArray) {
+        if (link != null) return
+        // Not `guard`: a refusal here is wiped by the next successful guarded
+        // call, because guard clears the notice on success. Starting a link is
+        // the one step whose failure must survive to the screen.
+        try {
+            link = GossipLink.start(deviceKey, group, emptyList())
+            linkedGroup = group
+        } catch (e: FfiException) {
+            notice = FfiRefusal.words(e)
+            android.util.Log.w("croft.social", "link refused: ${FfiRefusal.words(e)}", e)
+        } catch (e: Throwable) {
+            notice = "the swarm could not be joined: ${e.message}"
+            android.util.Log.w("croft.social", "link failed: ${e.message}", e)
+        }
+    }
+
+    /**
+     * The code to show the other phone, or null before a link exists.
+     *
+     * A HOST's code names its group, because the topic is the group id and a
+     * joining device cannot reach the swarm without it. A JOINER's names none —
+     * it has no group yet — and carries only its key package, which is what the
+     * host needs to seat it. Two codes, one each way; found on hardware, where
+     * the JVM tier had been handing the group id between surfaces directly.
+     */
+    fun pairingCode(): String? = guard {
+        link?.pairingCode(session.mlsKeyPackage(), linkedGroup ?: ByteArray(0))
+    }
+
+    /** The group this device's link is on, if any. */
+    private var linkedGroup: ByteArray? = null
+
+    /** Whether a link exists — for a log line during a device run. */
+    fun hasLink(): Boolean = link != null
+
+    /**
+     * Read a code the other phone showed, and dial them.
+     *
+     * A refusal here is the ordinary case — a mistyped or half-scanned code —
+     * so it lands as a notice rather than an exception reaching the screen.
+     */
+    fun pairWith(code: String) = guard {
+        val read = readPairingCode(code)
+        pairedPeer = read
+
+        // A code that names a group, read by a device that has none, is a host
+        // inviting a joiner: join THEIR swarm, bootstrapped to them. Otherwise
+        // it is a joiner's code and this device is the host — remember them, so
+        // the invite knows whose key package to seat.
+        if (read.groupId.isNotEmpty() && link == null) {
+            link = GossipLink.start(deviceKey, read.groupId, listOf(read.card))
+            linkedGroup = read.groupId
+        } else {
+            link?.addPeer(read.card)
+        }
+        Unit
+    }
+
+    /** Wait for the swarm to form, up to [timeoutMs]. */
+    fun awaitPeer(timeoutMs: Long): Boolean = link?.waitForPeer(timeoutMs.toULong()) ?: false
+
+    /**
+     * Invite the peer whose code was read: the Welcome, and the record.
+     *
+     * Both, and in that order. The Welcome alone seats them in the lockbox and
+     * leaves them absent from the record, which looks on their phone like a
+     * conversation that decrypts and shows nothing.
+     */
+    fun invitePairedPeer() = guard {
+        val peer = pairedPeer ?: return@guard
+        val l = link ?: return@guard
+        l.broadcastWelcome(session.invite(peer.keyPackage))
+        l.broadcastRecord(session.recordOffer())
+    }
+
+    /**
+     * Drain whatever has arrived, for up to [timeoutMs], and act on each kind.
+     *
+     * Two branches and a third that only *offers*. A Welcome seats this device
+     * in the lockbox; a sealed message folds; a record is put in front of the
+     * person and nothing more, because accepting it is their call.
+     */
+    fun pumpFor(timeoutMs: Long): Int {
+        val l = link ?: return 0
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var handled = 0
+        while (System.currentTimeMillis() < deadline) {
+            val artifact = l.nextArtifact(250UL)
+            if (artifact == null) {
+                // Quiet after having taken delivery of something means the
+                // queue has drained; keep waiting only while nothing has
+                // arrived at all. A pump that always burned its whole timeout
+                // would make every UI tick cost the timeout.
+                if (handled > 0) break else continue
+            }
+            guard {
+                when (artifact.kind) {
+                    ArtifactBox.WELCOME -> session.acceptInvite(artifact.payload)
+                    ArtifactBox.SEALED -> session.receiveSealed(artifact.payload)
+                    ArtifactBox.RECORD -> offered =
+                        OfferedRecord(artifact.payload, session.readRecord(artifact.payload))
+                }
+            }
+            handled++
+        }
+        return handled
+    }
+
+    /**
+     * Pump until a record is offered, or [timeoutMs] passes.
+     *
+     * Returns what it claims, for a person to judge. Nothing is folded.
+     */
+    fun pumpUntilRecordOffered(timeoutMs: Long): RecordClaimsView? {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline && offered == null) {
+            pumpFor(500)
+        }
+        return offered?.claims
+    }
+
+    /** Accept the offered record — the recorded output of the judgment. */
+    fun acceptOfferedRecord() = guard {
+        offered?.let {
+            session.acceptRecord(it.bytes)
+            offered = null
+        }
+    }
+
+    /**
+     * Decline the offered record.
+     *
+     * A real outcome, not the absence of accepting. Nothing is folded and the
+     * offer is spent; the person can be offered it again if the other device
+     * re-sends.
+     */
+    fun declineOfferedRecord() {
+        offered = null
+    }
 
     /**
      * The current surface state.
@@ -82,10 +267,17 @@ class SocialSurface private constructor(
             draft = view.draft,
             forkBanner = Rendering.forkBanner(view.fork),
             notice = notice,
+            peerCount = link?.neighbourCount()?.toInt() ?: 0,
+            offeredRecord = offered?.claims,
+            hasMlsGroup = session.hasMlsGroup(),
+            mlsEpoch = session.mlsEpoch()?.toLong(),
         )
     }
 
-    override fun close() = session.close()
+    override fun close() {
+        link?.shutdown()
+        session.close()
+    }
 
     /**
      * Run an action, keeping any refusal as words on the surface.
@@ -117,6 +309,12 @@ class SocialSurface private constructor(
     }
 }
 
+/** A record offered by another device, with what it claims. */
+private data class OfferedRecord(
+    val bytes: ByteArray,
+    val claims: RecordClaimsView,
+)
+
 /** Everything the screen needs, in one read. */
 data class SurfaceState(
     /** The groups this identity belongs to. */
@@ -131,6 +329,27 @@ data class SurfaceState(
     val forkBanner: ForkBanner?,
     /** The last refusal, in the session's own words. */
     val notice: String?,
+    /** How many devices are on this group's swarm right now. */
+    val peerCount: Int = 0,
+    /**
+     * A record another device has offered, awaiting this person's judgment.
+     *
+     * Non-null means the screen must show what it claims and offer accept or
+     * decline. Nothing has been folded.
+     */
+    val offeredRecord: RecordClaimsView? = null,
+    /** Whether a real MLS group is seated on this device. */
+    val hasMlsGroup: Boolean = false,
+    /**
+     * The seated group's MLS epoch, or null when none is seated.
+     *
+     * On screen and in every log line because an MLS desync is unreadable
+     * without it: two devices that disagree about the epoch look, from either
+     * one alone, like a device that is simply not receiving. The plan asks for
+     * epoch transitions to be observable for exactly this reason, and the S2
+     * runbook's rung 4 is stated as "the epoch advances 0 -> 1".
+     */
+    val mlsEpoch: Long? = null,
 )
 
 /** A group row. */

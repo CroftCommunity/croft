@@ -34,6 +34,11 @@ store-redb = { path = "../ports/store-redb" }
 # than a shared log, and the seal happens Rust-side beside the store — the same
 # argument as for effects: the material must not cross the FFI.
 keylayer-openmls = { path = "../ports/keylayer-openmls" }
+# S2: the transport. A second port beside the key layer, not folded into it —
+# the session owns MLS state and the store, the link owns a socket and a swarm,
+# and rung 6 (force-stop, relaunch, reload the group) is precisely a moment
+# when there is state and no swarm.
+transport-iroh = { path = "../ports/transport-iroh" }
 # The boundary is the one place a failure can go quiet: Rust returns an error,
 # the binding hands the shell an exception, and what happens next is out of this
 # crate's hands. Emitting here leaves something behind to find afterwards.

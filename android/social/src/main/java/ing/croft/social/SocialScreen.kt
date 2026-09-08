@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -44,9 +45,20 @@ fun SocialScreen(
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
     onCreateGroup: (String) -> Unit,
+    onPairWith: (String) -> Unit = {},
+    onInvite: () -> Unit = {},
+    onAcceptRecord: () -> Unit = {},
+    onDeclineRecord: () -> Unit = {},
+    pairingCode: String? = null,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.fillMaxSize().padding(12.dp)) {
+    // systemBarsPadding, found at rung 5 on hardware. Without it the composer
+    // row is laid out UNDER the gesture navigation bar: on the Samsung the Send
+    // button occupied y 2199-2256 while the nav bar began at 2205, leaving six
+    // reachable pixels. No JVM test can see this, and the emulator's default
+    // navigation does not reproduce it either — it takes a real phone with
+    // gesture nav, which is the whole argument for the device tier.
+    Column(modifier = modifier.fillMaxSize().systemBarsPadding().padding(12.dp)) {
         Text("Croft Social (dev)", style = MaterialTheme.typography.titleMedium)
 
         // The fork banner sits ABOVE everything and is not dismissible. It is
@@ -76,7 +88,22 @@ fun SocialScreen(
             )
         }
 
+        // The judgment sits ABOVE the conversation and cannot be scrolled past,
+        // for the same reason the fork banner does: it is a decision the person
+        // has to make, not a notification about one already made.
+        state.offeredRecord?.let { claims ->
+            RecordOfferCard(claims, onAcceptRecord, onDeclineRecord)
+        }
+
         GroupList(state.groups, onSelectGroup, onCreateGroup)
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        PairingPanel(
+            code = pairingCode,
+            peerCount = state.peerCount,
+            canInvite = state.groups.any { it.selected },
+            onPairWith = onPairWith,
+            onInvite = onInvite,
+        )
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
         MembersPanel(state.members)
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
@@ -202,3 +229,117 @@ private fun Composer(
 /** First four bytes as hex — enough to tell two principals apart on a screen. */
 private fun shortHex(bytes: ByteArray): String =
     bytes.take(4).joinToString("") { "%02x".format(it) }
+
+
+/**
+ * What another device is offering, and the two ways out of it.
+ *
+ * This is the middle of a bounded exchange: the person has scanned or pasted a
+ * code, and now sees what they would be taking on before taking it. Both
+ * buttons are real outcomes — a card whose only exit is "Accept" would make the
+ * judgment decorative.
+ *
+ * The claims are rendered verbatim from the core. Nothing here summarises or
+ * softens them, for the same reason the standing labels are rendered verbatim:
+ * a shell that edits what a record claims is a shell that can flatter it.
+ */
+@Composable
+private fun RecordOfferCard(
+    claims: uniffi.croft_ffi.RecordClaimsView,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text("A device is offering you a group.", fontWeight = FontWeight.Bold)
+            Text(
+                "group ${shortHex(claims.group)}",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            claims.founder?.let {
+                Text("founded by ${shortHex(it)}", style = MaterialTheme.typography.bodySmall)
+            }
+            Text(
+                "${claims.assertionCount} assertions, seating ${claims.seats.size}",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            claims.seats.forEach { seat ->
+                Text(
+                    "  ${shortHex(seat.principal)}  ${seat.role}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Text(
+                if (claims.wouldSeatMe) "It would seat you." else "It would NOT seat you.",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold,
+            )
+            if (claims.alreadyFolded) {
+                Text(
+                    "You are already in this group.",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontStyle = FontStyle.Italic,
+                )
+            }
+            Row(modifier = Modifier.padding(top = 8.dp)) {
+                Button(onClick = onAccept) { Text("Accept") }
+                Button(
+                    onClick = onDecline,
+                    modifier = Modifier.padding(start = 8.dp),
+                ) { Text("Decline") }
+            }
+        }
+    }
+}
+
+/**
+ * Pairing: show this device's code, take the other one's, and say who is here.
+ *
+ * `peerCount` is not decoration. Gossip delivers only to the neighbours it has
+ * at the moment of the call, so a person who invites into an empty swarm gets
+ * silence and no error. Showing the count is what makes "wait until the other
+ * phone is here" something they can actually see.
+ */
+@Composable
+private fun PairingPanel(
+    code: String?,
+    peerCount: Int,
+    canInvite: Boolean,
+    onPairWith: (String) -> Unit,
+    onInvite: () -> Unit,
+) {
+    val theirs = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+
+    Text("Pairing", style = MaterialTheme.typography.labelLarge)
+    Text(
+        if (peerCount == 0) "nobody else on this group yet" else "$peerCount other device(s) here",
+        style = MaterialTheme.typography.bodySmall,
+        fontStyle = FontStyle.Italic,
+    )
+    if (code != null) {
+        Text("your code:", style = MaterialTheme.typography.bodySmall)
+        // Selectable so it can be copied off the screen; a 569-character code
+        // is not something anyone should have to read aloud if a camera works.
+        androidx.compose.foundation.text.selection.SelectionContainer {
+            Text(code, style = MaterialTheme.typography.bodySmall, maxLines = 3)
+        }
+    }
+    OutlinedTextField(
+        value = theirs.value,
+        onValueChange = { theirs.value = it },
+        label = { Text("their code") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = false,
+        maxLines = 3,
+    )
+    Row {
+        Button(onClick = { onPairWith(theirs.value) }, enabled = theirs.value.isNotBlank()) {
+            Text("Pair")
+        }
+        Button(
+            onClick = onInvite,
+            enabled = canInvite && peerCount > 0,
+            modifier = Modifier.padding(start = 8.dp),
+        ) { Text("Invite") }
+    }
+}

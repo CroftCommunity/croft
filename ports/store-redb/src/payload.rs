@@ -91,9 +91,79 @@ fn role_byte(role: Role) -> u8 {
     }
 }
 
+/// The principal and role a `MembershipAdd` payload seats.
+///
+/// The inverse of [`encode_membership_add_payload`], and it lives beside it on
+/// purpose. The fold already decodes this layout privately; a second private
+/// copy in the FFI would be the third, and this repo's own wire module exists
+/// because the corpus once shipped three copies of an envelope decoder, one of
+/// which silently mis-parsed. A shared decoder with a round-trip test is how
+/// the two halves are kept from drifting.
+///
+/// Returns `None` rather than erroring: the caller here is reading a record
+/// offered by another device, where a malformed payload is a thing to refuse
+/// politely, not an exceptional condition.
+#[must_use]
+pub fn decode_membership_add_payload(payload: &[u8]) -> Option<(PrincipalId, Role)> {
+    if payload.len() < 33 {
+        return None;
+    }
+    let mut raw = [0u8; 32];
+    raw.copy_from_slice(&payload[..32]);
+    let role = role_from_byte(payload[32])?;
+    Some((PrincipalId::new(raw), role))
+}
+
+/// The role a wire byte names, or `None` for one this build does not know.
+///
+/// Total `match`, mirroring [`role_byte`], so a new role breaks the build in
+/// both directions rather than in neither.
+#[must_use]
+fn role_from_byte(b: u8) -> Option<Role> {
+    match b {
+        0 => Some(Role::Owner),
+        1 => Some(Role::Admin),
+        2 => Some(Role::Member),
+        3 => Some(Role::Observer),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The round trip is the test that matters: an encoder and a decoder that
+    /// disagree is precisely the failure this pair is meant to prevent, and
+    /// only driving both catches it.
+    #[test]
+    fn every_role_survives_the_membership_round_trip() {
+        for role in [Role::Owner, Role::Admin, Role::Member, Role::Observer] {
+            let principal = PrincipalId::new([0x7A; 32]);
+            let encoded = encode_membership_add_payload(&principal, role.clone());
+
+            let (got_principal, got_role) =
+                decode_membership_add_payload(&encoded).expect("what we encoded decodes");
+
+            assert_eq!(got_principal, principal);
+            assert_eq!(got_role, role, "a role did not survive the round trip");
+        }
+    }
+
+    #[test]
+    fn a_short_membership_payload_decodes_to_nothing() {
+        for len in [0usize, 1, 32] {
+            assert!(decode_membership_add_payload(&vec![0u8; len]).is_none());
+        }
+    }
+
+    #[test]
+    fn an_unknown_role_byte_decodes_to_nothing() {
+        let mut p = encode_membership_add_payload(&PrincipalId::new([1; 32]), Role::Owner);
+        p[32] = 0x5B;
+
+        assert!(decode_membership_add_payload(&p).is_none());
+    }
 
     #[test]
     fn a_genesis_payload_is_the_fifty_bytes_the_reader_requires() {

@@ -680,6 +680,55 @@ the standing rig) exchange sealed messages in a group one of them planted; a dep
 with per-plane rungs stated in the runbook style.
 
 
+**S2 CLOSED 2026-09-08/09. Rungs 1-6 GREEN on two real phones; rung 7 not run.**
+
+*Done when* asked for: two real devices exchanging sealed messages in a group
+one of them planted (**yes**), a departure + token return device-to-device
+(**no — not built, rung 7 untouched**), state surviving an app restart
+(**yes, on both devices**), the JVM sealed-round-trip test green (**yes**), and
+the device run recorded runbook-style (**yes**,
+`ops/RUNBOOK-s2-two-device-sealed-chat.md`, results under every rung).
+
+So S2 closes with its behavioural half met except the departure arc, which is
+carried — along with the lost-race scenario from S1, which this run could have
+staged and did not.
+
+**What the run actually bought, and it was not the green ladder.** Six defects
+surfaced between rung 3 and rung 6, none reachable from any tier below the
+device one, and two of them silent on the device that had the problem: no
+INTERNET permission; a pairing code that could not carry the group id (so a
+joiner could never reach the swarm — the JVM test had been handing the id
+between surfaces directly, which no phone can do); a device seated by a Welcome
+that never persisted its group id (every earlier restart test restarted the
+group's CREATOR); a host with no credential for its own invitee, which then
+forgot it again across a restart; and two UI defects — the composer behind the
+keyboard that opens it, and Send under the gesture navigation bar with six
+reachable pixels. Each is fixed with a test that fails without the fix. The
+runbook's own table records which tier could never have caught which.
+
+**Q2 was honoured, and its premise was false.** The plan said the transport was
+"wiring rather than a new dependency — the app already carries iroh on both
+sides of the FFI". Neither half held: the Rust workspace had no iroh, and the
+Kotlin artifact the calling app carries ships zero gossip classes. Put to the
+owner as a fork; the owner chose Rust-side gossip (2026-08-27). Measured cost:
+`libcroft_ffi.so` 6.3 MB -> 29.6 MB.
+
+**Two design decisions the owner made mid-build**, both of which changed code
+rather than wording. The record travels as a THIRD artifact kind offered two
+ways — inline, or a locator for the day a record outgrows gossip's 4096-byte
+ceiling; the locator form is decoded and refused, with no fetcher written,
+because nothing here could exercise one. And accepting a record is a **bounded
+exchange, not a scan**: `read_record` reports what a record claims and is
+required to touch nothing, `accept_record` folds, and a person goes between
+them. Declining is a real outcome. That is the same shape S3 commits to for the
+DID-persona binding, arriving a phase early.
+
+**E141 confirmed on hardware, expected and not fixed:** the two phones show the
+same group under different names (`new group` on the host, `f097fba4` on the
+joiner), because titles are local truth and are never folded. Nothing complains.
+
+*The earlier pause note, kept because it is what a fresh context was handed:*
+
 **S2 PAUSED 2026-08-27 at the plan's own checkpoint — everything up to needing
 two physical phones is done.**
 

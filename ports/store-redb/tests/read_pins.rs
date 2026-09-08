@@ -231,3 +231,88 @@ fn a_group_with_no_folded_state_reads_as_no_members_rather_than_erroring() {
         .expect("read")
         .is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// The governance record — what an invite hands to a joining device (P7 S2)
+// ---------------------------------------------------------------------------
+
+/// A device seated by an MLS Welcome holds key material and no record: it does
+/// not know the group exists, who is in it, or that the inviter may act for the
+/// principal their assertions name. This read is what closes that gap, so it
+/// has to return the ENVELOPES — signed, whole, replayable — and not the
+/// derived state, which carries no signatures and cannot be re-verified.
+#[test]
+fn a_groups_governance_record_comes_back_as_replayable_envelopes() {
+    let mut f = Fixture::new(1);
+    let group = f.found_group(0xA1);
+    f.say(group, "a message, which is not governance");
+
+    let record = read::governance_record(&f.db, &group).expect("the record reads");
+
+    assert_eq!(
+        record.len(),
+        2,
+        "genesis and the founder's MembershipAdd, and not the message"
+    );
+    for raw in &record {
+        let env = social_tree_core::wire::decode_envelope_from_canonical(raw)
+            .expect("every entry decodes as an envelope");
+        assert_eq!(env.group, group);
+        assert!(
+            !env.signature.is_empty(),
+            "an envelope without its signature cannot be re-verified by the joiner"
+        );
+    }
+}
+
+/// Order is the whole point: a MembershipAdd folded before its genesis is
+/// refused, so a record replayed out of order strands the joining device.
+#[test]
+fn the_record_comes_back_in_governance_sequence_order() {
+    let mut f = Fixture::new(2);
+    let group = f.found_group(0xA2);
+
+    let record = read::governance_record(&f.db, &group).expect("the record reads");
+
+    let kinds: Vec<AssertionType> = record
+        .iter()
+        .map(|raw| {
+            social_tree_core::wire::decode_envelope_from_canonical(raw)
+                .unwrap()
+                .assertion_type
+        })
+        .collect();
+
+    assert_eq!(
+        kinds,
+        vec![AssertionType::GroupGenesis, AssertionType::MembershipAdd],
+        "genesis must come first or the replay cannot fold"
+    );
+}
+
+/// Two groups on one device must not bleed into each other's records — a
+/// joiner admitted to one group would otherwise be handed the other's history.
+#[test]
+fn the_record_carries_only_the_group_asked_for() {
+    let mut f = Fixture::new(3);
+    let mine = f.found_group(0xA3);
+    let other = f.found_group(0xA4);
+
+    let record = read::governance_record(&f.db, &mine).expect("the record reads");
+
+    for raw in &record {
+        let env = social_tree_core::wire::decode_envelope_from_canonical(raw).unwrap();
+        assert_eq!(env.group, mine, "an envelope from {other:?} leaked in");
+    }
+}
+
+/// A group this device has never folded reads as an empty record rather than an
+/// error — the same choice `members_of_group` makes, for the same reason.
+#[test]
+fn a_group_that_was_never_folded_has_an_empty_record() {
+    let f = Fixture::new(4);
+
+    let record = read::governance_record(&f.db, &GroupId::new([0xFF; 32])).expect("no error");
+
+    assert!(record.is_empty());
+}

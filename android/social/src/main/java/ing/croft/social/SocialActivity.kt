@@ -10,7 +10,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import android.app.Application
 import java.io.File
 import java.security.SecureRandom
@@ -36,6 +41,11 @@ class SocialActivity : ComponentActivity() {
                 onDraftChange = vm::setDraft,
                 onSend = vm::send,
                 onCreateGroup = vm::createGroup,
+                onPairWith = vm::pairWith,
+                onInvite = vm::invite,
+                onAcceptRecord = vm::acceptRecord,
+                onDeclineRecord = vm::declineRecord,
+                pairingCode = vm.pairingCode.value,
             )
         }
     }
@@ -59,9 +69,31 @@ class SocialViewModel(app: Application) : AndroidViewModel(app) {
 
     val state = mutableStateOf(surface.state())
 
+    /** This device's pairing code, once a link is up. */
+    val pairingCode = mutableStateOf<String?>(null)
+
     fun createGroup(title: String) = act { surface.createGroup(title) }
-    fun selectGroup(id: ByteArray) = act { surface.selectGroup(id) }
+
+    /**
+     * Select a group and join its swarm.
+     *
+     * Joining on selection rather than on launch: the topic is derived from the
+     * group, so there is nothing to join until one is chosen.
+     */
+    fun selectGroup(id: ByteArray) = act {
+        surface.selectGroup(id)
+        surface.startLink(id)
+    }
+
     fun send() = act { surface.send() }
+
+    fun pairWith(code: String) = act { surface.pairWith(code) }
+
+    fun invite() = act { surface.invitePairedPeer() }
+
+    fun acceptRecord() = act { surface.acceptOfferedRecord() }
+
+    fun declineRecord() = act { surface.declineOfferedRecord() }
 
     /**
      * Replace the draft with [text].
@@ -78,12 +110,54 @@ class SocialViewModel(app: Application) : AndroidViewModel(app) {
         surface.type(text)
     }
 
+    /**
+     * The receive pump.
+     *
+     * On its own thread and running for the ViewModel's life, because artifacts
+     * arrive when the other phone sends them and not when this one taps
+     * something. Each tick drains whatever is waiting and republishes the
+     * state; a tick with nothing in it costs one 250ms poll inside the link.
+     *
+     * `Dispatchers.IO` rather than `Default`: the pump blocks on a channel, and
+     * blocking a `Default` worker starves the pool it shares with everything
+     * else.
+     */
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                val handled = runCatching { surface.pumpFor(1_000) }.getOrDefault(0)
+                if (handled > 0) {
+                    withContext(Dispatchers.Main) { republish() }
+                }
+            }
+        }
+    }
+
+    private fun republish() {
+        state.value = surface.state()
+        val s = state.value
+        Log.d(
+            TAG,
+            "pump: groups=${s.groups.size} timeline=${s.timeline.size} " +
+                "peers=${s.peerCount} mls=${s.hasMlsGroup} epoch=${s.mlsEpoch} " +
+                "offered=${s.offeredRecord != null}",
+        )
+    }
+
     private inline fun act(block: () -> Unit) {
         block()
+        // Refreshed after EVERY action, not just group selection. A JOINER
+        // never selects a group — it has none — so a code computed only there
+        // left the joining device with nothing to show, and the exchange is
+        // two-way. Found on hardware at rung 4.
+        pairingCode.value = surface.pairingCode()
+        Log.d(TAG, "link: started=${surface.hasLink()} code=${pairingCode.value?.length ?: -1}")
         state.value = surface.state()
         val s = state.value
         Log.d(TAG, "state: groups=${s.groups.size} selected=${s.groups.count { it.selected }} " +
-            "timeline=${s.timeline.size} members=${s.members.size} draft='${s.draft}'")
+            "timeline=${s.timeline.size} members=${s.members.size} peers=${s.peerCount} " +
+            "mls=${s.hasMlsGroup} epoch=${s.mlsEpoch} " +
+            "offered=${s.offeredRecord != null} draft='${s.draft}'")
         s.notice?.let { Log.w(TAG, "refused: $it") }
     }
 

@@ -276,3 +276,59 @@ fn seated_fold() -> MemStore {
         .expect("the governance decision folds first");
     store
 }
+
+/// **The joiner's restart, which nothing above covers.**
+///
+/// Found on two phones at S2's rung 5, and invisible to every test that came
+/// before it because they all restarted the device that CREATED the group.
+/// A creator persists its group id on the way through `create_group`; a device
+/// seated by a Welcome took a different path and persisted nothing, so its MLS
+/// group lived in memory only.
+///
+/// The symptom is the nastiest shape this phase knows. Nothing fails at join
+/// time, nothing fails on the host, and every openmls row is sitting in the
+/// store — but croft cannot find them again, because openmls has no
+/// enumeration API and the id was never written down. The joiner simply comes
+/// back with no group, and the conversation is over with no error until
+/// someone speaks.
+#[test]
+fn a_member_seated_by_a_welcome_still_has_its_group_after_a_restart() {
+    let dir = temp_dir("joiner-restart");
+    let alice_path = dir.join("alice.redb");
+    let bob_path = dir.join("bob.redb");
+
+    let fold = seated_fold();
+
+    let (welcome, bob_group_id) = {
+        let mut bob = OpenMlsKeyLayer::persistent(bob_id(), &bob_path).expect("bob");
+        let bob_kp = bob.key_package_bytes().expect("bob's key package");
+
+        let mut alice = OpenMlsKeyLayer::persistent(alice_id(), &alice_path).expect("alice");
+        alice.create_group().expect("create");
+        alice
+            .deposit_key_package(bob_id(), &bob_kp)
+            .expect("deposit");
+        let slip = authorize_invite_enactment(&bob_id(), fold.state(&the_group()))
+            .expect("the folded decision mints the slip");
+        let welcome = alice.add_with_welcome(slip).expect("enact").welcome;
+
+        bob.join_from_welcome(&welcome).expect("bob seats");
+        let id = bob.group_id().expect("a seated member has a group id");
+        (welcome, id)
+    }; // both processes end — the phones were force-stopped
+
+    let _ = &welcome;
+
+    let mut bob = OpenMlsKeyLayer::persistent(bob_id(), &bob_path).expect("bob restarts");
+
+    assert_eq!(
+        bob.stored_group_ids().expect("read ids"),
+        vec![bob_group_id],
+        "a member seated by a Welcome must write its group id down too — an id \
+         nobody kept is a group nobody can open, however much of it is in the store",
+    );
+    assert!(
+        bob.load_group().expect("load"),
+        "and the group must come back when it restarts"
+    );
+}

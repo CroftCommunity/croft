@@ -16,6 +16,8 @@
 
 /// What can go wrong, in the session's own words.
 pub mod error;
+/// The gossip link: this device's join to a group's swarm.
+pub mod link;
 /// One substrate instance, the ports beside it, and the pond's loop over both.
 pub mod session;
 
@@ -111,6 +113,29 @@ pub enum FfiError {
         /// The fold's own words.
         reason: String,
     },
+    /// The transport refused, in its own words.
+    #[error("transport: {reason}")]
+    Transport {
+        /// What the transport said.
+        reason: String,
+    },
+    /// A pairing code could not be read.
+    ///
+    /// Separate from [`FfiError::Transport`] because its words are read by a
+    /// PERSON standing between two phones mid-pairing, not by a developer
+    /// reading a stack trace. Flattening the two would put the wrong register
+    /// of sentence in front of someone trying to type a code.
+    ///
+    /// Named `BadPairingCode` and not `PairingCode` so the generated
+    /// `FfiException.BadPairingCode` does not sit one letter from the
+    /// `PairingCode` RECORD a shell also holds. Both are generated into one
+    /// Kotlin file; two things called `PairingCode`, one an error and one a
+    /// value, is a trap for whoever writes the shell next.
+    #[error("{reason}")]
+    BadPairingCode {
+        /// What was wrong, in words for the person pairing.
+        reason: String,
+    },
 }
 
 impl From<error::SessionError> for FfiError {
@@ -155,7 +180,9 @@ impl FfiError {
             | FfiError::EmptyDraft { reason }
             | FfiError::NoSuchGroup { reason, .. }
             | FfiError::Storage { reason }
-            | FfiError::Refused { reason } => reason,
+            | FfiError::Refused { reason }
+            | FfiError::Transport { reason }
+            | FfiError::BadPairingCode { reason } => reason,
         }
     }
 }
@@ -266,6 +293,61 @@ pub struct MemberRow {
 pub struct MembersPane {
     /// Rows in roster order.
     pub rows: Vec<MemberRow>,
+}
+
+/// One seat a record would establish.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SeatClaim {
+    /// The principal seated, 32 bytes.
+    pub principal: Vec<u8>,
+    /// The role, in the core's own words.
+    pub role: String,
+}
+
+/// What an offered record claims, for a person to judge before accepting.
+///
+/// This is the middle of a bounded exchange — scan, see who this is and what
+/// they claim, accept — and it exists so the judgment has something to be about.
+/// Reading a record produces this and folds nothing.
+///
+/// It carries no group TITLE, and that is correct rather than missing: titles
+/// are local truth on each device and are never folded (roadmap E141), so a
+/// record cannot carry one. Two phones showing different names for one group is
+/// expected.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RecordClaimsView {
+    /// The group every assertion belongs to, 32 bytes.
+    pub group: Vec<u8>,
+    /// Who authored the genesis, if there is one.
+    pub founder: Option<Vec<u8>>,
+    /// Who this record would seat, and how.
+    pub seats: Vec<SeatClaim>,
+    /// Whether this device's own principal is among them.
+    pub would_seat_me: bool,
+    /// How many assertions the record carries.
+    pub assertion_count: u32,
+    /// Whether this device already holds folded state for the group.
+    pub already_folded: bool,
+}
+
+impl From<session::RecordClaims> for RecordClaimsView {
+    fn from(c: session::RecordClaims) -> Self {
+        RecordClaimsView {
+            group: c.group.as_bytes().to_vec(),
+            founder: c.founder.map(|p| p.as_bytes().to_vec()),
+            seats: c
+                .seats
+                .into_iter()
+                .map(|(principal, role)| SeatClaim {
+                    principal: principal.as_bytes().to_vec(),
+                    role: format!("{role:?}"),
+                })
+                .collect(),
+            would_seat_me: c.would_seat_me,
+            assertion_count: c.assertion_count as u32,
+            already_folded: c.already_folded,
+        }
+    }
 }
 
 /// The whole rendered chat surface.
@@ -429,6 +511,45 @@ impl ChatSession {
     /// Open a sealed message from the seated group.
     pub fn open_sealed(&self, wire: Vec<u8>) -> Result<Vec<u8>, FfiError> {
         Ok(self.lock().open_sealed(&wire)?)
+    }
+
+    /// Send the draft as a sealed assertion, returning what to broadcast.
+    ///
+    /// Not `seal(plaintext)`: what crosses is the whole signed assertion, so
+    /// the far device learns the author from inside it and can fold it. See
+    /// `Session::send_sealed`.
+    pub fn send_sealed(&self) -> Result<Vec<u8>, FfiError> {
+        Ok(self.lock().send_sealed()?)
+    }
+
+    /// Open a sealed assertion from the swarm and fold it.
+    ///
+    /// `false` means it was already known — the normal consequence of gossip
+    /// delivering the same artifact twice — not a failure.
+    pub fn receive_sealed(&self, wire: Vec<u8>) -> Result<bool, FfiError> {
+        Ok(self.lock().receive_sealed(&wire)?)
+    }
+
+    // -- the record, offered and judged ------------------------------------
+
+    /// This group's record, encoded to offer to a joining device.
+    pub fn record_offer(&self) -> Result<Vec<u8>, FfiError> {
+        let session = self.lock();
+        let envelopes = session.group_record()?;
+        Ok(transport_iroh::record::encode_inline(&envelopes)?)
+    }
+
+    /// What an offered record claims. Folds nothing.
+    pub fn read_record(&self, offer: Vec<u8>) -> Result<RecordClaimsView, FfiError> {
+        Ok(self.lock().read_record(&offer)?.into())
+    }
+
+    /// Accept an offered record: register its authors and fold it.
+    ///
+    /// The recorded output of a person's judgment. Returns how many assertions
+    /// were newly folded; zero means it was already known.
+    pub fn accept_record(&self, offer: Vec<u8>) -> Result<u32, FfiError> {
+        Ok(self.lock().accept_record(&offer)? as u32)
     }
 }
 
