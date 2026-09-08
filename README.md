@@ -42,15 +42,28 @@ the lightest, and returner-side "admission voided" legibility — each pinned by
 tests that also check what the words must NOT say. The calling app's APK
 contains none of it, because the code is not in that module's dependency graph.
 
-**Chat is sealed on-device (P7 S2, paused 2026-08-27).** MLS state persists
-across restarts — openmls's `StorageProvider` implemented over redb — and
-sealed chat crosses the FFI: `make bindings` runs a JVM test that seals on one
-substrate, opens on another, and refuses a stranger. The invite path folds the
-governance decision first and mints its enactment slip from that folded state,
-so the crypto cannot seat someone the record never admitted. What is **not**
-built: the device-to-device transport, so nothing yet carries a Welcome or a
-sealed message between two phones. `ops/RUNBOOK-s2-two-device-sealed-chat.md`
-is written and not yet run.
+**Sealed chat runs between two real phones (P7 S2, closed 2026-09-08/09).**
+MLS state persists across restarts — openmls's `StorageProvider` implemented
+over redb — and the invite path folds the governance decision first, minting its
+enactment slip from that folded state, so the crypto cannot seat someone the
+record never admitted.
+
+The transport is **iroh-gossip, device to device**, with the relay disabled and
+no discovery service: a phone learns where to reach another only from a pairing
+code a person carried across, so no relay is contacted by construction rather
+than by care. An invite hands over two things — the MLS Welcome, and the
+group's **record** as replayable signed assertions, because a Welcome alone
+seats a device in the lockbox and leaves it absent from the record. Accepting
+that record is a bounded exchange rather than a scan: the joining phone is shown
+what the record claims, and folds nothing until a person accepts. Declining is a
+real outcome.
+
+Rungs 1–6 of `ops/RUNBOOK-s2-two-device-sealed-chat.md` are **green on
+hardware** and recorded there — including rung 6, where both phones are
+force-stopped and the restarted one seals a message the *other* device opens.
+The run found six defects no lower test tier could reach, two of them silent on
+the device that had the problem. Rung 7, the departure and token-return arc, is
+**not built and not run**.
 
 ## The shape
 

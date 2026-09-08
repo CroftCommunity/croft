@@ -43,21 +43,39 @@ bindings over a real redb store — and the calling app's APK contains **zero**
 entries matching `ing/croft/social` or `libcroft_ffi`, with its native
 libraries unchanged. 164 calling-app tests green and untouched, 26 social tests
 green, nothing skipped. E116's four presentation obligations are landed and
-pinned. **P7 S2 is PAUSED 2026-08-27 at its own checkpoint**, with everything
-short of two physical phones done: MLS state now **persists** (openmls's
-`StorageProvider` over redb, `ports/keylayer-openmls/src/store.rs` — the probe
-P0-2 required found upstream's sqlite provider does **not** support wasm32, so
-it would have capped S5), the key layer reloads a group after a restart, and
-**sealed chat crosses the FFI with the JVM checkpoint green (12/12,
-`make bindings`)** — seal on one substrate, open on another, a stranger
-refused. The invite path is the real arc: governance folds first, the slip is
-minted from that folded state, then MLS enacts. **Not built and needed before
-any device run: the iroh-gossip transport and a pairing step** — the JVM tier
-passes Welcomes and sealed messages as byte arrays inside the test, so nothing
-yet carries them between two phones. Start at
-`ops/RUNBOOK-s2-two-device-sealed-chat.md`, which is written but **NOT RUN**.
-Still owed: the lost-race scenario and the departure/token-return arc, both of
-which need that second device. The **android
+pinned. **P7 S2 CLOSED 2026-09-08/09: sealed chat runs between two real phones.**
+MLS state **persists** (openmls's `StorageProvider` over redb,
+`ports/keylayer-openmls/src/store.rs` — the probe P0-2 required found upstream's
+sqlite provider does **not** support wasm32, so it would have capped S5), and
+sealed chat crosses the FFI with the JVM checkpoint green. The transport is
+**iroh-gossip, Rust-side** (`ports/transport-iroh`) with `RelayMode::Disabled`
+and no discovery service: peers are learned only from a pairing code a person
+carries, so no relay is contacted by construction rather than by care. Q2's
+stated premise was FALSE — this workspace had no iroh, and the Kotlin artifact
+the calling app carries ships zero gossip classes — and the owner chose to
+honour Q2 in Rust anyway (2026-08-27); measured cost, `libcroft_ffi.so` 6.3 MB
+-> 29.6 MB. A group's **record** travels as a third artifact kind, offered
+inline or by locator (the locator form is decoded and refused; no fetcher is
+written because nothing can exercise one yet). Accepting a record is a **bounded
+exchange, not a scan**: `readRecord` reports what it claims and folds nothing,
+`acceptRecord` folds, and a person decides between them — declining is a real
+outcome. **Rungs 1-6 of `ops/RUNBOOK-s2-two-device-sealed-chat.md` are GREEN on
+hardware** and recorded there: both apps installed with the calling app
+fingerprinted untouched, real MLS at epoch 0, the two-code pairing exchange, the
+epoch advancing 0 -> 1, sealed messages crossing BOTH ways with the sender's
+principal rendered from inside the envelope, and — rung 6, the one the phase
+exists for — both devices force-stopped and relaunched, after which the
+restarted host sealed a message the OTHER device opened. The run found **six
+defects no tier below it could reach**, two of them silent on the device that
+had the problem (no INTERNET permission; a pairing code that could not carry the
+group id; a Welcome-seated device that never persisted its group id; a host with
+no credential for its own invitee, forgotten again on restart; the composer
+behind the keyboard; Send under the navigation bar) — each now fixed with a test
+that fails without the fix. **E141 is confirmed on hardware and is not a bug:**
+the two phones name the same group differently, because titles are local truth
+and are never folded. Not run: **rung 7**, the departure and token-return arc,
+which is still not built.
+ The **android
 app** — the inherited croftcall client — builds, launches, and is published as
 **`v0.4.0`** (Latest): camps on **our relay** (`relay.croft.ing:8443`),
 reports the live connection path, redeems exchange invite links (Phase 11
