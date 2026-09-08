@@ -119,6 +119,22 @@ pub struct PairingBlob {
 **R7 — capability convergence.** Rung 7 (departure and token return) built against the same
 primitive as calling's revocation, informed by the half that is already device-validated.
 
+**How code in this stream is allowed to travel** (`CroftC/.claude/SHARED-CODE.md`, landed
+2026-09-08 while this plan was being written). R1–R5 are unaffected: `call-core`,
+`chat-core`, the ports, `ffi` and `shell` are members of one Cargo workspace, and rule 1
+explicitly permits path dependencies *inside* a repo — the rule is about the repo boundary.
+**R3 is the one phase that touches a boundary.** croft-stack already has `attach_probe`,
+which mints and attaches against the real relay, and a headless croft binary wanting that
+logic must take it as a **git dependency pinned to a commit**, or leave it in croft-stack
+and drive it — never a copy. A copy would be debt with a name (rule 4) and would land as a
+FLAG on its first audit. The same applies to anything R7 wants from croft-stack's admit.
+
+*Recorded because it is a live false positive, not a rule to work around:* check 47a
+currently FLAGs `croft/ffi/Cargo.toml` for `path = "src/bin/uniffi-bindgen.rs"`. That is a
+`[[bin]]` target path in uniffi's recommended layout, the file exists in-repo, and it is
+not a dependency. Reported to the dimension's author 2026-09-08; croft should read GREEN on
+47a. Do not restructure `ffi/` to satisfy it.
+
 ## Reasoning
 
 **Why one stream rather than two that coordinate.** The three primitives are already
