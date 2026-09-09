@@ -188,13 +188,69 @@ Measured state, 2026-09-08: `ing.croft.iroh.endpoint` is published and public �
 calling reaches a device — while an MLS **key package exists only inside the carried
 pairing blob**, with no record type at all. That asymmetry is the whole of the gap.
 
-- **What it needs:** a published key-package record, so a person can be invited without
-  being handed 669 characters. That is a new `ing.croft.*` type and therefore
-  `LEXICONS.md`'s four acts, **investigate first** — search the official lexicons *and*
-  `community.lexicon.*` *and* what we already consume, and record what was checked. MLS has
-  a Delivery Service concept and a published-key-package shape may already exist; minting
-  ours before looking is the failure that document exists to prevent. Validate on the way
-  **in**: a real PDS accepted a record missing every required field.
+- **What it needs — and the investigate act is DONE (2026-09-08). It changed the shape.**
+
+  *Act 1, all three places searched, nothing found:*
+
+  | Where | Checked | Result |
+  |---|---|---|
+  | Official | `app.bsky.*`, `com.atproto.*`, `chat.bsky.*`, `tools.ozone.*` | no key-material type of any kind |
+  | `community.lexicon.*` | the seven live namespaces — app, bookmarks, calendar, interaction, location, payments, preference | none cryptographic |
+  | Third-party / consumed | the `awesome-lexicons` catalogue; our own `ing.croft.*`, `fyi.forage.*`, `exchange.recipe.*` | none cryptographic |
+
+  **Note for LEXICONS.md:** `community.lexicon.*` **moved**. The
+  `lexicon-community/lexicon` GitHub repo was archived 2026-07-27 and development is now
+  at `tangled.org/lexicon.community/lexicons`. A search that stops at the GitHub repo now
+  reads an archive.
+
+  *The pattern, which is what makes this survive someone finding a fifth candidate:* the
+  ecosystem has no key-material type because **every atproto E2EE effort keeps its key
+  material in its own service rather than in the repo.** Germ — the first third-party
+  encrypted messenger inside Bluesky, MLS-based, atproto for identity — authenticates with
+  atproto and runs its own delivery service. That is the same observation the meer plan
+  already recorded from the other direction: *"No MLS delivery service exists to copy,
+  because everyone else's DS is their product."* Nobody has minted this type because nobody
+  has tried to put MLS state in a public repo.
+
+  **And there is a protocol reason they have not, which we should not walk into.** RFC 9420
+  KeyPackages are intended to be used **once** — that is what gives the initial message
+  replay protection and forward secrecy. A Delivery Service is what enforces single use;
+  the one documented exception is a client-designated **last-resort** KeyPackage, which may
+  be reused and which the RFCs say to rotate as soon as possible after use and avoid where
+  possible. Clients are expected to *refill* the DS's supply over time.
+
+  An atproto record has none of that. It is durable, world-readable, and only its owner can
+  write or delete it — so **the consumer of a key package cannot consume it**. Publishing
+  one `ing.croft.*` key-package record does not give us a key-package directory; it gives
+  every inviter a permanent last-resort KeyPackage, which is the thing MLS tells you to
+  minimise.
+
+  *So R8's discovery half is not "an endpoint record for key packages".* Three shapes, and
+  the third is where this now points:
+
+  1. **A last-resort record.** One published KeyPackage, reuse accepted, rotated on a
+     schedule and after any observed use. Simplest; weakest initial forward secrecy; needs
+     a story for "observed use", which a public repo does not give you.
+  2. **A set of one-time records, deleted on use.** Correct in MLS terms and unbuildable as
+     stated — the inviter cannot delete from the invitee's repo, so consumption cannot be
+     recorded where the records live.
+  3. **The meer holds the key packages.** A DS is exactly "a mailbox plus a key-package
+     directory with consumption semantics", we already have a meer design for the mailbox
+     half (CISS custodian queues, per-DID, `CISS/docs/plans/2026-08-24-1-plan-meer-custodian-queue.md`,
+     landed on CISS main 2026-08-26), and the atproto record then shrinks to a **pointer**:
+     where my meer is, plus a last-resort package for when it is unreachable.
+
+  **Recommendation: (3), with the atproto record as a pointer and a last-resort fallback.**
+  It is the only one of the three that can enforce single use, it reuses a design that
+  exists rather than inventing a second store, and it keeps the public record small and
+  stable — which matters because a repo record is world-readable forever.
+
+  **What this does NOT settle**, and should not be smuggled through as though it did:
+  widening the meer from "mailbox for ciphertext" to "mailbox plus key-package directory"
+  is a real scope change to a CISS-side design with two open questions of its own. That
+  belongs to whoever owns the meer plan, as a question, not as a consequence of this one.
+  Validate on the way **in** regardless of shape: a real PDS accepted a record missing every
+  required field.
 - **What it does NOT need: the ring walker.** Worth stating because the two look alike and
   are not. *Inviting a specific person is a point lookup* — handle → DID → their key
   package — exactly the shape calling already uses to resolve a callee. *Browsing your
