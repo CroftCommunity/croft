@@ -155,10 +155,25 @@ valuable part. The shared surface is genuinely small — `Endpoint` construction
 `EndpointId` handling — and most of `transport-iroh`'s 1,277 LOC is codec (`frame.rs`,
 `record.rs`, `pairing.rs`) that calling does not want.
 
-**Probe before deciding:** confirm two iroh `Endpoint`s with different `RelayMode`s can
-coexist in one process and one binary without the relay-disabled one acquiring relay
-behaviour. If they cannot, (b) is not merely preferable but forced, and the P7 separation
-claim needs re-examining too.
+**Probe RUN 2026-09-08 — they can coexist, so (b) is a judgment, not a necessity.**
+`ports/transport-iroh/tests/two_relay_modes.rs`: a relay-attaching endpoint
+(`RelayMode::Custom`, pointed at TEST-NET-1 so nothing is contacted and no admission is
+needed) binds beside this crate's severed `GossipTransport` in one process, retries for
+1.5 s, and the severed transport's dial card still carries no relay-shaped address. The
+attempt is the contamination vector, not the attach, so the far end never needing to answer
+is the point rather than a shortcut.
+
+**What that changes.** The recommendation for (b) stands **entirely on the architectural
+argument** — a structural guarantee is worth more than a conventional one — and NOT on a
+technical impossibility. The plan should not be read as though the probe forced it. It also
+means **P7 S2's separation claim is not undermined**: the calling app and the social module
+already share a phone, and severance survives a relay-attaching neighbour.
+
+**The probe's limit, stated.** It asserts what this repo already means by severance — that
+no relay-shaped address escapes into a dial card — which is a property of what the endpoint
+*publishes*, not proof that it never contacts a relay. A stronger claim needs traffic
+observation, which is not available here. If (a) is ever chosen despite the recommendation,
+that stronger evidence is the thing to go and get first.
 
 ### D2 — what is the first macOS artifact?
 

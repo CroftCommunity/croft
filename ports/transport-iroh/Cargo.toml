@@ -47,3 +47,10 @@ data-encoding = "2"
 
 [dev-dependencies]
 tracing-subscriber = "0.3"
+# D1 probe only (tests/two_relay_modes.rs): the probe binds a SECOND, relay-
+# attaching endpoint beside this crate's relay-disabled one, which needs iroh
+# and a runtime directly rather than through GossipTransport. Dev-only on
+# purpose — nothing in src/ may construct a relay-attaching endpoint, which is
+# the property the probe exists to protect.
+iroh = "1.1"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "macros"] }
