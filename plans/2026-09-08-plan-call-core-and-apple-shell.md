@@ -1,6 +1,7 @@
 # Plan — filling `call-core` and standing up the apple shell (roadmap R1–R4)
 
-**Status:** PROPOSED 2026-09-08, Pass 1. Phase 0's D1 is already RUN and green; D4–D6 are
+**Status:** PROPOSED 2026-09-08, three passes complete. **Not ready to execute** — the
+open-question severities are agent-set and need the owner's confirmation (Pass 3, item 5). Phase 0's D1 is already RUN and green; D4–D6 are
 not. Nothing below Phase 0 should start until D4–D6 are answered, because two of them can
 change the shape of R1.
 
@@ -65,6 +66,11 @@ deliberately, as the price of staying additive while croftcall bakes, and it com
 stated expiry: *if R3 has not started when R1 lands, R1 is dead code and should be reverted
 rather than left to rot.* This is the single most likely way this plan goes wrong.
 
+Pass 2 extends that guard one layer up: **R2 without R3 is the same shape** — a port whose
+only caller is its own test suite. The expiry covers R1 and R2 together, and the honest
+reading is that R1–R3 are one unit of work that happens to land in three commits, not three
+independently valuable phases.
+
 **Why additive.** The calling app is released, baking under enforcement, and carries an
 unverified fix. Switching it onto a fresh core in the same motion means two moving things
 and no way to attribute a regression. The core runs as a second implementation graded by
@@ -117,6 +123,11 @@ Everything here was read or run firsthand on 2026-09-08. Anything not listed is 
   own entry.
 - `ops/JOURNAL.md` — R3 and R4 add toolchain requirements (a macOS target, possibly a
   second Rust target). G4 makes that journalled with reason and outcome.
+- `docs/adr/0004-…` — the calling transport port as a port, with D1's reasoning. **R2**
+  (Pass 2 finding; precedent is `0003-keylayer-port.md`).
+- `.github/workflows/ci.yml` — **R1** adds `call-core` to `core-purity`; **R2** adds the new
+  port to the clippy/fmt job. Pass 2 finding: not a doc, but the same failure mode — a
+  reference that goes stale silently.
 - `plans/2026-09-08-plan-one-stream-calling-and-chat.md` — the parent's R1–R4 lines point
   here; no edit needed unless a phase is dropped or renamed.
 
@@ -202,6 +213,12 @@ same matrix that grades the Kotlin, with Android untouched.
       reason intact — a dial never lowers admission)
 - [ ] `docs/ENFORCEMENT-SCENARIOS.md` — `PIN:` syntax extended per D5
 - [ ] the Rust matrix walker per D5
+- [ ] **`core/call-core/clippy.toml`** — the purity lints, copied from
+      `core/social-tree-core/clippy.toml`. Pass 2 finding: they are a **per-crate** config,
+      so without this file a clock read in `call-core` is not a defect, it is invisible
+- [ ] **`.github/workflows/ci.yml`** — add `call-core` to the `core-purity` job's wasm arm,
+      clippy and fmt. Pass 2 finding: every Rust gate names crates explicitly with `-p`, so
+      a new crate lands **outside all of them** and CI stays green over it
 - [ ] `CLAUDE.md` — the "calling app calls none of it" clause becomes accurate again
 
 **Call chain:** `core/call-core` tests → `camp::decide` / `dial::decide`. **This phase has
@@ -219,8 +236,9 @@ document that defines them, which is the only consumer they have until R3.
 `.../DialAdmission.kt`, `.../MainViewModel.kt`, `.../caps/Admit.kt`,
 `docs/ENFORCEMENT-SCENARIOS.md`, `android/app/src/test/java/ing/croft/call/EnforcementMatrixTest.kt`.
 
-**Write-set:** `core/call-core/**`, `Cargo.toml`, `docs/ENFORCEMENT-SCENARIOS.md`,
-`CLAUDE.md`, and the new Rust walker's file.
+**Write-set:** `core/call-core/**` (including its own `clippy.toml`), `Cargo.toml`,
+`.github/workflows/ci.yml`, `docs/ENFORCEMENT-SCENARIOS.md`, `CLAUDE.md`, and the new Rust
+walker's file.
 
 **Shared-state contract:** no mutable state beyond the write-set. No network, no relay, no
 device. Pure `cargo test`.
@@ -233,9 +251,27 @@ Kotlin in this phase.
 **Done when:**
 1. **Behavioural:** the enforcement matrix grades both implementations — a row failing in
    Rust fails the build even though the Kotlin passes.
-2. **Verification:** `cargo test -p call-core` and `./gradlew :app:testDebugUnitTest` both
-   green, and the deliberate perturbation of one matrix row is watched to fail the Rust
-   walker specifically.
+2. **Verification:** the **walker**, not the module — `cargo test -p call-core --test
+   enforcement_matrix` (Pass 3 finding: an earlier draft said `cargo test -p call-core`,
+   which is the isolated-module command the quality gate explicitly flags; it proves the
+   rules work alone and nothing about whether the matrix reaches them). Plus
+   `./gradlew :app:testDebugUnitTest` still green, the deliberate perturbation of one
+   matrix row watched to fail the Rust walker specifically, and
+   `cargo check -p call-core --target wasm32-unknown-unknown` + `cargo clippy -p call-core`
+   green in CI **watched to fail** against a deliberately inserted `SystemTime::now`. A
+   purity gate nobody has watched reject a clock read is not a purity gate.
+
+**Tests first, and the boundaries named** (Pass 3). Write the walker and the row tests
+before the rules. The rules are branching code with real edges, so single-point assertions
+would survive a one-line mutation — name the edges up front:
+- **re-mint margin:** inside the margin mints; *exactly at* the boundary mints; outside
+  reuses. Three points, not one. The Kotlin matrix already pins the boundary case
+  (`a pass exactly at the margin boundary still mints`) and the Rust must too, or the
+  ported rule can drift by one comparison operator with both suites green.
+- **refusal mapping:** each refusal reason maps to its own words — asserted per reason, not
+  "a refusal produces some words".
+- **the R0 rule:** a dial with a live pass and a tokenless want KEEPS; identical token
+  keeps; a different non-null token swaps. The interesting case is the one that regressed.
 
 **Validation:** *Narrow.* Tests are sufficient — no I/O, no shipped artifact changes.
 
@@ -252,6 +288,11 @@ Kotlin in this phase.
 - [ ] bind with a persisted secret key, `RelayMode::Custom` at our relay, auth token carried
 - [ ] the camp/dial lifecycle, with R0's rule enforced *at the port* rather than only in the
       decision layer
+- [ ] **`docs/adr/0004-…`** — Pass 2 finding: a new port has precedent,
+      `docs/adr/0003-keylayer-port.md` is "the key layer is a port". D1's reasoning is the
+      ADR's content and should live there, not only in a plan that will be archived
+- [ ] **`.github/workflows/ci.yml`** — the new port added to the clippy/fmt job beside
+      `transport-iroh` (it is not a pure core, so it belongs in that job, not core-purity)
 - [ ] `CLAUDE.md` — the ports list
 
 **Call chain:** `call-core` decision → port `attach(token)` / `dial(peer)` → iroh
@@ -264,12 +305,17 @@ close one second later. RED against a port that rebinds unconditionally; GREEN a
 that does not. Marked `:live` (per `VERIFICATION.md`, a `:live` suffix is a recorded reason
 not to gate) and run deliberately, not in CI.
 
+**Tests first** (Pass 3): the `:live` regression is written and RED against the current
+rebinding behaviour before the port is written. It is the phase's reason for existing, so
+writing it second would be writing it to fit.
+
 **Depends on:** R1.
 
 **Read-set:** `android/app/.../net/CallPeer.kt` (the lifecycle being ported),
 `ports/transport-iroh/src/transport.rs` (the bind pattern), `core/call-core/**`.
 
-**Write-set:** the new port's crate, `Cargo.toml`, `CLAUDE.md`.
+**Write-set:** the new port's crate, `Cargo.toml`, `.github/workflows/ci.yml`,
+`docs/adr/0004-…`, `CLAUDE.md`.
 
 **Shared-state contract:** **touches the production relay.** Read-only in the operational
 sense — attach, camp, dial, hang up; no admin, no config, no converge. Claim
@@ -280,6 +326,13 @@ local ports beyond iroh's ephemeral UDP. Uses a test account's credentials from
 **Risks:** the biggest is a false green — a test that passes because the relay admitted us
 for a reason unrelated to what we think. Mitigation: assert on the **relay's own journal
 lines**, not just on client-side success, exactly as §15 did.
+
+**Observability** (Pass 3). §15 was diagnosed from the *relay's* journal, not the client's:
+app-tagged logcat was drowned in system noise and the successful mint is silent at every
+client layer. So the port must emit what the relay cannot see — attach attempted, token
+presented or not, rebind decided and why, connection closed and by whom — at `debug`, with
+the endpoint id on every line so a run can be correlated with the journal by eye. Without
+that, a failure here is diagnosed the same expensive way §15 was.
 
 **Done when:**
 1. **Behavioural:** a `cargo test` run on this laptop reproduces the §15 defect against a
@@ -328,6 +381,12 @@ Credentials from `CroftC/.env`; never echoed, never committed. Claim `testbed--r
 **Risks:** the tempting one is letting this become a second client rather than an
 instrument. Guard: it prints observations and exits; it holds no UI state and makes no
 decision the core does not make.
+
+**Observability** (Pass 3). This binary IS the diagnostic surface, so its output is a
+deliverable rather than a side effect: each step of the arc printed with its outcome and
+the endpoint id, and — the part that matters — **the silence cases named out loud**. A
+successful mint is silent at every layer; a binary that prints nothing between "camping"
+and "admitted" reproduces the exact ambiguity that made §13 misread its own evidence.
 
 **Done when:**
 1. **Behavioural:** running one command on this laptop produces
@@ -454,4 +513,60 @@ unchanged. Three things the expansion surfaced that the sketch did not have:
 3. **The matrix walker is Kotlin-only**, so "dual-graded" was an assertion with no
    mechanism. D5 now has to answer it before R1 can have a wiring test.
 
-*Not yet done:* Pass 2 (gap analysis) and Pass 3 (quality gates).
+**Pass 2 — gap analysis, 2026-09-08.** Claims checked against the code rather than the
+plan. Four findings, two of which change phase contents:
+
+1. **Every Rust gate names crates explicitly with `-p`.** `ci.yml`'s `core-purity` job runs
+   `cargo check -p social-tree-core --target wasm32-unknown-unknown`, `-p chat-core`, and
+   clippy/fmt per crate. **A new crate lands outside all of them and CI stays green over
+   it.** For `call-core` that is not cosmetic: WASM-cleanliness and no-clock are the
+   defining properties of a core in this repo, and they would simply not be enforced.
+   Added to R1's changes, write-set and done-when — including *watching* the purity gate
+   reject a deliberately inserted `SystemTime::now`, because a gate nobody has watched
+   fail is indistinguishable from one that is not wired.
+2. **The purity lints are a per-crate `clippy.toml`.** They live in
+   `core/social-tree-core/clippy.toml` (`disallowed-methods` / `disallowed-types` on
+   `SystemTime` and `Instant`). Clippy reads the nearest one, so `call-core` needs its own
+   copy or the lints do not apply. *Observed while checking, and not this plan's to fix:*
+   **`chat-core` has no `clippy.toml`** — it is wasm-checked but not clock-linted today.
+3. **A new port has ADR precedent.** `docs/adr/0003-keylayer-port.md` is "the key layer is
+   a port". R2's D1 reasoning belongs in an ADR, not only in a plan that will be archived.
+   Added to R2 and to Documentation Impact.
+4. **Ships-alone coherence: R2 has R1's problem one layer up.** A port whose only caller is
+   its test suite is the same dead code. The expiry guard now covers R1 and R2 together,
+   and the plan says plainly that R1–R3 are one unit of work landing in three commits.
+
+Dependencies re-verified: R2 genuinely consumes R1's decision types; R3 consumes both; R4
+consumes R3. Concurrency map unchanged — all sequential, no parallel set to audit for
+write-set disjointness, and the one real shared resource (the production relay) already has
+an invariant-shaped contract rather than a mechanism-shaped one.
+
+**Pass 3 — quality gates, 2026-09-08.** Five checks, four fixed in place and one escalated.
+
+1. **R1's verification command was the flagged anti-pattern.** It read
+   `cargo test -p call-core` — the isolated-module form the gate explicitly names as a plan
+   defect, because it proves the rules work alone and nothing about whether anything reaches
+   them. Replaced with the walker command. Worth noting that this plan *argued* against dead
+   code at length and then specified a verification that could not have caught it.
+2. **Boundary cases were unnamed**, so R1's test specifications would have survived a
+   one-line mutation. The re-mint margin is branching code with a real edge — the Kotlin
+   matrix already pins `a pass exactly at the margin boundary still mints` — and a ported
+   rule can drift by one comparison operator with both suites green. Edges now named for
+   the margin, the refusal mapping and the R0 rule.
+3. **No observability was planned for R2/R3**, in a plan whose motivating incident was
+   diagnosed *from the relay's journal* because client logging was useless. Both phases now
+   specify what to emit, including naming the silence cases — a successful mint is silent at
+   every layer, and a binary that prints nothing between "camping" and "admitted" rebuilds
+   the ambiguity that made §13 misread itself.
+4. **TDD ordering was implied, not stated.** R1 and R2 now say which test is written first
+   and why writing it second would mean writing it to fit.
+5. **ESCALATED — the open-question severities are agent-set and unconfirmed.** D4 and D5 are
+   marked BLOCKING on my judgement, D6 PHASE-GATED, D2/D3 ADVISORY. Pass 3 requires the user
+   to see and confirm these before execution starts. **This plan is not ready to execute
+   until that happens**, independent of anything else in it.
+
+Coherence check passed: the plan still solves the problem in its Problem Statement, scope
+has not crept (`caps/` is explicitly out, and R5–R8 stayed with the parent), and the
+reasoning reconstructs from the document alone.
+
+*Three passes complete.* Execution is gated on item 5.
