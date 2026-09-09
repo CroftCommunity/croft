@@ -1,214 +1,457 @@
-# Plan — the apple shell: filling `call-core` so the calling arc can be exercised without two phones
+# Plan — filling `call-core` and standing up the apple shell (roadmap R1–R4)
 
-**Status:** PROPOSED 2026-09-08. Not started. D1–D3 are open and are the point of
-this document; nothing below D1 should be built until it is settled.
+**Status:** PROPOSED 2026-09-08, Pass 1. Phase 0's D1 is already RUN and green; D4–D6 are
+not. Nothing below Phase 0 should start until D4–D6 are answered, because two of them can
+change the shape of R1.
 
-**Motivated by:** `ops/RUNBOOK-two-device-call-test.md` §15 (2026-09-08) — the first
-phone-earned admission lines under enforce, and the dial defect found in the same run.
+**Parent:** `2026-09-08-plan-one-stream-calling-and-chat.md`. That document sequences the
+whole stream (R0–R8) and holds the decisions spanning both workstreams; this one owns
+**R1–R4** and nothing else. R0/R0b are landed. R5–R8 are the parent's.
+
+**Naming note:** no `-N` ordinal, per `CroftC/.claude/TRACKING.md` (retired 2026-08-29 — a
+counter two invisible sessions cannot share). The `phase-plan` skill prescribes one and
+also says to match an existing project convention; this is that case.
 
 ## Problem Statement
 
-**Finding a client defect currently costs two physical phones, a borrowed SIM, and a
-forty-second edit-to-observation cycle.** §15 found that a single Connect tap tears down
-the caller's camped relay connection, costing reachability for four minutes in the worst
-observation. That defect is nine days old — it has been live since the enforce flip — and
-nothing below the two-device tier could see it. The tiers that exist all stop short:
+**Finding a client defect costs two physical phones and a forty-second cycle, and the
+reason is structural rather than a coverage gap.** §15 (2026-09-08) found that one Connect
+tap tore down the caller's camping pass, leaving a phone unreachable for four minutes. That
+defect was nine days old, live under enforcement the whole time, and no tier below two
+devices could see it:
 
-| Tier | Can it see the dial dropping the camp? | Why not |
+| Tier | Could it see it? | Why not |
 |---|---|---|
-| Kotlin unit / journey tests | No | `FixtureExchange` fakes the ports; no real iroh endpoint exists to tear down |
-| `cargo test` (our Rust) | No | Calling is not in our Rust at all |
-| `attach_probe` (croft-stack) | No | Attaches and holds; it never dials, so it never exercises the path |
-| Emulator | Partially, at best | Relay-mediated behaviour is visible, but it is one endpoint and the networking is NAT'd through the host |
-| Two physical phones | **Yes** — this is how it was found | The most expensive tier we have |
+| Kotlin unit / journey tests | No | `FixtureExchange` fakes the ports; no real endpoint exists to tear down |
+| `cargo test` | No | Calling is not in our Rust at all |
+| croft-stack's `attach_probe` | No | It attaches and holds; it never dials |
+| Emulator | Partially | One endpoint, NAT'd networking |
+| Two physical phones | **Yes** | The most expensive tier we have |
 
-The reason the cheap tiers cannot reach it is structural, not an oversight in test
-coverage. **The calling app reaches iroh through upstream Kotlin bindings, not through our
-Rust**, and there are two independent iroh integrations in one APK today:
+The cause is that **the calling app reaches iroh through upstream Kotlin bindings, not
+through our Rust**, and two independent iroh integrations live in one APK:
 
 ```
-CALLING (shipped, v0.5.0)   Kotlin 2,902 LOC ──→ computer.iroh (upstream iroh-ffi, Maven
-                                                  Central, bundles libiroh_ffi.so) ──→ iroh
-SOCIAL  (P7 S2, dev module) Kotlin ──→ our libcroft_ffi.so ──→ our Rust
-                                        (ports/transport-iroh, RelayMode::Disabled) ──→ iroh
+CALLING (released v0.5.0)   Kotlin 2,902 LOC ─→ computer.iroh (upstream, Maven) ─→ iroh
+SOCIAL  (P7 S2, dev module) Kotlin ─→ our libcroft_ffi.so ─→ our Rust ─→ iroh
 ```
 
-The endpoint lifecycle — construct, attach, camp, dial, tear down — lives in
-`net/CallPeer.kt` and `MainViewModel.kt`, driving upstream bindings. It is reachable from
-Kotlin instrumentation and from a real device, and from nowhere else. So is every future
-defect of the same shape.
+`core/call-core/` has been an empty `.gitkeep` since 2026-08-11 and is not a workspace
+member. `shell/` has never had an occupant.
 
-Meanwhile `core/call-core/` has been an empty `.gitkeep` since 2026-08-11, and
-`Cargo.toml` does not list it as a workspace member. `core/feed-core/` and `shell/` are
-the same. The architecture named a home for this work and it was never filled.
-
-**What we want:** to exercise the full calling arc — sign in, camp, be refused, mint, be
-admitted, dial, hang up — on a laptop, against the real relay, in seconds, without adb and
-without borrowing a phone that has someone's SIM in it.
-
-## Approach
-
-Fill `core/call-core` with the calling logic in Rust, and build the macOS client on it.
-Do it **additively**: Android is not touched until the core has been proven by a second
-shell, which honours P7's standing constraint that every phase stay additive while
-croftcall bakes.
-
-**Phase 0 — the decisions and their probes.** D1–D3 below. Each carries a probe that
-must run before the decision is taken, because the last three architectural surprises in
-this repo (`relayUrl()` under refusal, the sqlite `StorageProvider` on wasm32, upstream
-Q2's premise) were all found by probing an assumption that read as obviously true.
-
-**Phase 1 — the decision rules, ported and dual-graded.** Move the pure decision logic —
-`CampAdmission`, `DialAdmission`, the callability derivation in `caps/` — into
-`core/call-core` as an `update(model, intent) -> (model, Vec<effect>)` core. These are
-already pure functions with ports injected and effects at the edges, so this is
-translation rather than untangling. **Android is untouched in this phase.** The
-enforcement scenario matrix (`docs/ENFORCEMENT-SCENARIOS.md`) becomes the shared oracle:
-the same rows must be walked by the Kotlin suite and by a new Rust suite, and a row that
-passes in one and fails in the other is the finding.
-
-**Phase 2 — the calling transport port.** The endpoint lifecycle in Rust, behind whatever
-D1 decides. This is the phase that buys us the defect class §15 found: attach, camp with a
-pass, dial, and — critically — *what happens to the camped connection when a dial starts*,
-as something `cargo test` can assert against a real relay.
-
-**Phase 3 — a headless shell, and the fast loop arrives here.** A Rust binary that walks
-the whole arc against `relay.croft.ing:8443` under enforce and prints what it observed. No
-UI. This is the smallest artifact that solves the stated problem, and it should land
-before any pixel is drawn. It also becomes a CI-able instrument in a way two phones never
-will be.
-
-**Phase 4 — the macOS UI shell.** `shell/` gets its first occupant.
-
-**Phase 5 — Android switches over.** Its own phase, its own device run against this
-runbook, and explicitly *not* a foregone conclusion (D3).
-
-**Sequencing note that is not a phase:** the §15 dial defect should be fixed in Kotlin
-**first**, ahead of Phase 0. It is small, it is shipped, and it is costing real
-reachability today. It must not wait behind an architecture migration.
+**What we want:** the calling arc — sign in, camp, be refused, mint, be admitted, dial,
+hang up — exercisable on a laptop against the real relay, in seconds.
 
 ## Reasoning
 
-**Why not write the Mac client natively in Swift.** It would be quicker to start and it
-would be the wrong thing. Every defect §15 found — the dial tearing down the camp,
-`dial failed: null`, a dead refresh token rendering as `Signed in` — lives in the Kotlin
-client's own paths. A Swift reimplementation would almost certainly not reproduce them,
-and its green would mean "the Mac client works," not "the shipped client works." We would
-have built a second thing to trust instead of a cheaper way to check the first. The
-enforcement matrix exists precisely because these rules are subtle enough to be got wrong
-twice, differently.
+**Why not write the macOS client natively in Swift.** Quicker to start, wrong thing built.
+Every defect §15 found lives in the Kotlin client's own paths; a reimplementation would
+almost certainly not reproduce them, and its green would mean "the Mac client works", not
+"the shipped client works". We would have built a second thing to trust rather than a
+cheaper way to check the first.
 
-**Why the port is more tractable than "port the app" sounds.** The calling app is 2,902
-Kotlin LOC total, and the admission surface is six files. It is already hexagonal —
-`CampAdmission` and `DialAdmission` are pure decision functions, the ports are injected,
-the effects are at the edges, and the journey tests already run over real ports against a
-fixture exchange. The shape the core wants is the shape the Kotlin already has.
+**Why the port is smaller than "port the app" sounds.** The decision logic is **216 lines**
+(`CampAdmission.kt` 96, `DialAdmission.kt` 120) and is already pure — injected ports,
+effects at the edges, journey tests over real ports. The shape the core wants is the shape
+the Kotlin already has. The `caps/` engine beside it is 1,194 lines and is **explicitly not
+in scope** (see *Adjacent, out of scope*).
 
-**Why porting the rules alone would not have caught §15's defect, and why we are doing it
-anyway.** Worth stating plainly so nobody expects the wrong payoff. The decision rules and
-the endpoint lifecycle are different layers:
+**Why R1 alone will feel like nothing happened, and the guard that comes with it.** R1
+buys shared *rules*. The §15 defect lived in the **endpoint lifecycle**, which is R2. A
+plan that stopped at R1 would be worth doing and would not solve the problem it was written
+for. Worse, **R1 produces code whose only caller is its own test suite until R3 wires it** —
+which is the dead-code shape the phase template exists to prevent. That is accepted
+deliberately, as the price of staying additive while croftcall bakes, and it comes with a
+stated expiry: *if R3 has not started when R1 lands, R1 is dead code and should be reverted
+rather than left to rot.* This is the single most likely way this plan goes wrong.
 
-```
-ports to core cleanly →  given a session, a cached pass, a refusal reason: camp or
-                         degrade, dial or refuse, and what words to say
-                         (this IS the enforcement matrix — one suite instead of two)
+**Why additive.** The calling app is released, baking under enforcement, and carries an
+unverified fix. Switching it onto a fresh core in the same motion means two moving things
+and no way to attribute a regression. The core runs as a second implementation graded by
+the same matrix; the duplication is the cost of being able to say which layer broke.
 
-does NOT port by itself →  the iroh endpoint lifecycle, OAuth's browser round-trip,
-                           platform HTTP
-                           ↑ §15's defect lives HERE
-```
+**What this never buys.** A laptop cannot answer NAT traversal across networks, cellular,
+or mobile lifecycle. This plan lowers the cost of everything *below* the two-device line;
+it does not move the line. The failure mode to guard against is a green desktop arc read as
+"calling works" — the same misreading §13 made of attributed `usage` lines.
 
-Phase 1 buys shared *rules*. Only Phase 2 buys shared *transport behaviour*, which is
-where the live bug is. A plan that stopped at Phase 1 would be worth doing and would not
-solve the stated problem, so Phase 2 is not optional and Phase 3 is where the goal is
-actually met.
+## Verified Assumptions
 
-**Why additive.** The calling app is the thing baking under enforce right now, with an
-open reachability defect. Switching it onto a fresh core in the same motion would mean two
-moving things and no way to attribute a regression to either. Running the core as a second
-implementation graded by the same matrix costs some duplication for a while and buys the
-ability to say which layer broke.
+Everything here was read or run firsthand on 2026-09-08. Anything not listed is unverified.
 
-**What this does not solve, and will never solve.** A laptop cannot answer real NAT
-traversal between two networks, cellular paths, or mobile lifecycle (backgrounding, doze,
-process death). The runbook's ladder is right that two real devices are the proof for
-those. This plan lowers the cost of everything *below* that line; it does not move the
-line. The failure mode to guard against is a green desktop arc being read as "calling
-works" — the same misreading §13 made with attributed `usage` lines, and §15's method note
-applies verbatim: a signal is evidence only once you know the case where it shows green
-and the property is false.
+- **`core/call-core/` is empty and not a member.** `find` reports 0 `.rs` files; `Cargo.toml`
+  `members` lists six crates and call-core is not among them. Same for `core/feed-core/` and
+  `shell/`.
+- **The decision logic is 216 lines.** `wc -l` on `CampAdmission.kt` (96) and
+  `DialAdmission.kt` (120). `caps/` is 1,194 across 14 files.
+- **Two iroh integrations coexist in one APK.** `android/app` imports `computer.iroh.*`
+  (Maven, bundles `libiroh_ffi.so`); `android/social` goes through our `libcroft_ffi.so`.
+  Confirmed by import scan and `build.gradle.kts`. Two applicationIds: `ing.croft.call`,
+  `ing.croft.social`.
+- **D1 is answered and green** — see Phase 0. `ports/transport-iroh/tests/two_relay_modes.rs`,
+  landed in croft #11.
+- **iroh is 1.1 on the Rust side** (`ports/transport-iroh/Cargo.toml`), and the API shape
+  used by the probe is `iroh::endpoint::presets::Minimal`, `RelayMap::try_from_iter`,
+  `RelayMode::Custom` — all compile-verified, not inferred from docs.
+- **`attach_probe` is an EXAMPLE target**, at
+  `croft-stack/relay/source/crates/croft-relay-bin/examples/attach_probe.rs`. Cargo examples
+  are not importable by dependents, so R3 **cannot** consume it as a pinned git dependency,
+  and per `SHARED-CODE.md` rule 1 must not copy it either. R3 writes its own attach against
+  the iroh API; that is not a copy of our code, it is use of a third-party API.
+- **The relay is in `enforce`** (`/etc/iroh-relay/croft-relay.toml`, read on the box), binary
+  `8e287cb7…` = croft-relay v0.2.0, unit up since the 2026-08-30 flip converge.
+- **The matrix walker is Kotlin-only.** `EnforcementMatrixTest` (`:app` testDebugUnitTest)
+  walks `docs/ENFORCEMENT-SCENARIOS.md` and resolves `PIN:` entries to Kotlin test names.
+  **There is no Rust walker**, which is why D5 exists.
 
-## Open decisions
+## Documentation Impact
 
-### D1 — where does the calling endpoint live? *(the plan hinges on this)*
+- `docs/ENFORCEMENT-SCENARIOS.md` — the `PIN:` syntax gains a way to name a Rust test
+  alongside a Kotlin one. **R1** (blocked on D5).
+- `CLAUDE.md` (croft) — the status paragraph says `shell/` is skeleton and the calling app
+  calls none of the core. **R1** corrects the second clause, **R4** the first. Both in the
+  phase that makes the sentence false, not a docs phase at the end.
+- `CHANGELOG.md` — an `[Unreleased]` entry per phase that changes what a consumer runs.
+  R3 and R4 do; R1 and R2 do not (no shipped artifact changes).
+- `README.md` — R3 adds a command a person can run; R4 adds an app. Both phases own their
+  own entry.
+- `ops/JOURNAL.md` — R3 and R4 add toolchain requirements (a macOS target, possibly a
+  second Rust target). G4 makes that journalled with reason and outcome.
+- `plans/2026-09-08-plan-one-stream-calling-and-chat.md` — the parent's R1–R4 lines point
+  here; no edit needed unless a phase is dropped or renamed.
 
-**Options.** (a) Extend `ports/transport-iroh` with a calling mode. (b) A new sibling
-port, e.g. `ports/transport-iroh-call`.
+## Concurrency Map
 
-**Recommendation: (b), a separate port.** `ports/transport-iroh` sets
-`RelayMode::Disabled` and contacts no relay **by construction rather than by care** —
-CLAUDE.md states it in those words, and P7 S2's separation claim rests on it (the calling
-APK contains zero gossip classes; the social module contacts no relay). A crate that
-contains both a relay-disabled gossip endpoint and a relay-attaching calling endpoint
-downgrades that guarantee from structural to conventional, and the guarantee is the
-valuable part. The shared surface is genuinely small — `Endpoint` construction and
-`EndpointId` handling — and most of `transport-iroh`'s 1,277 LOC is codec (`frame.rs`,
-`record.rs`, `pairing.rs`) that calling does not want.
+**All four phases are sequential.** R2 depends on R1's types, R3 on both, R4 on R3.
+Nothing here is parallelisable and no phase needs a re-entry checklist.
+
+The one genuine shared-state concern is **the production relay**, which R2 and R3 both
+touch as a live dependency, and which peer sessions and the bake also use. Contract for
+both phases: read-only against production (attach, camp, dial, hang up — no admin, no
+config, no converge), and **claim `testbed--relay-live` in `.coordination/claims/`** before
+any run that holds a connection for more than a few seconds, so a peer reading the journal
+does not attribute our endpoint to a device.
+
+## Phases
+
+### Phase 0 — Discovery
+
+D1 is **RUN**. D4–D6 are not, and two of them can change R1's shape, so this phase gates
+everything below it.
+
+- [x] **D1: can a relay-disabled endpoint and a relay-attaching one share a process?**
+  - **Probe:** bind `GossipTransport` (severed) and a raw `iroh::Endpoint` with
+    `RelayMode::Custom` pointed at TEST-NET-1 in one process; let the neighbour retry; assert
+    the severed transport's dial card carries no relay-shaped address.
+  - **Result (2026-09-08, croft #11):** **they coexist.** Severance held.
+  - **Consequence:** the sibling-port recommendation in D1 below stands on the architectural
+    argument alone, **not** on impossibility, and P7 S2's separation claim is not undermined.
+  - **Disposition:** `keep-as-fixture` — landed as
+    `ports/transport-iroh/tests/two_relay_modes.rs`.
+
+- [ ] **D4: is every admission decision actually pure, or does one reach for I/O inline?**
+  - **Probe:** read `CampAdmission.kt` and `DialAdmission.kt` end to end and list every
+    decision point, classifying each as `(state, input) -> (decision, effects)` or as
+    something that awaits. Cross-check against `MainViewModel.dialCallee`, which is where
+    the effects are actually performed today.
+  - **Success criteria:** a written list of decision points with zero unclassified entries.
+    A single decision that must await is not a blocker — it is a finding that changes R1's
+    signature, and better found now than in the middle of the port.
+  - **Disposition:** `throwaway` — the output is prose in this plan's Review Log.
+
+- [ ] **D5: how does the matrix grade two implementations?**
+  - **Probe:** read `EnforcementMatrixTest.kt` and the `PIN:` grammar in
+    `docs/ENFORCEMENT-SCENARIOS.md`. Decide between (a) extending the syntax so one row can
+    name both a Kotlin and a Rust test, with the Kotlin walker checking only its own and a
+    new Rust walker checking only its own; (b) a single Rust walker that parses the file and
+    the Kotlin walker retiring; (c) two files, which is rejected on sight because two
+    matrices is the drift this whole stream exists to stop.
+  - **Success criteria:** a named choice with the walker's parse rule written down, and a
+    statement of what happens to a row that names only one side.
+  - **Disposition:** `throwaway`.
+
+- [ ] **D6: what does R3 need that croft-stack already has, and how may it travel?**
+  - **Probe:** read `attach_probe.rs` and list what it does that R3 also needs (mint a
+    token against admit, attach, present it). For each, decide: already in `call-core` after
+    R1, reimplement against the iroh/HTTP API, or genuinely needs croft-stack code.
+  - **Success criteria:** a list where nothing is marked "copy". Verified already: it is an
+    **example** target, so a pinned git dependency cannot reach it — meaning "extract it
+    into a library crate in croft-stack, then pin that" is the only compliant path if any
+    item genuinely needs croft-stack's code, and that is a croft-stack-side change to
+    negotiate, not a croft-side decision.
+  - **Disposition:** `throwaway`.
+
+**Done when:** D4, D5 and D6 are answered in the Review Log, the Verified Assumptions
+section reflects them, and any phase whose shape changed has been edited **before**
+execution starts.
+
+---
+
+### R1 — `call-core`: the decision rules, dual-graded
+
+**Goal:** the camp and dial admission rules exist in Rust as a pure core, graded by the
+same matrix that grades the Kotlin, with Android untouched.
+
+**Changes:**
+- [ ] `core/call-core/Cargo.toml` + `src/lib.rs` — new crate, added to workspace `members`
+- [ ] `src/model.rs` — the state a decision reads (session presence, cached pass + expiry,
+      grant/proof availability) and the decision/effect types
+- [ ] `src/camp.rs` — `CampAdmission`'s rules: mint / reuse / re-mint at margin / degrade
+      with words, one arm per matrix row
+- [ ] `src/dial.rs` — `DialAdmission`'s rules including `rebind` (R0's fix, ported with its
+      reason intact — a dial never lowers admission)
+- [ ] `docs/ENFORCEMENT-SCENARIOS.md` — `PIN:` syntax extended per D5
+- [ ] the Rust matrix walker per D5
+- [ ] `CLAUDE.md` — the "calling app calls none of it" clause becomes accurate again
+
+**Call chain:** `core/call-core` tests → `camp::decide` / `dial::decide`. **This phase has
+no production caller** — the first is R3. Stated rather than hidden: it is the additive
+constraint's cost, and the expiry in *Reasoning* applies.
+
+**Wiring test:** the Rust matrix walker, RED at phase start (no rows resolve to Rust tests)
+and GREEN at end (every row that names a Rust test resolves to one that exists). This is
+the phase's anti-dead-code gate: the walker proves the rules are reachable from the
+document that defines them, which is the only consumer they have until R3.
+
+**Depends on:** D4 (signature), D5 (grading).
+
+**Read-set:** `android/app/src/main/java/ing/croft/call/CampAdmission.kt`,
+`.../DialAdmission.kt`, `.../MainViewModel.kt`, `.../caps/Admit.kt`,
+`docs/ENFORCEMENT-SCENARIOS.md`, `android/app/src/test/java/ing/croft/call/EnforcementMatrixTest.kt`.
+
+**Write-set:** `core/call-core/**`, `Cargo.toml`, `docs/ENFORCEMENT-SCENARIOS.md`,
+`CLAUDE.md`, and the new Rust walker's file.
+
+**Shared-state contract:** no mutable state beyond the write-set. No network, no relay, no
+device. Pure `cargo test`.
+
+**Risks:** the port drifts from the Kotlin while both are live — mitigated by the shared
+matrix, which is the whole point of dual-grading. Second risk: scope creep into `caps/`
+(1,194 lines); the boundary is that `call-core` decides, `caps` fetches, and fetching stays
+Kotlin in this phase.
+
+**Done when:**
+1. **Behavioural:** the enforcement matrix grades both implementations — a row failing in
+   Rust fails the build even though the Kotlin passes.
+2. **Verification:** `cargo test -p call-core` and `./gradlew :app:testDebugUnitTest` both
+   green, and the deliberate perturbation of one matrix row is watched to fail the Rust
+   walker specifically.
+
+**Validation:** *Narrow.* Tests are sufficient — no I/O, no shipped artifact changes.
+
+---
+
+### R2 — the calling transport port
+
+**Goal:** the endpoint lifecycle in Rust — bind, camp with a pass, dial — such that the
+§15 defect class is reachable by `cargo test` instead of by two phones.
+
+**Changes:**
+- [ ] a new sibling port per D1's recommendation (name TBD at execution; **not** a mode
+      inside `ports/transport-iroh`, whose relay-disabled guarantee is structural)
+- [ ] bind with a persisted secret key, `RelayMode::Custom` at our relay, auth token carried
+- [ ] the camp/dial lifecycle, with R0's rule enforced *at the port* rather than only in the
+      decision layer
+- [ ] `CLAUDE.md` — the ports list
+
+**Call chain:** `call-core` decision → port `attach(token)` / `dial(peer)` → iroh
+`Endpoint`. R1's rules become the port's caller, which is what retires R1's dead-code
+status.
+
+**Wiring test:** **the §15 regression, as a test.** Camp against the enforcing relay,
+dial, and assert the camped connection survives — no `no_token` after the dial, no `usage`
+close one second later. RED against a port that rebinds unconditionally; GREEN against one
+that does not. Marked `:live` (per `VERIFICATION.md`, a `:live` suffix is a recorded reason
+not to gate) and run deliberately, not in CI.
+
+**Depends on:** R1.
+
+**Read-set:** `android/app/.../net/CallPeer.kt` (the lifecycle being ported),
+`ports/transport-iroh/src/transport.rs` (the bind pattern), `core/call-core/**`.
+
+**Write-set:** the new port's crate, `Cargo.toml`, `CLAUDE.md`.
+
+**Shared-state contract:** **touches the production relay.** Read-only in the operational
+sense — attach, camp, dial, hang up; no admin, no config, no converge. Claim
+`testbed--relay-live` before any run holding a connection beyond a few seconds. Binds no
+local ports beyond iroh's ephemeral UDP. Uses a test account's credentials from
+`CroftC/.env`, never committed.
+
+**Risks:** the biggest is a false green — a test that passes because the relay admitted us
+for a reason unrelated to what we think. Mitigation: assert on the **relay's own journal
+lines**, not just on client-side success, exactly as §15 did.
+
+**Done when:**
+1. **Behavioural:** a `cargo test` run on this laptop reproduces the §15 defect against a
+   port that has it, and passes against the port that does not.
+2. **Verification:** the `:live` regression test, plus the relay journal showing
+   `admitted … sponsorship=` and **no** `no_token` in the dial window.
+
+**Validation:** *Broad.* Tests plus live integration; check the relay journal, confirm the
+data flow, verify the refusal paths (tokenless, wrong key) not just the happy one.
+
+---
+
+### R3 — the headless arc binary (the fast loop)
+
+**Goal:** one command on a laptop walks the whole calling arc against production, with no
+phone and no adb.
+
+**Changes:**
+- [ ] a `bin/` target (crate name TBD) — sign in / load session, camp, dial a named peer,
+      hang up, and print what it observed
+- [ ] session handling: reuse a stored OAuth session; refuse honestly when the refresh
+      token is dead (the §15.2 case — `Signed in` over a dead session is the defect this
+      must not reproduce)
+- [ ] `README.md` + `CHANGELOG.md` + `ops/JOURNAL.md` entries
+
+**Call chain:** `main` → session load → `call-core::camp::decide` → port `attach` →
+`call-core::dial::decide` → port `dial` → relay. This is the first end-to-end chain in the
+plan and the reason R1 stops being dead code.
+
+**Wiring test:** the binary itself, run against production, asserting on the relay journal.
+A test that runs the binary and greps the journal for this endpoint's `admitted … sponsorship=`.
+
+**Depends on:** R1, R2, D6.
+
+**Read-set:** `croft-stack/relay/source/crates/croft-relay-bin/examples/attach_probe.rs`
+(read for what it does — **not** copied; it is an example target and unimportable),
+`android/app/.../caps/Admit.kt` and `.../identity/AuthManager.kt` for the mint and session
+shapes.
+
+**Write-set:** the new binary crate, `Cargo.toml`, `README.md`, `CHANGELOG.md`,
+`ops/JOURNAL.md`.
+
+**Shared-state contract:** as R2, plus it holds a real OAuth session for a test account.
+Credentials from `CroftC/.env`; never echoed, never committed. Claim `testbed--relay-live`.
+
+**Risks:** the tempting one is letting this become a second client rather than an
+instrument. Guard: it prints observations and exits; it holds no UI state and makes no
+decision the core does not make.
+
+**Done when:**
+1. **Behavioural:** running one command on this laptop produces
+   `admitted endpoint_id=… sponsorship=…` in the production journal, then a dial, then a
+   hang-up — with no phone attached.
+2. **Verification:** that command, plus the journal lines it caused, pasted into the Review
+   Log with timestamps.
+
+**Validation:** *Broad.* Live against production under enforcement.
+
+---
+
+### R4 — `shell/`'s first occupant: the macOS app
+
+**Goal:** a person can do R3's arc without a terminal, and `shell/` stops being a `.gitkeep`.
+
+**Changes:**
+- [ ] `shell/<name>/` — the macOS shell, per D2 (headless first, UI second)
+- [ ] the FFI surface it consumes — whether `ffi/` grows a calling object beside
+      `ChatSession` or a second crate appears is an execution decision, recorded when made
+- [ ] `CLAUDE.md`, `README.md`, `CHANGELOG.md`, `ops/JOURNAL.md`
+
+**Call chain:** macOS UI event → FFI → `call-core` → port → relay.
+
+**Wiring test:** a test at the FFI boundary that drives camp-then-dial through the same
+surface the UI uses — not the core directly. If the test can reach the core without going
+through the FFI, it is not testing the wiring.
+
+**Depends on:** R3.
+
+**Read-set:** `ffi/src/lib.rs` (the `ChatSession` pattern), `shell/`, R3's binary.
+
+**Write-set:** `shell/**`, possibly `ffi/**`, `Cargo.toml`, the four docs above.
+
+**Shared-state contract:** as R3, plus a macOS build toolchain — journalled per G4.
+
+**Risks:** scope. A UI invites features. This phase's job is parity with R3's arc, nothing
+more; anything else is a later plan.
+
+**Done when:**
+1. **Behavioural:** a person clicks in a macOS app and the production relay journal shows
+   that endpoint admitted, dialling, and hanging up.
+2. **Verification:** the FFI-boundary wiring test, plus the journal lines.
+
+**Validation:** *Broad*, and explicitly **not** a substitute for a device run — see the
+line in *Reasoning* about the two-device tier.
+
+---
+
+## Adjacent, explicitly OUT of this plan's scope
+
+- **`caps/` (1,194 lines)** — the callability engine, ticket redemption, OAuth flow, DPoP,
+  the XRPC surface. `call-core` decides; `caps` fetches. Porting it is a separate plan and
+  probably follows R4, not R1.
+- **R5 (the rendered-principal seam), R6, R7, R8** — the parent plan's.
+- **Android switching onto the core (D3)** — deliberately undecided until after R3.
+- **Chat.** `chat-core` and `call-core` never merge; per-pond cores is law.
+
+## Open Questions
+
+- `[RECOMMENDED: BLOCKING]` **D4** — is every admission decision pure? *A decision that must
+  await changes `call-core`'s signature, and finding that mid-port is the expensive way.*
+- `[RECOMMENDED: BLOCKING]` **D5** — how does the matrix grade two implementations? *R1's
+  wiring test IS the Rust walker; without this answered there is no gate and R1 ships
+  unreachable code.*
+- `[RECOMMENDED: PHASE-GATED (R3)]` **D6** — what may travel from croft-stack? *Only bites
+  at R3, but the answer may require a croft-stack-side extraction, which is someone else's
+  repo and therefore lead time.*
+- `[RECOMMENDED: ADVISORY]` **D2** — first macOS artifact. *Recommendation recorded below
+  and not contentious; can be confirmed at R4.*
+- `[RECOMMENDED: ADVISORY]` **D3** — does Android ever switch? *Deliberately deferred until
+  after R3, when the cost is measurable rather than estimated.*
+
+## Decisions
+
+### D1 — where does the calling endpoint live?
+
+**Options.** (a) Extend `ports/transport-iroh` with a calling mode. (b) A new sibling port.
+
+**Recommendation: (b), a separate port.** `ports/transport-iroh` sets `RelayMode::Disabled`
+and contacts no relay **by construction rather than by care** — CLAUDE.md's words — and P7
+S2's separation claim rests on it. A crate containing both endpoint kinds downgrades that
+guarantee to a convention. The shared surface is small (`Endpoint` construction,
+`EndpointId`); most of the crate's 1,277 lines are codec that calling does not want.
 
 **Probe RUN 2026-09-08 — they can coexist, so (b) is a judgment, not a necessity.**
-`ports/transport-iroh/tests/two_relay_modes.rs`: a relay-attaching endpoint
-(`RelayMode::Custom`, pointed at TEST-NET-1 so nothing is contacted and no admission is
-needed) binds beside this crate's severed `GossipTransport` in one process, retries for
-1.5 s, and the severed transport's dial card still carries no relay-shaped address. The
-attempt is the contamination vector, not the attach, so the far end never needing to answer
-is the point rather than a shortcut.
+`ports/transport-iroh/tests/two_relay_modes.rs`. A relay-attaching endpoint binds beside the
+severed transport, retries for 1.5 s, and the severed dial card still carries no
+relay-shaped address. **The recommendation therefore stands entirely on the architectural
+argument** — the plan must not be read as though the probe forced it — and **P7 S2's
+separation claim is not undermined**, which mattered because the two apps already share a
+phone.
 
-**What that changes.** The recommendation for (b) stands **entirely on the architectural
-argument** — a structural guarantee is worth more than a conventional one — and NOT on a
-technical impossibility. The plan should not be read as though the probe forced it. It also
-means **P7 S2's separation claim is not undermined**: the calling app and the social module
-already share a phone, and severance survives a relay-attaching neighbour.
-
-**The probe's limit, stated.** It asserts what this repo already means by severance — that
-no relay-shaped address escapes into a dial card — which is a property of what the endpoint
-*publishes*, not proof that it never contacts a relay. A stronger claim needs traffic
-observation, which is not available here. If (a) is ever chosen despite the recommendation,
-that stronger evidence is the thing to go and get first.
+**The probe's limit, stated.** It asserts what this repo already means by severance — no
+relay-shaped address escaping into a dial card — which is a property of what the endpoint
+*publishes*, not proof it never contacts a relay. A stronger claim needs traffic
+observation. If (a) is ever chosen anyway, that is the evidence to go and get first.
 
 ### D2 — what is the first macOS artifact?
 
-**Options.** (a) Headless Rust binary walking the arc, no UI. (b) SwiftUI app over uniffi,
-matching the FFI surface Android would eventually use.
+**Recommendation: headless (R3) first, UI (R4) after.** R3 is what removes adb from the
+loop; whether a person can *use* it is a different question from whether we can *test* it,
+and UI work should not block the loop that motivated the plan.
 
-**Recommendation: (a) first, (b) after.** (a) is Phase 3 and it is what actually removes
-adb from the loop. (b) is Phase 4 and is mostly about whether a person can *use* it, which
-is a different question from whether we can *test* it. Shipping (a) first also keeps
-Phase 4's UI work from blocking the fast loop that motivated the whole plan.
+### D3 — does Android switch onto the core at all?
 
-### D3 — does Android switch over at all, and when?
-
-Left genuinely open. The case for: one implementation, one matrix, defects found in
-`cargo test`. The case against: the Kotlin client is shipped, released, and now
-device-validated under enforce; replacing its transport is a large risk against an app
-that is finally working, and the upstream `computer.iroh` bindings are maintained by n0
-for free. A defensible outcome is that macOS runs on the core, Android stays on its
-Kotlin path, and the matrix grades both — accepting the duplication permanently and
-deliberately. **Decide this after Phase 3**, when the core has actually been exercised and
-the cost of the switch is measurable rather than estimated.
-
-## What "done" means for each phase
-
-- **P1:** `core/call-core` is a workspace member; the Rust suite walks the same
-  `ENFORCEMENT-SCENARIOS.md` rows the Kotlin suite walks; Android untouched and its 172
-  tests still green.
-- **P2:** a `cargo test` asserts the camped connection's fate across a dial, against a
-  real relay. This is the test that would have caught §15 and is the phase's whole
-  justification.
-- **P3:** one command on a laptop produces `admitted … sponsorship=…` in the production
-  journal, and a dial, and a hang-up, with no phone attached.
-- **P4:** a person can do the above without reading a terminal.
-- **P5:** deferred to D3.
+Genuinely open. A defensible outcome is macOS on the core, Android staying Kotlin, and the
+matrix grading both — duplication accepted deliberately rather than arrived at by drift.
+**Decide after R3**, when the switch's cost is measurable.
 
 ## Review Log
 
-*(empty — this plan has not been reviewed)*
+**Pass 1 — 2026-09-08.** Expanded from a shape sketch into a phase plan against the
+`phase-plan` template. D1's probe result was already in the sketch and is carried forward
+unchanged. Three things the expansion surfaced that the sketch did not have:
+
+1. **R1 has no production caller until R3** — the dead-code shape the template's "call
+   chain" field exists to catch. Recorded with an expiry rather than hidden, and R1's
+   wiring test is now the Rust matrix walker specifically so the phase has a gate at all.
+2. **`attach_probe` is an example target**, so R3 cannot take it as a pinned git dependency
+   and must not copy it. That turns D6 from a vague "what can we reuse" into a concrete
+   question with a compliant path (extract to a library crate in croft-stack, then pin) and
+   a lead time, because it is another repo.
+3. **The matrix walker is Kotlin-only**, so "dual-graded" was an assertion with no
+   mechanism. D5 now has to answer it before R1 can have a wiring test.
+
+*Not yet done:* Pass 2 (gap analysis) and Pass 3 (quality gates).
