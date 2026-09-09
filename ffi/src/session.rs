@@ -36,6 +36,7 @@ use social_tree_core::ports::ed25519::{
 };
 use social_tree_core::ports::{DeviceId as PortDeviceId, PrincipalId as PortPrincipalId, Signer};
 use social_tree_core::update::IngestResult;
+use store_redb::fold_derived::FoldError;
 use store_redb::fold_derived::{max_lamport_for_device, DerivedFold};
 use store_redb::payload::{encode_genesis_payload, encode_membership_add_payload, GenesisRules};
 use store_redb::tables::Db;
@@ -737,20 +738,13 @@ impl Session {
                 // it is also not an effect, and must not be counted as one.
                 Ok(IngestResult::Duplicate) => {}
                 Err(e) => {
-                    // NOT the repeat-delivery path — that arrives as
-                    // Ok(Duplicate) above, which is why this string match was
-                    // dead code for the case its old comment claimed. It stays
-                    // only to catch a fold error whose TEXT mentions an
-                    // already-present something, and it is fragile by nature:
-                    // the honest fix is a typed FoldError, filed rather than
-                    // done here because widening that enum reaches past this
-                    // change.
-                    let said = e.to_string();
-                    if said.contains("duplicate") || said.contains("already") {
-                        continue;
-                    }
+                    // Typed, not textual. The repeat-delivery path is
+                    // Ok(Duplicate) above; everything that arrives here is a
+                    // real refusal, decided by matching the ERROR rather than
+                    // its sentence.
+                    debug_assert!(fold_refusal_is_fatal(&e));
                     return Err(self.refuse(SessionError::Refused {
-                        reason: format!("assertion {i} in this record would not fold: {said}"),
+                        reason: format!("assertion {i} in this record would not fold: {e}"),
                     }));
                 }
             }
@@ -993,5 +987,92 @@ impl Session {
         };
         tracing::debug!(target: "croft.ffi", epoch = merged.epoch, "seated from a Welcome");
         Ok(())
+    }
+}
+
+/// Is a fold refusal fatal to the whole accept?
+///
+/// **Exhaustive on purpose — no wildcard.** Every variant today is fatal, so
+/// the body reads as a formality; the value is the compile error a future
+/// variant causes. If a variant is ever added that means "already present",
+/// this stops building and someone has to decide, rather than the new case
+/// being swept silently into the fatal pile.
+///
+/// It replaces a string match on the error's Display text. That match was filed
+/// as fragile during R0b and turned out to be worse: `FoldError` has no
+/// already-present variant at all (repeat delivery is
+/// `Ok(IngestResult::Duplicate)`), so it never fired for its stated purpose —
+/// while several variants carry free-form text that can contain the words it
+/// looked for. redb's own "table already exists" reaches
+/// `FoldError::StorageError`, and a storage failure would have been skipped as
+/// a harmless repeat.
+fn fold_refusal_is_fatal(e: &FoldError) -> bool {
+    match e {
+        FoldError::SignatureInvalid(_) => true,
+        FoldError::CredentialInvalid(_) => true,
+        FoldError::AuthorizationFailed(_) => true,
+        FoldError::LamportViolation { .. } => true,
+        FoldError::MalformedEnvelope(_) => true,
+        // Documented as transient ("retry once the predecessors arrive"), but
+        // a record is offered as a COMPLETE inline set — if its own antecedents
+        // are missing, the offer is malformed rather than early. Fatal here,
+        // and named so the distinction is on the record.
+        FoldError::MissingAntecedents { .. } => true,
+        FoldError::ThresholdNotMet { .. } => true,
+        FoldError::StorageError(_) => true,
+        FoldError::UnknownAssertionType(_) => true,
+    }
+}
+
+#[cfg(test)]
+mod fold_refusal_tests {
+    use super::*;
+
+    /// **The reason this predicate exists at all.**
+    ///
+    /// `accept_record` used to decide whether a fold refusal was fatal by
+    /// grepping the error's Display text for "duplicate" or "already". That was
+    /// filed as fragile during R0b; enumerating `FoldError` showed it is worse
+    /// than fragile. No variant means "already present" — repeat delivery
+    /// arrives as `Ok(IngestResult::Duplicate)` — so the branch never fired for
+    /// the case its comment claimed. What it COULD fire on is the free-form
+    /// text inside a real failure: redb says "table already exists", and that
+    /// sentence lands in `FoldError::StorageError`. A storage failure would
+    /// have been skipped as though it were a harmless repeat, and the accept
+    /// would have reported partial success over it.
+    #[test]
+    fn a_storage_failure_whose_text_says_already_is_still_fatal() {
+        let e = FoldError::StorageError("table already exists".into());
+        assert!(
+            fold_refusal_is_fatal(&e),
+            "a storage failure must not be skipped because its message \
+             happens to contain the word 'already'"
+        );
+    }
+
+    #[test]
+    fn a_refusal_that_merely_mentions_a_duplicate_is_still_fatal() {
+        let e = FoldError::MalformedEnvelope("duplicate field in envelope".into());
+        assert!(fold_refusal_is_fatal(&e));
+    }
+
+    /// Every variant today is fatal. The value is not this assertion — it is
+    /// that the predicate matches EXHAUSTIVELY, with no wildcard, so a variant
+    /// added later that genuinely means "already present" stops the build
+    /// instead of being silently swept into the fatal pile.
+    #[test]
+    fn every_fold_refusal_is_fatal_today() {
+        for e in [
+            FoldError::SignatureInvalid("x".into()),
+            FoldError::CredentialInvalid("x".into()),
+            FoldError::AuthorizationFailed("x".into()),
+            FoldError::MalformedEnvelope("x".into()),
+            FoldError::MissingAntecedents { have: 0, need: 1 },
+            FoldError::ThresholdNotMet { have: 0, need: 1 },
+            FoldError::StorageError("x".into()),
+            FoldError::UnknownAssertionType(0),
+        ] {
+            assert!(fold_refusal_is_fatal(&e), "unexpectedly non-fatal: {e}");
+        }
     }
 }
