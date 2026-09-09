@@ -12,6 +12,14 @@ to the environment and why*.
 
 ### Fixed
 
+- **chat core: accepting a record you already hold no longer reports as though
+  it folded.** `accept_record` matched `Ok(_)` over `IngestResult`, counting
+  `Duplicate` as applied, so a repeat delivery returned the record's full
+  assertion count. Gossip delivers the same record once per path, so this is the
+  ordinary case, and the surface had no way to tell a person that nothing new
+  happened. The count now counts only what was applied, and the shell says "you
+  were already in this group" instead of rendering a silent no-op as success.
+  (Dev-module surface; the shipped calling app is unaffected.)
 - **calling: a dial no longer tears down the caller's camping pass.** Under
   enforcement, one Connect tap dropped the caller off the relay and the
   re-attach went tokenless — measured on a physical phone as four minutes of

@@ -35,6 +35,7 @@ use social_tree_core::ports::ed25519::{
     Ed25519Signer, Ed25519Verifier, RegistryCredentialResolver,
 };
 use social_tree_core::ports::{DeviceId as PortDeviceId, PrincipalId as PortPrincipalId, Signer};
+use social_tree_core::update::IngestResult;
 use store_redb::fold_derived::{max_lamport_for_device, DerivedFold};
 use store_redb::payload::{encode_genesis_payload, encode_membership_add_payload, GenesisRules};
 use store_redb::tables::Db;
@@ -723,11 +724,27 @@ impl Session {
             );
 
             match self.fold.ingest(&env) {
-                Ok(_) => folded += 1,
+                // NEW state. This is the only thing `folded` counts, because
+                // the count is what a shell reads to tell a person whether
+                // anything actually happened (CLAUDE.md, "a surface never
+                // claims a capability it has not confirmed"). `Ok(_)` used to
+                // cover both arms, so a repeat accept reported the record's
+                // full assertion count and was indistinguishable from a first
+                // accept — the no-op Accept the S2 device run flagged.
+                Ok(IngestResult::Applied { .. }) => folded += 1,
+                // Repeat delivery. Gossip hands a member the same record once
+                // per path, so this is a normal event and not a failure — but
+                // it is also not an effect, and must not be counted as one.
+                Ok(IngestResult::Duplicate) => {}
                 Err(e) => {
-                    // An assertion already folded is the repeat-delivery case
-                    // and is not a failure; anything else is, and names its
-                    // index so the offer can be inspected.
+                    // NOT the repeat-delivery path — that arrives as
+                    // Ok(Duplicate) above, which is why this string match was
+                    // dead code for the case its old comment claimed. It stays
+                    // only to catch a fold error whose TEXT mentions an
+                    // already-present something, and it is fragile by nature:
+                    // the honest fix is a typed FoldError, filed rather than
+                    // done here because widening that enum reaches past this
+                    // change.
                     let said = e.to_string();
                     if said.contains("duplicate") || said.contains("already") {
                         continue;

@@ -224,12 +224,23 @@ class SocialSurface private constructor(
         return offered?.claims
     }
 
-    /** Accept the offered record — the recorded output of the judgment. */
-    fun acceptOfferedRecord() = guard {
-        offered?.let {
-            session.acceptRecord(it.bytes)
+    /**
+     * Accept the offered record — the recorded output of the judgment.
+     *
+     * The fold count is READ, not discarded. An accept that folds nothing is a
+     * different outcome from one that folds the record, and rendering them the
+     * same was the no-op Accept the S2 run flagged. The note is set after
+     * [guard], because guard clears the notice on success and this is an
+     * outcome rather than a refusal — nothing failed; nothing happened.
+     */
+    fun acceptOfferedRecord() {
+        val folded = guard {
+            val o = offered ?: return@guard null
+            val n = session.acceptRecord(o.bytes)
             offered = null
+            n
         }
+        if (folded != null) Rendering.acceptOutcome(folded)?.let { notice = it }
     }
 
     /**

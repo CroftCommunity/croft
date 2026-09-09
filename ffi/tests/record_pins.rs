@@ -192,6 +192,41 @@ fn accepting_the_same_record_twice_is_not_a_failure() {
     );
 }
 
+/// **A repeat accept must be DISTINGUISHABLE, not merely survivable.**
+///
+/// The test above pins that a second accept does not fail. That is necessary
+/// and not sufficient: "did not fail" is what a surface reads when it renders
+/// an Accept that folded nothing exactly like an Accept that folded everything,
+/// which is the no-op Accept the S2 device run flagged as an open UI question.
+///
+/// The count is the live signal (CLAUDE.md, "a surface never claims a
+/// capability it has not confirmed"): the first accept folds the record's
+/// assertions, the second folds none of them because every one is already in
+/// the fold. A shell that reads the count can say "you were already in this
+/// group" and mean it; a shell that reads only `is_ok()` cannot.
+///
+/// This pins an existing property rather than driving new behaviour — the
+/// counting is already right, and it is the SHELL that discards it. It is here
+/// so the shell may rely on it and so a later refactor of the duplicate branch
+/// cannot quietly turn 0 into N.
+#[test]
+fn a_repeat_accept_folds_nothing_and_says_so_in_the_count() {
+    let (_alice, mut bob, offer) = alice_and_bob();
+
+    let first = bob.accept_record(&offer).expect("first accept");
+    let second = bob.accept_record(&offer).expect("second accept");
+
+    assert!(
+        first > 0,
+        "the first accept must fold the record's assertions, folded {first}"
+    );
+    assert_eq!(
+        0, second,
+        "a repeat accept folds nothing new; anything else means duplicates \
+         are being re-folded"
+    );
+}
+
 /// **The reverse direction, which the device run found missing.**
 ///
 /// The host learns nothing about the joiner from the record — it wrote that
