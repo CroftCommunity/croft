@@ -1,7 +1,8 @@
 # Plan — filling `call-core` and standing up the apple shell (roadmap R1–R4)
 
-**Status:** PROPOSED 2026-09-08, three passes complete. **Not ready to execute** — the
-open-question severities are agent-set and need the owner's confirmation (Pass 3, item 5). Phase 0's D1 is already RUN and green; D4–D6 are
+**Status:** ACCEPTED 2026-09-10. Three passes complete, **Phase 0 CLOSED** — D1 was probed
+2026-09-08, and D4/D5/D6 were walked with the owner 2026-09-10 (see *Decisions*). Pass 3's
+escalation is discharged: the severities were reviewed. **R1 may start.** Phase 0's D1 is already RUN and green; D4–D6 are
 not. Nothing below Phase 0 should start until D4–D6 are answered, because two of them can
 change the shape of R1.
 
@@ -70,6 +71,14 @@ Pass 2 extends that guard one layer up: **R2 without R3 is the same shape** — 
 only caller is its own test suite. The expiry covers R1 and R2 together, and the honest
 reading is that R1–R3 are one unit of work that happens to land in three commits, not three
 independently valuable phases.
+
+**Porting is a two-way street** (owner, 2026-09-10): *"we want kotlin to be in good shape as
+we port it so we are porting good code."* So when the port surfaces something wrong in the
+Kotlin — and it will, because reading code closely enough to translate it is how today's
+`Ok(_)` and `rebindWithToken` defects were both found — **the fix lands on BOTH sides**, not
+only the new one. Otherwise the matrix reports "drift" when what actually happened is that
+one side is right and the other is fossilised, and the signal that is supposed to catch
+divergence instead records it as normal.
 
 **Why additive.** The calling app is released, baking under enforcement, and carries an
 unverified fix. Switching it onto a fresh core in the same motion means two moving things
@@ -160,7 +169,8 @@ everything below it.
   - **Disposition:** `keep-as-fixture` — landed as
     `ports/transport-iroh/tests/two_relay_modes.rs`.
 
-- [ ] **D4: is every admission decision actually pure, or does one reach for I/O inline?**
+- [x] **D4: is every admission decision actually pure, or does one reach for I/O inline?**
+  **ANSWERED 2026-09-10 — yes, and the risky part was already handled.**
   - **Probe:** read `CampAdmission.kt` and `DialAdmission.kt` end to end and list every
     decision point, classifying each as `(state, input) -> (decision, effects)` or as
     something that awaits. Cross-check against `MainViewModel.dialCallee`, which is where
@@ -168,20 +178,47 @@ everything below it.
   - **Success criteria:** a written list of decision points with zero unclassified entries.
     A single decision that must await is not a blocker — it is a finding that changes R1's
     signature, and better found now than in the middle of the port.
-  - **Disposition:** `throwaway` — the output is prose in this plan's Review Log.
+  - **Result:** `CampAdmission.plan(signedIn, cached, nowMs)` and
+    `action(outcome, nowMs)` take **`nowMs` as a parameter**. The one thing that could have
+    forced a signature change — deciding "is my pass still good?" needs the time — is
+    already injected rather than read. The Kotlin was written to core discipline before it
+    ever lived in a core, so the port is a translation.
+  - **Two translation details, neither structural.** `failureNote(t: Throwable)` takes a JVM
+    type and becomes an error enum in Rust. And the decisions consume `Admit.CampOutcome`
+    from `caps/`, which is NOT being ported — so `call-core` carries its own copy of the
+    **outcome shape** (minted / refused-with-reason / unavailable / bad-request) while the
+    thing that performs the HTTP call stays Kotlin. The core knows what answers are
+    possible, not how to get one. That is the seam, and it is clean.
+  - **Disposition:** `throwaway` — the output is the paragraph above.
 
-- [ ] **D5: how does the matrix grade two implementations?**
+- [x] **D5: how does the matrix grade two implementations?**
+  **DECIDED 2026-09-10 (owner): (a) now, (b) eventually.**
   - **Probe:** read `EnforcementMatrixTest.kt` and the `PIN:` grammar in
     `docs/ENFORCEMENT-SCENARIOS.md`. Decide between (a) extending the syntax so one row can
     name both a Kotlin and a Rust test, with the Kotlin walker checking only its own and a
     new Rust walker checking only its own; (b) a single Rust walker that parses the file and
     the Kotlin walker retiring; (c) two files, which is rejected on sight because two
     matrices is the drift this whole stream exists to stop.
-  - **Success criteria:** a named choice with the walker's parse rule written down, and a
-    statement of what happens to a row that names only one side.
+  - **Decision:** **(a)** — one row names both sides; two walkers, each checking its own.
+    A row gains `RUST:<path>` beside its `PIN:<file>::\`test\``, the Kotlin walker keeps
+    checking `PIN:` and a new Rust walker checks `RUST:`. **(b) is the destination** — the
+    Kotlin walker retires once Android is on the core (D3) — but not now: retiring the
+    shipped app's gate to serve unshipped code removes enforcement where it currently
+    matters. **(c) two files is rejected**; two matrices is the drift this stream exists to
+    stop.
+  - **Owner's framing, which is why (b) is a destination and not a maybe:** *"this is all
+    alpha, so I would rather prioritize forward functionality than preserve historical."*
+  - **One-sided rows:** a row naming only `PIN:` passes, but the COUNT of such rows is
+    asserted and may only shrink — the shape forage used for its nine pre-rule lexicon
+    entries (reached zero) and the `ing.croft.*` register used 2026-09-08. It is the only
+    option that lets the port land row by row while keeping incomplete coverage visible
+    instead of silent. *Recorded as the default rather than as an owner decision — the
+    a/b question was answered explicitly, this sub-question was not, and it is cheap to
+    overturn.*
   - **Disposition:** `throwaway`.
 
-- [ ] **D6: what does R3 need that croft-stack already has, and how may it travel?**
+- [x] **D6: what does R3 need that croft-stack already has, and how may it travel?**
+  **ANSWERED 2026-09-10 — nothing travels, and the read found a better constraint.**
   - **Probe:** read `attach_probe.rs` and list what it does that R3 also needs (mint a
     token against admit, attach, present it). For each, decide: already in `call-core` after
     R1, reimplement against the iroh/HTTP API, or genuinely needs croft-stack code.
@@ -192,9 +229,9 @@ everything below it.
     negotiate, not a croft-side decision.
   - **Disposition:** `throwaway`.
 
-**Done when:** D4, D5 and D6 are answered in the Review Log, the Verified Assumptions
-section reflects them, and any phase whose shape changed has been edited **before**
-execution starts.
+**Done when:** ~~D4, D5 and D6 are answered…~~ **MET 2026-09-10.** All four discovery
+items are resolved, the phases they touched are edited, and the plan is accepted. See
+*Decisions* for each answer and *Review Log* for what changed as a result.
 
 ---
 
@@ -447,18 +484,26 @@ line in *Reasoning* about the two-device tier.
 
 ## Open Questions
 
-- `[RECOMMENDED: BLOCKING]` **D4** — is every admission decision pure? *A decision that must
-  await changes `call-core`'s signature, and finding that mid-port is the expensive way.*
-- `[RECOMMENDED: BLOCKING]` **D5** — how does the matrix grade two implementations? *R1's
-  wiring test IS the Rust walker; without this answered there is no gate and R1 ships
-  unreachable code.*
-- `[RECOMMENDED: PHASE-GATED (R3)]` **D6** — what may travel from croft-stack? *Only bites
-  at R3, but the answer may require a croft-stack-side extraction, which is someone else's
-  repo and therefore lead time.*
-- `[RECOMMENDED: ADVISORY]` **D2** — first macOS artifact. *Recommendation recorded below
-  and not contentious; can be confirmed at R4.*
-- `[RECOMMENDED: ADVISORY]` **D3** — does Android ever switch? *Deliberately deferred until
-  after R3, when the cost is measurable rather than estimated.*
+**All closed 2026-09-10** — walked with the owner one at a time. Severities below were the
+recommendations; the resolutions are in *Decisions*, and Pass 3's escalation (agent-set
+severities never reviewed) is discharged.
+
+- ~~`[BLOCKING]` **D4** — is every admission decision pure?~~ **RESOLVED by reading the
+  code**, not by asking: `nowMs` is already a parameter. It never needed to be a question,
+  which is itself the lesson — a probe that can be answered by opening the file should be
+  run before it is escalated.
+- ~~`[BLOCKING]` **D5** — how does the matrix grade two implementations?~~ **DECIDED (a)
+  now, (b) eventually.**
+- ~~`[PHASE-GATED (R3)]` **D6** — what may travel from croft-stack?~~ **RESOLVED: nothing
+  does.** Also resolved by reading rather than asking.
+- ~~`[ADVISORY]` **D2** — first macOS artifact.~~ **CONFIRMED: headless first.**
+- ~~`[ADVISORY]` **D3** — does Android ever switch?~~ **DECIDED: yes; timing after R3.**
+  Upgraded from advisory in effect — it changes what R1 and R2 optimise for.
+
+One sub-item carried as a default rather than an owner decision: **what happens to a matrix
+row that names only the Kotlin side.** The a/b question was answered explicitly; this was
+not. The default is "passes, but the count is pinned and may only shrink". Cheap to
+overturn; see D5.
 
 ## Decisions
 
@@ -485,17 +530,42 @@ relay-shaped address escaping into a dial card — which is a property of what t
 *publishes*, not proof it never contacts a relay. A stronger claim needs traffic
 observation. If (a) is ever chosen anyway, that is the evidence to go and get first.
 
-### D2 — what is the first macOS artifact?
+### D2 — what is the first macOS artifact? **CONFIRMED 2026-09-10 (owner).**
 
-**Recommendation: headless (R3) first, UI (R4) after.** R3 is what removes adb from the
+**Headless (R3) first, UI (R4) after.** R3 is what removes adb from the
 loop; whether a person can *use* it is a different question from whether we can *test* it,
-and UI work should not block the loop that motivated the plan.
+and UI work should not block the loop that motivated the plan. A headless binary can also
+run in CI; a window never will.
 
-### D3 — does Android switch onto the core at all?
+**The limit, stated so R4 is not treated as garnish.** A headless binary can print "NOT
+camped on relay", but nothing judges whether those are the right words in the right place.
+Screen honesty — the rule that cost two device runs — is a **UI** rule, so R4 is where the
+honesty invariant gets its second surface. Second, not optional.
 
-Genuinely open. A defensible outcome is macOS on the core, Android staying Kotlin, and the
-matrix grading both — duplication accepted deliberately rather than arrived at by drift.
-**Decide after R3**, when the switch's cost is measurable.
+### D3 — does Android switch onto the core? **DECIDED 2026-09-10 (owner): YES. Timing after R3.**
+
+**This changed on 2026-09-10 and the change is load-bearing.** The question used to be "does
+it switch *at all*", to be answered after R3. It is now **"assume yes; decide the timing
+after R3"** — because D5's answer implies it. Retiring the Kotlin walker (D5's "(b)
+eventually") only makes sense if the Kotlin implementation stops being what Android runs.
+
+**Why the distinction is not pedantry — it changes what R1 and R2 optimise for:**
+
+| If D3 were "maybe" | D3 is "yes, timing TBD" |
+|---|---|
+| design the core for the macOS shell; worry about Android's FFI later, if ever | **design the core to cross the Android FFI from the start**, because it will |
+
+P7 has already paid and proven that cost once for chat — the uniffi surface, the arm64
+cross-compile, a real device `dlopen`ing the result — so it is a known quantity rather than
+a risk.
+
+**A consolidation nobody had costed.** Today a phone carrying both apps carries **two** iroh
+copies: upstream's `libiroh_ffi.so` in the calling app, ours inside `libcroft_ffi.so` in the
+social one. One app on one core is **one** copy. P7's measured 6.3 MB → 29.6 MB is the cost
+of putting iroh in our Rust *once*; calling joining it does not pay that twice.
+
+**The real cost, named honestly:** we take over a surface n0 currently maintains for free,
+including the Android cross-compile. That is the thing to weigh at R3, not whether to go.
 
 ## Review Log
 
@@ -569,4 +639,31 @@ Coherence check passed: the plan still solves the problem in its Problem Stateme
 has not crept (`caps/` is explicitly out, and R5–R8 stayed with the parent), and the
 reasoning reconstructs from the document alone.
 
-*Three passes complete.* Execution is gated on item 5.
+*Three passes complete.* ~~Execution is gated on item 5.~~
+
+**Phase 0 closed — 2026-09-10.** The four discovery items walked with the owner one at a
+time, in plain English, each grounded in the code before being discussed rather than after.
+
+**Two of the three "blocking" questions were answered by opening a file.** D4 (are the
+decisions pure?) was settled by reading `CampAdmission.kt` — `nowMs` is already a parameter.
+D6 (what may travel from croft-stack?) was settled by reading `attach_probe.rs` — 33 lines,
+every import third-party, nothing of ours in it. **Both had been escalated to the owner as
+questions when they were probes.** Worth recording as a planning lesson: Pass 1 marked them
+BLOCKING on the reasoning that they *could* change R1's shape, which was true, and then did
+not spend the ten minutes that would have shown they did not.
+
+**D6's real output was not the answer to its question.** Reading the probe showed it
+attaches with `iroh_relay::client::ClientBuilder` — a relay client — while the app binds an
+`iroh::Endpoint` with a `RelayMode`. Different layers. The probe proves *the relay accepts
+this token*; it proves nothing about *the app's endpoint attaching*, which is exactly where
+§15's defect lived. R3 now carries that as a constraint: go through `Endpoint`, not the
+probe's shape, however convenient 33 lines look.
+
+**D3 moved from a question to a premise**, and that propagates. "Assume Android switches;
+decide when after R3" means R1 and R2 design for the Android FFI from the start rather than
+treating it as a later maybe. It also surfaced a consolidation nobody had costed: a phone
+with both apps carries two iroh copies today, and one app on one core carries one.
+
+**A standing rule came out of D5's framing** and is now in *Reasoning*: the port is a
+two-way street. Defects the port surfaces in the Kotlin get fixed on both sides, or the
+matrix records divergence as normal instead of catching it.
