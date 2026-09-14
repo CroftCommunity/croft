@@ -45,8 +45,11 @@ to the environment and why*.
   refusal now names the failure, and a dial whose endpoint could not be bound
   stops with words instead of dialling a dead endpoint.
 
-Both are unit-pinned and **not yet re-run on hardware**; the camp row in
-`docs/ENFORCEMENT-SCENARIOS.md` stays DEVICE-OPEN until a phone proves it.
+**Both are now DEVICE-VERIFIED (2026-09-14, runbook §16).** A real phone dialled
+without losing its camp — one line in the relay journal across the whole call,
+where the same action a week earlier produced a teardown, a close and a re-admit
+within a second. The call connected (the first of this arc) and the E129 endings
+read verbatim on both screens.
 
 ### Security
 

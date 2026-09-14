@@ -67,9 +67,9 @@ House truths the rows encode:
 | v1 callee (no grant params) | MUST DIAL tokenless, silently (compat) | PIN:DialAdmissionTest.kt::`no grant means the v1 tokenless dial, silently` |
 | Grant but no usable proof | MUST DEGRADE with a sign-in nudge, mint untouched | PIN:DialAdmissionTest.kt::`a grant with no usable proof dials tokenless with a sign-in nudge` · PIN:DialCompositionJourneyTest.kt::`signed out with no secret nudges and never touches the mint` |
 | Client defect (bad request) | MUST REFUSE and say it is ours | PIN:DialAdmissionTest.kt::`a bad request is a client defect and blocks the dial` |
-| Dialling while holding a live camping pass | MUST KEEP the pass — a dial never lowers admission | PIN:RebindPolicyTest.kt::`a tokenless dial keeps a live camping pass — reachability is never lowered` · PIN:RebindPolicyTest.kt::`the same token is not a rebind` — **DEVICE-OPEN**: fixed and unit-pinned 2026-09-08, not yet re-run on hardware |
+| Dialling while holding a live camping pass | MUST KEEP the pass — a dial never lowers admission | PIN:RebindPolicyTest.kt::`a tokenless dial keeps a live camping pass — reachability is never lowered` · PIN:RebindPolicyTest.kt::`the same token is not a rebind` — **DEVICE-VERIFIED 2026-09-14** (runbook §16): one Connect tap on a real phone, and the relay journal carried **one line in total** from the tap through the connected call and the hang-up — no `Stream terminated`, no `usage` close, no denial, no re-admit. §15.3's identical action produced all four within a second. |
 | Dialling with a minted call token | MUST SWAP (M4c), accepting the camp gap | PIN:RebindPolicyTest.kt::`a minted call token swaps — a different admitting token is the M4c path` · PIN:RebindPolicyTest.kt::`an unbound endpoint binds the minted token` |
-| The endpoint cannot be bound at dial time | MUST NOT DIAL, and say so | `MainViewModel.REBIND_FAILED`; dialling a dead endpoint is what produced `dial failed: null` (§15.3). No pure test — the guard is at the shell, and the arc it protects needs a real endpoint |
+| The endpoint cannot be bound at dial time | MUST NOT DIAL, and say so | `MainViewModel.REBIND_FAILED`; dialling a dead endpoint is what produced `dial failed: null` (§15.3). No pure test — the guard is at the shell, and the arc it protects needs a real endpoint. **Not exercised on hardware**: §16's dial succeeded, so the guard never fired. It remains unproven on a device and must not be read as covered by §16. |
 
 ## Callability honesty (M2 — advisory layer; the gate wins)
 
@@ -95,15 +95,17 @@ House truths the rows encode:
 Recorded as prose, not rows, because a `PIN:` naming a test that does not exist
 fails the walk — each needs its test written before it earns a row.
 
-- ~~**A dial drops the caller's camp.**~~ **FIXED 2026-09-08 — unit-pinned,
-  DEVICE-OPEN.** Cause was `rebindWithToken`: the relay auth token belongs to the
+- ~~**A dial drops the caller's camp.**~~ **FIXED 2026-09-08, DEVICE-VERIFIED
+  2026-09-14 (runbook §16) — closed.** Cause was `rebindWithToken`: the relay auth token belongs to the
   endpoint, so changing it means `stop()`/`start()`, and the tokenless dial path
   called `rebindWithToken(null)` over a live camping pass — a strict downgrade,
   refused by definition under enforce. `DialAdmission.rebind` now decides, and a
   dial never lowers admission; rows are in the Dial posture table above.
-  **Not yet re-run on hardware.** That gap is the whole point of §15: the last
-  unit-green screen-honesty fix was device-BROKEN, and this row does not close
-  until a phone dials without losing its camp.
+  **Re-run on hardware 2026-09-14 and it held** — the closing condition was written
+  in advance and met exactly: a phone dialled without losing its camp, with no
+  `no_token` after the Connect tap. The caution §15 attached to this row was right to
+  exist and this time the unit-green fix was also device-true; it stands for the next
+  one, not against this.
 - ~~**`dial failed: null`**~~ **FIXED 2026-09-08.** It was the P7 S1 uniffi
   finding met again — a fieldless generated variant crosses with an empty
   message, and `"dial failed: ${t.message}"` rendered that verbatim. The catch
