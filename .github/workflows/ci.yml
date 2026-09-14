@@ -42,6 +42,8 @@ jobs:
         run: cargo check -p social-tree-core --target wasm32-unknown-unknown
       - name: wasm arm — the chat pond compiles for wasm32-unknown-unknown
         run: cargo check -p chat-core --target wasm32-unknown-unknown
+      - name: wasm arm — the call pond compiles for wasm32-unknown-unknown
+        run: cargo check -p call-core --target wasm32-unknown-unknown
       - name: no-default-features arm
         run: cargo check -p social-tree-core --no-default-features
       - name: clippy, including the disallowed-methods purity lints
@@ -53,8 +55,15 @@ jobs:
         # the dead -A independently; this form also denies rustc warnings —
         # unused imports, dead code — which -D clippy::all alone would let pass.)
         run: cargo clippy -p social-tree-core -- -D warnings --force-warn missing_docs
+      # call-core (R1): --all-targets so the matrix walker and row tests are linted too.
+      # Its clippy.toml is where the purity lints live — a per-crate file, so a clock
+      # read here would otherwise be invisible (call-core plan, Pass 2 finding).
+      - name: clippy — call-core, including the disallowed-methods purity lints
+        run: cargo clippy -p call-core --all-targets -- -D warnings --force-warn missing_docs
       - name: fmt
         run: cargo fmt -p social-tree-core -- --check
+      - name: fmt — call-core
+        run: cargo fmt -p call-core -- --check
 
   # The two crates P7 S0 landed. A separate job from core-purity because they
   # are not pure and must not be held to that standard: `store-redb` opens

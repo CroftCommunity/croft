@@ -10,6 +10,16 @@ to the environment and why*.
 
 ## [Unreleased]
 
+### Added
+
+- **core: `call-core`, the camp and dial admission rules as a pure Rust pond
+  (R1 of the call-core-and-apple-shell plan).** A port of the shipped Kotlin
+  decision logic, clock-free, graded by the same enforcement matrix: nineteen
+  client-posture rows now carry a `RUST:` pin beside their Kotlin `PIN:`, and
+  a Rust walker holds them to it. **Nothing shipped changes** — the calling
+  app calls none of it until R3; the crate is the shared rules the fast loop
+  will run against the real relay.
+
 ### Security
 
 - **rustls 0.23.43 → 0.23.45** — RUSTSEC-2026-0285, issued 2026-09-14: rustls did not
@@ -50,13 +60,6 @@ without losing its camp — one line in the relay journal across the whole call,
 where the same action a week earlier produced a teardown, a close and a re-admit
 within a second. The call connected (the first of this arc) and the E129 endings
 read verbatim on both screens.
-
-### Security
-
-- **core: `rustls` 0.23.43 → 0.23.45 retires RUSTSEC-2026-0285** (TLS 1.3 handshake
-  messages accepted across encryption-level boundaries; published 2026-09-14). It is in
-  `croft-ffi`'s production tree (`cargo tree -p croft-ffi -i rustls --edges normal`), so
-  the fix is the upgrade, not an exception. Lockfile-only; the next APK carries it.
 
 ## [0.5.0] — 2026-08-27
 

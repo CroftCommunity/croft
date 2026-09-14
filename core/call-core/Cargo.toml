@@ -1,0 +1,12 @@
+# The call pond's decision rules (plan 2026-09-08 call-core-and-apple-shell, R1):
+# camp and dial admission as a pure core, a port of android/app's CampAdmission
+# and DialAdmission, graded by the same enforcement matrix that grades them.
+# No production caller until R3 — stated, not hidden (the plan's expiry clause).
+[package]
+name = "call-core"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "The Croft call pond: camp and dial admission decisions — pure, clock-free, I/O-free"
+
+[dependencies]
