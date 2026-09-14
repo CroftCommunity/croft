@@ -1,6 +1,7 @@
 # Phase 11 — cap/admission on the client (plan)
 
-**Status: ACTIVE — D1/D2 decided by the owner 2026-08-17; M1 underway.**
+**Status: SHIPPED — M1–M3 released as v0.3.0 (2026-08-17) and v0.4.0 (2026-08-18); M4 released as v0.5.0 (2026-08-27); production enforce flip 2026-08-30. Historical record; status corrected 2026-09-14.**
+(Was: ACTIVE — D1/D2 decided by the owner 2026-08-17; M1 underway.)
 Written 2026-08-17, the day rungs 0–3 all went green and v0.2.0 shipped.
 
 **D1 decided:** lazy-on-tap **plus** a TTL cache — resolution happens only on

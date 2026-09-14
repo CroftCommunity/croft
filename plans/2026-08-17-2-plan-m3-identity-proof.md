@@ -1,5 +1,7 @@
 # Phase 11 M3 — identity proof: `provenDid` via atproto OAuth
 
+**Status: SHIPPED — released as v0.4.0 (2026-08-18); `provenDid` via atproto OAuth is live. Status line added 2026-09-14.**
+
 Plan doc (phase-plan skill — passes 1–3 complete, ready for execution).
 Parent plan:
 `plans/2026-08-17-phase11-cap-admission.md` (M3 is its third milestone).
