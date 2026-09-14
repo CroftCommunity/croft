@@ -36,6 +36,13 @@ to the environment and why*.
 Both are unit-pinned and **not yet re-run on hardware**; the camp row in
 `docs/ENFORCEMENT-SCENARIOS.md` stays DEVICE-OPEN until a phone proves it.
 
+### Security
+
+- **core: `rustls` 0.23.43 → 0.23.45 retires RUSTSEC-2026-0285** (TLS 1.3 handshake
+  messages accepted across encryption-level boundaries; published 2026-09-14). It is in
+  `croft-ffi`'s production tree (`cargo tree -p croft-ffi -i rustls --edges normal`), so
+  the fix is the upgrade, not an exception. Lockfile-only; the next APK carries it.
+
 ## [0.5.0] — 2026-08-27
 
 Phase 11 **M4 — the client side is complete and device-validated**
