@@ -864,3 +864,26 @@ Same WiFi, same room, one call. NAT traversal across networks, cellular, and mob
 lifecycle (backgrounding, doze, process death) are untouched — §5's rungs 2 and 3 remain
 the tier for those. The call's path was not instrumented here beyond connection; a
 relayed-vs-direct reading was not taken.
+
+### §16 rig state as left — and a deliberate departure from "restore the released APK"
+
+The standing rule is that a rig build is restored to the released v0.5.0 when done. **It was
+not, on the Pixel, and that is the owner's call (2026-09-14)** rather than an oversight:
+
+- **Samsung (callee)** — released **v0.5.0**, untouched, signed in, camped.
+- **Pixel (caller)** — a **debug build of main `983c955`**, kept. Restoring v0.5.0 would put
+  back a defect this very run proved fixed, and would wipe app data a second time. Under
+  "alpha, forward over historical" that trade is not worth making twice.
+
+**The hazard the departure leaves, stated so the next session does not rediscover it.** The
+Pixel's published endpoint record now names the **debug build's** identity:
+
+```
+ing.croft.iroh.endpoint/self  ->  873f3ddc15e58b…   (the 631277dda5… of §13–§15 is dead)
+```
+
+Reinstalling the calling app on that phone — any build, including the release — wipes app
+data, mints a **new** iroh secret key, and leaves the published record naming a device that
+no longer exists. Under enforce the phone is then silently unreachable, and the only surface
+that says so is the camp line. Re-publish `rkey=self` with the new id and relaunch; the
+repair takes a minute once you know, and cost twenty when we did not.
