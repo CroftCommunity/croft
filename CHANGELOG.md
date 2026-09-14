@@ -61,13 +61,6 @@ where the same action a week earlier produced a teardown, a close and a re-admit
 within a second. The call connected (the first of this arc) and the E129 endings
 read verbatim on both screens.
 
-### Security
-
-- **core: `rustls` 0.23.43 → 0.23.45 retires RUSTSEC-2026-0285** (TLS 1.3 handshake
-  messages accepted across encryption-level boundaries; published 2026-09-14). It is in
-  `croft-ffi`'s production tree (`cargo tree -p croft-ffi -i rustls --edges normal`), so
-  the fix is the upgrade, not an exception. Lockfile-only; the next APK carries it.
-
 ## [0.5.0] — 2026-08-27
 
 Phase 11 **M4 — the client side is complete and device-validated**
