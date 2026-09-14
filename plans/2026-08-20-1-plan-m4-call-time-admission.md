@@ -1,8 +1,7 @@
 # Phase 11 M4 — call-time admission: the cap becomes a relay token (plan)
 
-**Status: ACTIVE — M4a, M4b, and M4c (code-complete) are DONE
-2026-08-20; O2 resolved from source. Next: M4d, the validation ladder —
-the first rung that needs hardware.** Written 2026-08-20, the day the relay
+**Status: DONE — M4a–M4c 2026-08-20; M4d validated on hardware (runbook §11 2026-08-21, §12 2026-08-24, all rungs green against staging enforce); released as v0.5.0 2026-08-27; production enforce flip 2026-08-30. Status corrected 2026-09-14.**
+(Was: ACTIVE — M4a, M4b, M4c DONE 2026-08-20; next M4d, the validation ladder.) Written 2026-08-20, the day the relay
 side finished its build surface (croft-stack Phase 8: caps evaluation, service-auth verify,
 `/grantCall` mint on the running binary, usage transport, declared deploy —
 Review Log in `discovery/alpha/plans/2026-08-07-1-plan-croft-relay-tiered-admission.md`,
