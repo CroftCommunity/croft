@@ -1,0 +1,10 @@
+# O8 (E117 P2): purity enforced mechanically. A core that needs the time asks
+# for it as an effect; a clock read in this crate is a defect, not a style issue.
+disallowed-methods = [
+    "std::time::SystemTime::now",
+    "std::time::Instant::now",
+]
+disallowed-types = [
+    "std::time::SystemTime",
+    "std::time::Instant",
+]
