@@ -10,6 +10,16 @@ to the environment and why*.
 
 ## [Unreleased]
 
+### Added
+
+- **core: `call-core`, the camp and dial admission rules as a pure Rust pond
+  (R1 of the call-core-and-apple-shell plan).** A port of the shipped Kotlin
+  decision logic, clock-free, graded by the same enforcement matrix: nineteen
+  client-posture rows now carry a `RUST:` pin beside their Kotlin `PIN:`, and
+  a Rust walker holds them to it. **Nothing shipped changes** — the calling
+  app calls none of it until R3; the crate is the shared rules the fast loop
+  will run against the real relay.
+
 ### Security
 
 - **rustls 0.23.43 → 0.23.45** — RUSTSEC-2026-0285, issued 2026-09-14: rustls did not

@@ -1,6 +1,6 @@
 # Plan — filling `call-core` and standing up the apple shell (roadmap R1–R4)
 
-**Status:** ACCEPTED 2026-09-10. Three passes complete, **Phase 0 CLOSED** — D1 was probed
+**Status:** **R1 LANDED 2026-09-14** (`core/call-core`, croft PR — see Review Log); R2 may start, and the expiry clause is now live: R3 must have started by the time R1 lands or R1 is reverted. Previously: ACCEPTED 2026-09-10. Three passes complete, **Phase 0 CLOSED** — D1 was probed
 2026-09-08, and D4/D5/D6 were walked with the owner 2026-09-10 (see *Decisions*). Pass 3's
 escalation is discharged: the severities were reviewed. **R1 may start.** Phase 0's D1 is already RUN and green; D4–D6 are
 not. Nothing below Phase 0 should start until D4–D6 are answered, because two of them can
@@ -241,22 +241,22 @@ items are resolved, the phases they touched are edited, and the plan is accepted
 same matrix that grades the Kotlin, with Android untouched.
 
 **Changes:**
-- [ ] `core/call-core/Cargo.toml` + `src/lib.rs` — new crate, added to workspace `members`
-- [ ] `src/model.rs` — the state a decision reads (session presence, cached pass + expiry,
+- [x] `core/call-core/Cargo.toml` + `src/lib.rs` — new crate, added to workspace `members`
+- [x] `src/model.rs` — the state a decision reads (session presence, cached pass + expiry,
       grant/proof availability) and the decision/effect types
-- [ ] `src/camp.rs` — `CampAdmission`'s rules: mint / reuse / re-mint at margin / degrade
+- [x] `src/camp.rs` — `CampAdmission`'s rules: mint / reuse / re-mint at margin / degrade
       with words, one arm per matrix row
-- [ ] `src/dial.rs` — `DialAdmission`'s rules including `rebind` (R0's fix, ported with its
+- [x] `src/dial.rs` — `DialAdmission`'s rules including `rebind` (R0's fix, ported with its
       reason intact — a dial never lowers admission)
-- [ ] `docs/ENFORCEMENT-SCENARIOS.md` — `PIN:` syntax extended per D5
-- [ ] the Rust matrix walker per D5
-- [ ] **`core/call-core/clippy.toml`** — the purity lints, copied from
+- [x] `docs/ENFORCEMENT-SCENARIOS.md` — `PIN:` syntax extended per D5
+- [x] the Rust matrix walker per D5
+- [x] **`core/call-core/clippy.toml`** — the purity lints, copied from
       `core/social-tree-core/clippy.toml`. Pass 2 finding: they are a **per-crate** config,
       so without this file a clock read in `call-core` is not a defect, it is invisible
-- [ ] **`.github/workflows/ci.yml`** — add `call-core` to the `core-purity` job's wasm arm,
+- [x] **`.github/workflows/ci.yml`** — add `call-core` to the `core-purity` job's wasm arm,
       clippy and fmt. Pass 2 finding: every Rust gate names crates explicitly with `-p`, so
       a new crate lands **outside all of them** and CI stays green over it
-- [ ] `CLAUDE.md` — the "calling app calls none of it" clause becomes accurate again
+- [x] `CLAUDE.md` — the "calling app calls none of it" clause becomes accurate again
 
 **Call chain:** `core/call-core` tests → `camp::decide` / `dial::decide`. **This phase has
 no production caller** — the first is R3. Stated rather than hidden: it is the additive
@@ -311,6 +311,20 @@ would survive a one-line mutation — name the edges up front:
   keeps; a different non-null token swaps. The interesting case is the one that regressed.
 
 **Validation:** *Narrow.* Tests are sufficient — no I/O, no shipped artifact changes.
+
+**Done, 2026-09-14 — evidence, in the order the phase prescribed:**
+1. The walker RED first (no `RUST:` pins; 32 one-sided rows), RED again once 19 rows
+   gained pins to files that did not exist (25 `MISSING FILE`), the row tests RED at
+   compile, then the rules — 30 tests green (`cargo test -p call-core`).
+2. **Watched to fail, both gates:** a `SystemTime::now()` inserted into `camp::plan` —
+   clippy (CI form, `-D warnings`) refused it as a disallowed method; the **wasm arm did
+   not** (std::time compiles on wasm32), so clippy.toml is the purity gate and the wasm
+   arm proves only portability. One `RUST:` pin renamed in the matrix — the Rust walker
+   failed naming that test and nothing else.
+3. Mutation baseline: 27 mutants, 22 caught, 5 unviable, **0 missed**
+   (`core/call-core/MUTATION.md`).
+4. One-sided rows: **13** (down from 32), asserted in the walker; each is a journey or
+   shell row that stays Kotlin-only until D3.
 
 ---
 
@@ -667,3 +681,19 @@ with both apps carries two iroh copies today, and one app on one core carries on
 **A standing rule came out of D5's framing** and is now in *Reasoning*: the port is a
 two-way street. Defects the port surfaces in the Kotlin get fixed on both sides, or the
 matrix records divergence as normal instead of catching it.
+
+**2026-09-14 — R1 executed.** Three things the port surfaced, none a defect in the
+Kotlin's behaviour:
+- **A type the Kotlin leaves loose.** `DialAdmission.Rebind.Swap(val token: String?)` can
+  never carry null after `rebind`'s own rule (a null want is always `Keep`); the Rust
+  `Swap { token: String }` makes that a type. Per the two-way-street rule this belongs on
+  both sides — but R1's goal says *Android untouched*, so it is recorded here for D3
+  time rather than landed in `:app` now. Behaviour is identical.
+- **The wasm arm cannot see a clock read.** The plan's Done-when asked for both arms to
+  be watched to fail against `SystemTime::now`; only clippy's `disallowed-methods` does.
+  The wasm arm earns its place for portability, not purity. Worth knowing before anyone
+  reads "compiles for wasm32" as "pure".
+- **The walker must not look for `.git`.** `cargo mutants` runs the suite in a VCS-less
+  copy; a walker that finds the repo root by walking up to `.git` reports every mutant
+  untestable. Fixed by locating the document by layout. `EnforcementMatrixTest.kt` has
+  the same shape and would meet the same wall if anything ever mutated it under a copy.

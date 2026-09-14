@@ -32,7 +32,14 @@ builds a generated exception's `message` from the variant's FIELDS, so the
 fieldless variants (`NoGroupSelected`, `EmptyDraft`) crossed with an EMPTY
 message until every variant gained a `reason` field. The typed exception was
 always there; the sentence was not. **The calling app still calls none of it** — the P7
-standing constraint holds every phase additive while croftcall bakes.
+standing constraint holds every phase additive while croftcall bakes. **R1 landed
+2026-09-14 (`core/call-core`):** the camp and dial admission rules now exist in Rust as
+a pure pond, a port of `CampAdmission.kt` / `DialAdmission.kt`, graded by the same
+`docs/ENFORCEMENT-SCENARIOS.md` rows (`RUST:` pins beside `PIN:`, walked by
+`core/call-core/tests/enforcement_matrix.rs`). The calling app calls none of that
+either — its first production caller is R3's headless arc binary, and the plan's
+expiry clause (R1 is reverted if R3 has not started when it lands) is the guard
+against it rotting as a second implementation.
 **P7 S1 landed 2026-08-27: the surface exists and runs on a device.**
 `android/social/` is a SEPARATE dev-only module (owner chose a module over a
 product flavor, so `:app`'s variant names and every runbook command stay
