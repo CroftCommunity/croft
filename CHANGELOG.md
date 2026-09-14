@@ -10,6 +10,18 @@ to the environment and why*.
 
 ## [Unreleased]
 
+### Security
+
+- **rustls 0.23.43 → 0.23.45** — RUSTSEC-2026-0285, issued 2026-09-14: rustls did not
+  enforce RFC 8446 §5.1, so a TLS 1.3 handshake message packed into the same record as a
+  key-changing message was accepted instead of terminating the connection. A peer can
+  therefore send in plaintext what should have been encrypted. CVSS 5.3, confidentiality
+  only (`C:L/I:N/A:N`); the transcript stays authenticated, so a network-position attacker
+  cannot alter or complete a handshake. **Fixed by a bump, not an exception:** the advisory
+  publishes no `affected.functions`, so the reachability argument `osv-scanner.toml` relies
+  on is unavailable, and a patched release already exists. Transitive via iroh, iroh-relay,
+  reqwest and hickory — production-reachable by any reading.
+
 ### Fixed
 
 - **chat core: accepting a record you already hold no longer reports as though
