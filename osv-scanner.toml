@@ -116,3 +116,47 @@ could not decide rung 2 mechanically and asked.
 
 Not fixable from here: it is transitive through iroh, and retiring it needs upstream
 to move to `pastey`. Retire by: that upstream move, or dropping the iroh dependency."""
+
+# ── rustls 0.23.45 — the licence is KNOWN and unchanged; the DATABASE is behind
+#
+# THE FIRST per-package licence exception in this workspace. SUPPLY-CHAIN.md rule 7
+# recorded "zero per-package licence exceptions were needed anywhere" on 2026-08-29,
+# and that stayed true until a security bump outran the licence database.
+#
+# What happened: RUSTSEC-2026-0285 was issued 2026-09-14 and its only fix is
+# rustls >= 0.23.45. That version was hours old when we took it, and deps.dev had
+# no record for it at all, so osv-scanner read the licence as UNKNOWN and the gate
+# blocked — correctly, since UNKNOWN is not in LICENCE_ALLOWLIST.
+#
+# Why this is an override and not a widened allowlist: the licence is not unknown to
+# US. Read from the crate's own manifest in the local registry cache, both versions
+# are identical and already allowlisted:
+#
+#   rustls-0.23.43/Cargo.toml   license = "Apache-2.0 OR ISC OR MIT"
+#   rustls-0.23.45/Cargo.toml   license = "Apache-2.0 OR ISC OR MIT"
+#
+# and deps.dev serves exactly that for 0.23.43 (published 2026-07-29) while returning
+# no record for 0.23.45. This is a data-freshness artifact with a known expiry: it
+# resolves itself the moment deps.dev ingests the version. Widening the allowlist to
+# accept UNKNOWN would silence every future unknown licence permanently, which is the
+# thing rule 7 exists to prevent.
+#
+# Checked that this is an ASSERTION and not a silencer: with the override in place and
+# the allowlist deliberately narrowed to MIT alone, rustls is still reported as a
+# violation (Apache-2.0 and ISC are then disallowed). The override states the licence;
+# the gate still judges it. A blanket ignore would have cleared it under any allowlist.
+#
+# RETIRE THIS by deleting the block once `deps.dev/v3alpha/systems/cargo/packages/
+# rustls/versions/0.23.45` returns a licences field. If the date below passes and it
+# still does not, that is a finding about deps.dev, not a reason to extend.
+[[PackageOverrides]]
+name = "rustls"
+version = "0.23.45"
+ecosystem = "crates.io"
+license.override = ["Apache-2.0", "ISC", "MIT"]
+effectiveUntil = 2026-10-05
+reason = """deps.dev has no record for this version yet (published hours before we
+took it, to fix RUSTSEC-2026-0285), so the scanner reads UNKNOWN. The crate's own
+manifest declares Apache-2.0 OR ISC OR MIT, identical to 0.23.43, which deps.dev
+already serves and which is already allowlisted. Verified by reading both manifests,
+not inferred. Delete once deps.dev catches up."""
