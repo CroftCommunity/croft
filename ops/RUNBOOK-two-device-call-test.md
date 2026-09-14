@@ -769,3 +769,121 @@ should gate any claim that v0.5.0 is complete under enforcement.
 Not run this session: the two-sided call, the E129 endings (blocked by 3), and
 E135(b)'s wording decision (its case is now concrete — see the `Signed in` /
 "NOT camped" contradiction in §15.2).
+
+## §16 — the dial fix, DEVICE-VERIFIED; and the first connected call of this arc (RUN 2026-09-14)
+
+§15 left the dial fix unit-green and **DEVICE-OPEN**, with the closing condition written
+down: *a phone must dial without losing its camp, with no `no_token` in the relay journal
+after a Connect tap.* It was met, and three things beyond it came with the run.
+
+**The rig.** Samsung `R5GL712H75Y` as callee on the **released v0.5.0** (versionCode 6,
+unmodified) — deliberately, so the callee stays the shipped artifact and the fix is isolated
+to one side. Pixel `51021FDAP000RF` as caller on a **debug build of main `983c955`**, whose
+APK was verified to contain the fix (`Rebind` present in `classes5.dex`/`classes6.dex`)
+rather than assumed from the source tree.
+
+### The result
+
+```
+19:48:05   ← ONE Connect tap
+(nothing)    no "Stream terminated", no usage close, no denial, no re-admit
+19:48:08   screen: "Hang up" — CONNECTED
+19:49:08   ← Hang up
+```
+
+**The relay journal carried ONE line in total from the tap through the call and the
+hang-up** — no verdicts, no `usage` closes. Both camps held. Set against §15.3's identical
+action:
+
+| | §15 (broken) | §16 (fixed) |
+|---|---|---|
+| 1 s after the tap | `actor errored "Stream terminated"` + `usage` close | nothing |
+| the camp | died, re-attach needed | never disturbed |
+| the screen | `NOT camped … calls cannot reach this device` | `Hang up` |
+| the dial | `dial failed: null` | connected |
+
+**The dial now reuses the camped connection instead of tearing it down.** The camp row and
+the three Dial posture rows move to DEVICE-VERIFIED.
+
+### The E129 endings, verbatim, both screens
+
+Blocked behind the dial defect since 2026-08-23. Read off the devices:
+
+```
+caller:  you ended the call — ready, camped on relay
+callee:  call ended: closed by peer: hangup (code 0) — ready, camped on relay
+```
+
+Both sides stayed camped after the call, which is E129's other requirement — the endpoint
+stays bound and the device stays callable.
+
+### Three findings from getting there, none of them the fix
+
+**1. The OAuth sessions did not survive six days idle.** Both phones came up `Signed in`
+with `NOT camped on relay`, and logcat gave the same reason on each:
+
+```
+foreground token refresh failed: HTTP 400 … {"error":"invalid_grant","error_description":"Invalid refresh token"}
+camp setup failed:               HTTP 400 … {"error":"invalid_grant","error_description":"Invalid refresh token"}
+```
+
+§15.2 measured this at ~11 days on the Pixel; this run measured **6 days on the Samsung**.
+The practical consequence for every future device run: **re-sign-in is step 0, always** —
+not a contingency. The `Signed in` / `NOT camped` pair is the tell, and the account card is
+never the signal (§15.2's refutation of the "shows the handle field" check still stands).
+
+**2. Installing a build over the released APK resets the device's endpoint identity.**
+`adb install -r` of the debug build reported `Success`, and the Pixel came up **signed out**
+with a **new endpoint id** — app data was cleared, taking the persisted iroh secret key with
+it. The published record still named the old identity, so the camp mint refused with
+`this device is not published by your account` (`endpoint_unbound`), correctly and in words.
+
+```
+Pixel endpoint after install:  873f3ddc15e58b2888edc8c51db9f91d2bffbafeb554cd62ce0c997fdb44c926
+ing.croft.iroh.endpoint/self:  631277dda58cc960db03cb1521f49fae2fab75c4afdf4c234f63aff08c98f044  (stale)
+```
+
+Repaired by re-publishing `rkey=self` with the new id, after which the arc completed —
+`denied no_token` 19:47:20 → `admitted … sponsorship=BudgetBytes(262144)` 19:47:21.
+
+**This is a rig hazard with teeth under enforce:** a reinstall silently makes a phone
+unreachable, and nothing but the camp line says so. **The caller's published record now
+names the DEBUG build's identity** — anyone who reinstalls that phone must re-publish it
+again.
+
+**3. A piped build command reported success for a failed build.** `./gradlew assembleDebug
+2>&1 | tail -15` exited 0 because the pipeline exits with `tail`'s status; the build had
+failed on `:social:compileDebugKotlin` (that module needs generated FFI bindings a fresh
+worktree does not have). Caught only because the APK was missing when the install was
+attempted. `CroftC/.claude/VERIFICATION.md` names this exact shape. The run used
+`:app:assembleDebug` to a log file with the exit code read directly afterwards.
+
+### What this run does NOT claim
+
+Same WiFi, same room, one call. NAT traversal across networks, cellular, and mobile
+lifecycle (backgrounding, doze, process death) are untouched — §5's rungs 2 and 3 remain
+the tier for those. The call's path was not instrumented here beyond connection; a
+relayed-vs-direct reading was not taken.
+
+### §16 rig state as left — and a deliberate departure from "restore the released APK"
+
+The standing rule is that a rig build is restored to the released v0.5.0 when done. **It was
+not, on the Pixel, and that is the owner's call (2026-09-14)** rather than an oversight:
+
+- **Samsung (callee)** — released **v0.5.0**, untouched, signed in, camped.
+- **Pixel (caller)** — a **debug build of main `983c955`**, kept. Restoring v0.5.0 would put
+  back a defect this very run proved fixed, and would wipe app data a second time. Under
+  "alpha, forward over historical" that trade is not worth making twice.
+
+**The hazard the departure leaves, stated so the next session does not rediscover it.** The
+Pixel's published endpoint record now names the **debug build's** identity:
+
+```
+ing.croft.iroh.endpoint/self  ->  873f3ddc15e58b…   (the 631277dda5… of §13–§15 is dead)
+```
+
+Reinstalling the calling app on that phone — any build, including the release — wipes app
+data, mints a **new** iroh secret key, and leaves the published record naming a device that
+no longer exists. Under enforce the phone is then silently unreachable, and the only surface
+that says so is the camp line. Re-publish `rkey=self` with the new id and relaunch; the
+repair takes a minute once you know, and cost twenty when we did not.

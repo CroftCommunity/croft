@@ -12,7 +12,7 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
 
 ## Open
 
-- [x] **A dial drops the caller's camp — reachability lost on every Connect.** FIXED 2026-09-08, unit-pinned, DEVICE-OPEN. [device: android x2]
+- [x] **A dial drops the caller's camp — reachability lost on every Connect.** FIXED 2026-09-08; **DEVICE-VERIFIED 2026-09-14** (runbook §16). [device done 2026-09-14: one Connect tap, one line in the relay journal across the whole call — no teardown, no re-admit; and the first connected call of the arc, with the E129 endings verbatim on both screens]
 
   **The fix:** the relay auth token belongs to the endpoint, so changing it costs
   a `stop()`/`start()`. `rebindWithToken` swapped unconditionally, and the
@@ -23,10 +23,20 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
   and the dial proceeded against a dead endpoint (both call sites now stop and
   say so), and the resulting refusal rendered as `dial failed: null`.
 
-  **Still owed: the device run.** 177 unit tests green proves the mapping, not
-  the phone. §15's own lesson is that a unit-green screen-honesty fix was
-  device-BROKEN; this row stays DEVICE-OPEN until a phone dials without losing
-  its camp and the relay journal shows no `no_token` after a Connect tap.
+  **The device run is DONE (2026-09-14).** The closing condition was written in
+  advance and met exactly: a phone dialled without losing its camp, and the relay
+  journal carried one line in total from the Connect tap through the connected
+  call and the hang-up. The call connected — the first in this arc — and the E129
+  endings read verbatim on both screens. Runbook §16.
+
+  Three findings came with it, none of them the fix: OAuth sessions did not
+  survive **six days** idle (§15.2 measured ~11), so re-sign-in is step 0 of every
+  device run rather than a contingency; `adb install -r` over the released APK
+  **cleared app data and with it the persisted iroh secret key**, giving the phone
+  a new endpoint id that its published record no longer named — silent
+  unreachability under enforce, repaired by re-publishing `rkey=self`; and a piped
+  `gradlew … | tail` reported exit 0 over a failed build, the exact shape
+  VERIFICATION.md names.
   Found on hardware 2026-09-08 under enforcement (`ops/RUNBOOK-two-device-call-test.md`
   §15.3). One Connect tap tears down the caller's camped relay connection — the relay
   logs `actor errored "Stream terminated, exiting"` and a `usage` close one second
