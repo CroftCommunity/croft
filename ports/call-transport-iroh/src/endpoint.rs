@@ -106,16 +106,7 @@ impl CallEndpoint {
     /// Returns as soon as the local socket is bound; whether the relay
     /// admitted the attach is [`Self::attached_relay`]'s question.
     pub fn bind(opts: BindOptions) -> Result<Self, CallTransportError> {
-        // Two workers, as transport-iroh: I/O-bound work — a QUIC socket, the
-        // relay actor — and on a phone the per-CPU default is threads and
-        // battery spent idle.
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_all()
-            .build()
-            .map_err(|e| CallTransportError::Runtime {
-                reason: e.to_string(),
-            })?;
+        let runtime = new_runtime()?;
         let secret = SecretKey::from_bytes(&opts.secret_key);
         let endpoint = runtime.block_on(bind_endpoint(
             &secret,
@@ -201,12 +192,22 @@ impl CallEndpoint {
                 let before = self.endpoint_id();
                 self.token = Some(token);
                 self.runtime.block_on(self.endpoint.close());
-                self.endpoint = self.runtime.block_on(bind_endpoint(
+                // A NEW runtime for the new endpoint. Measured against
+                // production (R3's arc, 2026-09-15): when the old endpoint was
+                // closed mid-attach, iroh logged `relay_recv_channel closed`
+                // and the new endpoint, bound on the SAME runtime, never
+                // reached the relay in 20 s — a task the close left behind
+                // outlived its endpoint. Dropping the old runtime cancels
+                // everything that ran on it; a `Call` still holding it keeps
+                // it alive until that call is gone.
+                let runtime = new_runtime()?;
+                self.endpoint = runtime.block_on(bind_endpoint(
                     &self.secret,
                     &self.relay,
                     self.token.as_deref(),
                     self.discovery,
                 ))?;
+                self.runtime = Arc::new(runtime);
                 self.generation += 1;
                 let after = self.endpoint_id();
                 if before != after {
@@ -358,6 +359,21 @@ impl CallEndpoint {
         tracing::debug!(endpoint = %self.endpoint_id_short(), "shutting down");
         self.runtime.block_on(self.endpoint.close());
     }
+}
+
+/// The runtime one bound endpoint lives on.
+///
+/// Two workers, as transport-iroh: I/O-bound work — a QUIC socket, the relay
+/// actor — and on a phone the per-CPU default is threads and battery spent
+/// idle.
+fn new_runtime() -> Result<Runtime, CallTransportError> {
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .map_err(|e| CallTransportError::Runtime {
+            reason: e.to_string(),
+        })
 }
 
 async fn bind_endpoint(
