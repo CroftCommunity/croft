@@ -307,6 +307,22 @@ name = "call-core"
 version = "0.1.0"
 
 [[package]]
+name = "call-transport-iroh"
+version = "0.1.0"
+dependencies = [
+ "call-core",
+ "data-encoding",
+ "iroh",
+ "iroh-relay",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "transport-iroh",
+]
+
+[[package]]
 name = "camino"
 version = "1.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

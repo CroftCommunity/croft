@@ -91,9 +91,17 @@ jobs:
       # ignore it. This one is DENY-clean on the commit that introduces it.
       - name: clippy — transport-iroh
         run: cargo clippy -p transport-iroh --all-targets -- -D warnings --force-warn missing_docs
+      # R2's calling transport (ADR-0004): the sibling port that attaches to a
+      # relay. Its `:live` regression is #[ignore]d, so `cargo test --workspace`
+      # in the gate job runs only its hermetic rows; this arm lints all targets,
+      # the live test included, so a rotting rig recipe is still a red build.
+      - name: clippy — call-transport-iroh
+        run: cargo clippy -p call-transport-iroh --all-targets -- -D warnings --force-warn missing_docs
       - name: fmt — store-redb
         run: cargo fmt -p store-redb -- --check
       - name: fmt — croft-ffi
         run: cargo fmt -p croft-ffi -- --check
       - name: fmt — transport-iroh
         run: cargo fmt -p transport-iroh -- --check
+      - name: fmt — call-transport-iroh
+        run: cargo fmt -p call-transport-iroh -- --check
