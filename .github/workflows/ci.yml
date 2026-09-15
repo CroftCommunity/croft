@@ -101,6 +101,10 @@ jobs:
       # it belongs in this job, not core-purity. Its `:live` arc is #[ignore]d.
       - name: clippy — croft-arc
         run: cargo clippy -p croft-arc --all-targets -- -D warnings --force-warn missing_docs
+      # R4's call-session: the arc's steps as the library the arc and the macOS shell
+      # both drive. Network glue (a PDS client, a state directory), so here, not purity.
+      - name: clippy — call-session
+        run: cargo clippy -p call-session --all-targets -- -D warnings --force-warn missing_docs
       - name: fmt — store-redb
         run: cargo fmt -p store-redb -- --check
       - name: fmt — croft-ffi
@@ -111,3 +115,23 @@ jobs:
         run: cargo fmt -p call-transport-iroh -- --check
       - name: fmt — croft-arc
         run: cargo fmt -p croft-arc -- --check
+      - name: fmt — call-session
+        run: cargo fmt -p call-session -- --check
+
+  # R4: the macOS shell. Its declared gate is env/gen-swift-bindings.sh — build the
+  # cdylib, generate the Swift bindings from it, run the package's tests (the
+  # FFI-boundary wiring test and the controller's honesty pins) — the same one
+  # command a laptop runs (`make shell-apple`). macOS only, because it drives
+  # `swift` and the shell is a window; a separate job so the ubuntu gate stays the
+  # ubuntu gate.
+  shell-apple:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - name: rustup syncs the pinned toolchain
+        run: rustup show
+      - name: toolchain, for the record
+        run: xcodebuild -version && swift --version
+      - name: make shell-apple
+        run: make shell-apple

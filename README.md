@@ -46,6 +46,22 @@ signed in. RUN, not inferred: two `croft-arc` processes on one laptop earned
 the relay, and hung up with the E129 endings verbatim (`bin/croft-arc/tests/live_arc.rs`,
 `:live`). The Android app still calls none of the Rust; D3's switch is after this.
 
+**The same arc from a macOS window (R4, 2026-09-15).** `shell/apple` is `shell/`'s first
+occupant: a SwiftPM package — `CroftCall` the SwiftUI window, `CroftCallKit` the controller
+it drives, `CroftFFI` uniffi's generated Swift over `libcroft_ffi` — over `ports/call-session`,
+the arc's steps as a library the binary and the window both drive. Sign in, Camp, Dial or
+Answer calls, Hang up; the screen shows the session line and the presence line as the core
+worded them (`camped on …` / `NOT camped on any relay; calls cannot reach this endpoint`)
+and re-asks the endpoint every five seconds. RUN against production from the buttons:
+`admitted … sponsorship=` for the window's endpoint on the Camp click, a call to the arc,
+*call ended: you hung up*.
+
+```sh
+make shell-apple                      # build the cdylib, generate Swift bindings, run the shell's tests
+shell/apple/.build/arm64-apple-macosx/debug/CroftCall
+# two instances on one laptop: CROFT_CALL_STATE_DIR=… CROFT_CALL_LABEL=… (see shell/apple/README.md)
+```
+
 **The core is now reachable from a shell (P7 S0, 2026-08-26).** `ffi/` is no
 longer a placeholder: a Kotlin JVM test drives create-group → send → project
 through the generated uniffi bindings, over `chat-core`'s update/project loop

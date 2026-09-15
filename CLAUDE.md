@@ -17,8 +17,8 @@ chasemp (`chase@owasp.org`, `github-personal`).
 machinery (E117 P1–P4: CONTESTED, real Ed25519, §7.6.4 removal kinds, the
 token/admission facts), `ports/keylayer-openmls` realizes the KeyLayer port
 on real openmls — both admission paths green end-to-end at loopback
-(`ports/keylayer-openmls/tests/loopback_e2e.rs`); `shell/` is still
-skeleton. **P7 S0 landed 2026-08-26 and the core is now reachable from a
+(`ports/keylayer-openmls/tests/loopback_e2e.rs`); **`shell/` has its first
+occupant — `shell/apple`, the macOS calling window (R4, 2026-09-15)**. **P7 S0 landed 2026-08-26 and the core is now reachable from a
 shell.** `ports/store-redb` is the redb store, promoted out of the discovery
 corpus and re-earning its 58 tests here rather than inheriting them; `ffi/`
 holds the uniffi surface — one `ChatSession` object with the substrate
@@ -48,8 +48,14 @@ when dead, never rendered as signed in), this device's endpoint record under its
 a self-minted camping pass, camp, dial or wait, hang up — RUN against production with no
 phone: two processes on one laptop earned `admitted … sponsorship=BudgetBytes(262144)`,
 connected through the relay, and hung up with the endings verbatim. R1's rules and R2's
-port now have a production caller, so the expiry clause is discharged. **The Android app
-still calls none of the Rust** — D3's switch is the next decision, after this.
+port now have a production caller, so the expiry clause is discharged. **R4 landed
+2026-09-15 (`shell/apple` + `ports/call-session` + `ffi` `CallSession`):** the arc's steps
+became a library both drivers share, the calling object crossed the FFI beside `ChatSession`
+(one cdylib, both iroh integrations), and a SwiftUI window RAN the arc on production from
+buttons — sign in, camp (`admitted … sponsorship=`), dial the arc, hang up, the screen
+reading what the core worded. The call-core-and-apple-shell plan is complete. **The Android
+app still calls none of the Rust** — D3's switch is the next decision; its phased proposal
+is in that plan's Review Log (R4 entry).
 **P7 S1 landed 2026-08-27: the surface exists and runs on a device.**
 `android/social/` is a SEPARATE dev-only module (owner chose a module over a
 product flavor, so `:app`'s variant names and every runbook command stay

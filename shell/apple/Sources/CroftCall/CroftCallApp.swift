@@ -5,7 +5,9 @@
 // Two instances on one laptop (the live rig's shape) need two state
 // directories and two labels: CROFT_CALL_STATE_DIR and CROFT_CALL_LABEL in
 // the environment, as the arc's --state-dir and --label. CROFT_CALL_RELAY
-// points at the staging listener when a refusal is what is wanted.
+// points at the staging listener when a refusal is what is wanted; the
+// fields prefill from CROFT_CALL_HANDLE, CROFT_CALL_APP_PASSWORD,
+// CROFT_CALL_DIAL and CROFT_CALL_DEVICE (see ContentView).
 
 import AppKit
 import CroftCallKit

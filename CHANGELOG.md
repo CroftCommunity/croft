@@ -12,6 +12,17 @@ to the environment and why*.
 
 ### Added
 
+- **`shell/apple`: the macOS calling window (R4 of the call-core-and-apple-shell plan).**
+  `shell/`'s first occupant: a SwiftPM package (`make shell-apple` builds, generates
+  uniffi's Swift bindings, runs its tests) whose window walks the arc from buttons —
+  sign in with an app password, camp with a self-minted pass, dial a handle's device or
+  answer, hang up — with the screen reading the session and presence lines as the core
+  worded them. RUN against production. Underneath: `ports/call-session` (the arc's
+  steps as a library both `croft-arc` and the window drive; `croft-arc`'s behaviour and
+  flags are unchanged) and `croft-ffi`'s new `CallSession` / `ActiveCall` objects beside
+  `ChatSession` — one cdylib now holds both iroh integrations. The library's dead-session
+  words no longer name `croft-arc`'s environment variables. (plan R4)
+
 - **core: `call-core`, the camp and dial admission rules as a pure Rust pond
   (R1 of the call-core-and-apple-shell plan).** A port of the shipped Kotlin
   decision logic, clock-free, graded by the same enforcement matrix: nineteen

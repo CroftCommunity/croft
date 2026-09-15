@@ -7,10 +7,14 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var controller: CallController
-    @State private var handle = ""
-    @State private var appPassword = ""
-    @State private var who = ""
-    @State private var device = "croft-arc"
+    // Prefilled from the environment the way the arc reads its own
+    // (CROFT_ARC_HANDLE, CROFT_ARC_APP_PASSWORD): the live rig launches two
+    // instances from a script, and a field a script cannot fill is a step a
+    // script cannot take. Empty when unset; a person types as usual.
+    @State private var handle = ProcessInfo.processInfo.environment["CROFT_CALL_HANDLE"] ?? ""
+    @State private var appPassword = ProcessInfo.processInfo.environment["CROFT_CALL_APP_PASSWORD"] ?? ""
+    @State private var who = ProcessInfo.processInfo.environment["CROFT_CALL_DIAL"] ?? ""
+    @State private var device = ProcessInfo.processInfo.environment["CROFT_CALL_DEVICE"] ?? "croft-arc"
 
     private let probe = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
 
