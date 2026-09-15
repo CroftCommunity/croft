@@ -40,6 +40,14 @@ fn direct_addrs(s: &CallSession) -> Vec<String> {
 }
 
 #[test]
+fn the_production_relay_is_the_ports_constant_not_a_shells_string() {
+    assert_eq!(
+        croft_ffi::croft_relay_url(),
+        call_transport_iroh::relay::CROFT_RELAY_URL
+    );
+}
+
+#[test]
 fn a_fresh_session_crosses_with_honest_words() {
     let dir = tempfile::tempdir().expect("tempdir");
     let s = CallSession::open(hermetic(dir.path())).expect("opens");

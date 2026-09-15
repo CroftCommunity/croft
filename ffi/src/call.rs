@@ -20,6 +20,14 @@ use call_session::report::ending_line;
 use call_session::steps::{self, Options, Presence};
 use call_transport_iroh::{Call, Direction, Discovery, PeerAddr};
 
+/// The production relay, as the port names it — so a shell's default is the
+/// product's commitment and not a string it typed.
+#[uniffi::export]
+#[must_use]
+pub fn croft_relay_url() -> String {
+    call_transport_iroh::relay::CROFT_RELAY_URL.to_string()
+}
+
 /// What a session is opened with.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CallOptions {

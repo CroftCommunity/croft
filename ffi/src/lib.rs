@@ -28,7 +28,9 @@ use std::sync::Mutex;
 
 use social_tree_core::model::GroupId;
 
-pub use call::{ActiveCall, CallError, CallOptions, CallSession, CallView, PeerAddress};
+pub use call::{
+    croft_relay_url, ActiveCall, CallError, CallOptions, CallSession, CallView, PeerAddress,
+};
 
 uniffi::setup_scaffolding!();
 
