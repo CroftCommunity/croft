@@ -9,7 +9,7 @@
 //! else is the mint being unavailable, which is not an authorization answer.
 
 use call_core::model::{CampOutcome, CampRefusal};
-use croft_arc::admit::{camp_outcome, camp_request};
+use call_session::admit::{camp_outcome, camp_request};
 
 #[test]
 fn the_request_carries_exactly_the_named_fields() {

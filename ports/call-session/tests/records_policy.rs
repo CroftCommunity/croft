@@ -7,7 +7,7 @@
 //! needs *a* record of the DID to name this endpoint id; which one is
 //! immaterial to it and material to everyone else.
 
-use croft_arc::records::{
+use call_session::records::{
     iso8601_utc, parse_record, reconcile, record_json, EndpointRecord, Reconcile,
 };
 

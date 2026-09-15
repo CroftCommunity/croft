@@ -330,6 +330,23 @@ name = "call-core"
 version = "0.1.0"
 
 [[package]]
+name = "call-session"
+version = "0.1.0"
+dependencies = [
+ "call-core",
+ "call-transport-iroh",
+ "data-encoding",
+ "iroh",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tracing",
+ "transport-iroh",
+]
+
+[[package]]
 name = "call-transport-iroh"
 version = "0.1.0"
 dependencies = [
@@ -648,15 +665,10 @@ name = "croft-arc"
 version = "0.1.0"
 dependencies = [
  "call-core",
+ "call-session",
  "call-transport-iroh",
- "data-encoding",
- "iroh",
- "reqwest",
- "serde",
- "serde_json",
  "tempfile",
  "thiserror 1.0.69",
- "tracing",
  "tracing-subscriber",
 ]
 

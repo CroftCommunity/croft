@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use call_core::model::CampPass;
 
 use crate::session::StoredSession;
-use crate::ArcError;
+use crate::Error;
 
 /// Where a run keeps its three files.
 #[derive(Debug)]
@@ -23,12 +23,12 @@ pub struct StateDir {
 impl StateDir {
     /// Open (creating) `explicit`, or the default under the user's state
     /// directory (`$XDG_STATE_HOME` or `~/.local/state`, then `croft-arc`).
-    pub fn open(explicit: Option<PathBuf>) -> Result<Self, ArcError> {
+    pub fn open(explicit: Option<PathBuf>) -> Result<Self, Error> {
         let path = match explicit {
             Some(p) => p,
             None => default_dir()?,
         };
-        std::fs::create_dir_all(&path).map_err(|e| ArcError::State {
+        std::fs::create_dir_all(&path).map_err(|e| Error::State {
             path: path.display().to_string(),
             reason: e.to_string(),
         })?;
@@ -42,10 +42,10 @@ impl StateDir {
     }
 
     /// The endpoint's secret key, generated on first use.
-    pub fn secret_key(&self) -> Result<[u8; 32], ArcError> {
+    pub fn secret_key(&self) -> Result<[u8; 32], Error> {
         let file = self.path.join("endpoint.key");
         if let Some(bytes) = self.read(&file)? {
-            return bytes.as_slice().try_into().map_err(|_| ArcError::State {
+            return bytes.as_slice().try_into().map_err(|_| Error::State {
                 path: file.display().to_string(),
                 reason: format!("an endpoint key is 32 bytes, got {}", bytes.len()),
             });
@@ -56,17 +56,17 @@ impl StateDir {
     }
 
     /// The stored session, if any.
-    pub fn session(&self) -> Result<Option<StoredSession>, ArcError> {
+    pub fn session(&self) -> Result<Option<StoredSession>, Error> {
         self.read_json(&self.path.join("session.json"))
     }
 
     /// Remember a session.
-    pub fn save_session(&self, s: &StoredSession) -> Result<(), ArcError> {
+    pub fn save_session(&self, s: &StoredSession) -> Result<(), Error> {
         self.write_json(&self.path.join("session.json"), s)
     }
 
     /// The cached camping pass, if any.
-    pub fn pass(&self) -> Result<Option<CampPass>, ArcError> {
+    pub fn pass(&self) -> Result<Option<CampPass>, Error> {
         let file = self.path.join("pass.json");
         let Some(v): Option<serde_json::Value> = self.read_json(&file)? else {
             return Ok(None);
@@ -85,41 +85,38 @@ impl StateDir {
     }
 
     /// Remember a camping pass.
-    pub fn save_pass(&self, p: &CampPass) -> Result<(), ArcError> {
+    pub fn save_pass(&self, p: &CampPass) -> Result<(), Error> {
         self.write_json(
             &self.path.join("pass.json"),
             &serde_json::json!({ "token": p.token, "expires_at_millis": p.expires_at_millis }),
         )
     }
 
-    fn read(&self, file: &Path) -> Result<Option<Vec<u8>>, ArcError> {
+    fn read(&self, file: &Path) -> Result<Option<Vec<u8>>, Error> {
         match std::fs::read(file) {
             Ok(b) => Ok(Some(b)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(ArcError::State {
+            Err(e) => Err(Error::State {
                 path: file.display().to_string(),
                 reason: e.to_string(),
             }),
         }
     }
 
-    fn read_json<T: serde::de::DeserializeOwned>(
-        &self,
-        file: &Path,
-    ) -> Result<Option<T>, ArcError> {
+    fn read_json<T: serde::de::DeserializeOwned>(&self, file: &Path) -> Result<Option<T>, Error> {
         let Some(bytes) = self.read(file)? else {
             return Ok(None);
         };
         serde_json::from_slice(&bytes)
             .map(Some)
-            .map_err(|e| ArcError::State {
+            .map_err(|e| Error::State {
                 path: file.display().to_string(),
                 reason: format!("not the JSON this build writes: {e}"),
             })
     }
 
-    fn write(&self, file: &Path, bytes: &[u8]) -> Result<(), ArcError> {
-        let fail = |e: std::io::Error| ArcError::State {
+    fn write(&self, file: &Path, bytes: &[u8]) -> Result<(), Error> {
+        let fail = |e: std::io::Error| Error::State {
             path: file.display().to_string(),
             reason: e.to_string(),
         };
@@ -132,8 +129,8 @@ impl StateDir {
         Ok(())
     }
 
-    fn write_json<T: serde::Serialize>(&self, file: &Path, value: &T) -> Result<(), ArcError> {
-        let bytes = serde_json::to_vec_pretty(value).map_err(|e| ArcError::State {
+    fn write_json<T: serde::Serialize>(&self, file: &Path, value: &T) -> Result<(), Error> {
+        let bytes = serde_json::to_vec_pretty(value).map_err(|e| Error::State {
             path: file.display().to_string(),
             reason: e.to_string(),
         })?;
@@ -141,11 +138,11 @@ impl StateDir {
     }
 }
 
-fn default_dir() -> Result<PathBuf, ArcError> {
+fn default_dir() -> Result<PathBuf, Error> {
     if let Some(xdg) = std::env::var_os("XDG_STATE_HOME") {
         return Ok(PathBuf::from(xdg).join("croft-arc"));
     }
-    let home = std::env::var_os("HOME").ok_or_else(|| ArcError::State {
+    let home = std::env::var_os("HOME").ok_or_else(|| Error::State {
         path: "~/.local/state/croft-arc".to_string(),
         reason: "neither XDG_STATE_HOME nor HOME is set; pass --state-dir".to_string(),
     })?;
