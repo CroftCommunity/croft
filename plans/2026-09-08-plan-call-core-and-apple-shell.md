@@ -1,6 +1,6 @@
 # Plan — filling `call-core` and standing up the apple shell (roadmap R1–R4)
 
-**Status:** **R1 LANDED 2026-09-14** (`core/call-core`, croft PR — see Review Log); R2 may start, and the expiry clause is now live: R3 must have started by the time R1 lands or R1 is reverted. Previously: ACCEPTED 2026-09-10. Three passes complete, **Phase 0 CLOSED** — D1 was probed
+**Status:** **R2 LANDED 2026-09-14** (`ports/call-transport-iroh`, ADR-0004, croft PR — see Review Log) on top of **R1 LANDED 2026-09-14** (`core/call-core`, croft #18). R3 may start, and the expiry clause covers both: R3 must have started by the time R2 lands or R1 and R2 are reverted. Previously: ACCEPTED 2026-09-10. Three passes complete, **Phase 0 CLOSED** — D1 was probed
 2026-09-08, and D4/D5/D6 were walked with the owner 2026-09-10 (see *Decisions*). Pass 3's
 escalation is discharged: the severities were reviewed. **R1 may start.** Phase 0's D1 is already RUN and green; D4–D6 are
 not. Nothing below Phase 0 should start until D4–D6 are answered, because two of them can
@@ -334,17 +334,17 @@ would survive a one-line mutation — name the edges up front:
 §15 defect class is reachable by `cargo test` instead of by two phones.
 
 **Changes:**
-- [ ] a new sibling port per D1's recommendation (name TBD at execution; **not** a mode
+- [x] a new sibling port per D1's recommendation — `ports/call-transport-iroh` (**not** a mode
       inside `ports/transport-iroh`, whose relay-disabled guarantee is structural)
-- [ ] bind with a persisted secret key, `RelayMode::Custom` at our relay, auth token carried
-- [ ] the camp/dial lifecycle, with R0's rule enforced *at the port* rather than only in the
-      decision layer
-- [ ] **`docs/adr/0004-…`** — Pass 2 finding: a new port has precedent,
+- [x] bind with a persisted secret key, `RelayMode::Custom` at our relay, auth token carried
+- [x] the camp/dial lifecycle, with R0's rule enforced *at the port* rather than only in the
+      decision layer (`CallEndpoint::rebind` consults `call_core::dial::rebind`)
+- [x] **`docs/adr/0004-call-transport-port.md`** — Pass 2 finding: a new port has precedent,
       `docs/adr/0003-keylayer-port.md` is "the key layer is a port". D1's reasoning is the
       ADR's content and should live there, not only in a plan that will be archived
-- [ ] **`.github/workflows/ci.yml`** — the new port added to the clippy/fmt job beside
+- [x] **`.github/workflows/ci.yml`** — the new port added to the clippy/fmt job beside
       `transport-iroh` (it is not a pure core, so it belongs in that job, not core-purity)
-- [ ] `CLAUDE.md` — the ports list
+- [x] `CLAUDE.md` — the ports list
 
 **Call chain:** `call-core` decision → port `attach(token)` / `dial(peer)` → iroh
 `Endpoint`. R1's rules become the port's caller, which is what retires R1's dead-code
@@ -393,6 +393,33 @@ that, a failure here is diagnosed the same expensive way §15 was.
 
 **Validation:** *Broad.* Tests plus live integration; check the relay journal, confirm the
 data flow, verify the refusal paths (tokenless, wrong key) not just the happy one.
+
+**Done, 2026-09-14 — evidence.**
+1. *Behavioural, both halves of Done-when 1, from a laptop with no phone.* The `:live`
+   regression (`ports/call-transport-iroh/tests/live_s15_regression.rs`, staging enforce
+   listener, rig passes minted by a local croft-relay-admit signing with the staging key):
+   - **RED against the port that has the defect** (`rebind` swapping unconditionally, the
+     pre-§15.3 shape): both rig endpoints camped (`admitted endpoint_id=… sponsorship=`),
+     then `rebind(None)` over the live pass → `Swapped` → the tokenless re-attach drew
+     **ten `denied endpoint_id=511c34a1a2 reason="no_token"` lines in ten seconds**
+     (03:11:11Z–03:11:20Z) and `attached_relay` said `None`. §15.3, verbatim.
+   - **GREEN against the port with the rule:** `rebind(None)` → `Kept`, still camped on the
+     same relay; the dial connected through the relay (hellos both ways,
+     `croftcall-r2-live` / `callee`); hang-up observed by the callee as
+     `ClosedByPeer { code: 0, reason: "hangup" }`; **journal during the call: 0 lines** —
+     §16's device result ("ONE line in total"), with none at all here.
+2. *Hermetic (on the gate):* 7 lifecycle rows (id stable across binds; the short id is the
+   journal's; tokenless-over-pass KEEPS the same endpoint; same-token keeps; other-token
+   swaps and the id survives; tokenless→token swaps; a relay that never answers reads as
+   NOT camped), 2 loopback call rows (dial/accept/hello both ways/hang-up/ending typed; a
+   dial to nobody refuses with words), 7 wire pins byte-matched to `WireFormat.kt`. The
+   two Keep rows were watched RED against the defect port with `Swapped` where `Kept` was
+   wanted. `make gate` green (see Review Log); clippy DENY-clean and fmt-clean on the
+   commit that adds the crate, per the `ports-and-ffi` job's own rule.
+3. *Refusal paths:* tokenless (the RED run above — live, on the journal); a relay that never
+   answers (hermetic); wrong key NOT run — the staging listener verifies one key and a
+   wrong-key pass is the same `attach_probe` rung §13 step 3 already scopes, so it is
+   left to that runbook rather than duplicated here.
 
 ---
 
@@ -697,3 +724,44 @@ Kotlin's behaviour:
   copy; a walker that finds the repo root by walking up to `.git` reports every mutant
   untestable. Fixed by locating the document by layout. `EnforcementMatrixTest.kt` has
   the same shape and would meet the same wall if anything ever mutated it under a copy.
+
+**2026-09-14 — R2 executed** (same session as R1, immediately after croft #18 landed; the
+sequence R1→R2→R3 is one commitment and the owner gave it in one line). Tests first, as
+Pass 3 ordered: the `:live` regression and the hermetic rows were written and watched to
+fail at compile against an empty crate, then the port was written **with the pre-§15.3
+unconditional swap on purpose**, run RED (hermetic: two Keep rows; live: the journal
+above), then given the rule. Five things the execution found, none of them a defect in the
+Kotlin:
+- **iroh 1.1 cannot swap a relay token live, read not assumed.** `Endpoint::insert_relay`
+  exists and looked like a way to change the token without a stop/start; the relay actor
+  reads `auth_token` only in `start_active_relay`, and a map change only re-runs address
+  discovery. So the Kotlin's lifecycle fact holds in Rust and the port models it the same
+  way (ADR-0004 Decision 3). Not measured — read in the actor source; a measurement is a
+  cheap follow-up if anyone doubts it.
+- **The journal instrument needed `sudo`.** The first live run read an EMPTY journal and
+  failed on "the journal must carry `admitted`", while the relay had in fact admitted both
+  endpoints: the box's login user is not in `systemd-journal`, and journalctl prints
+  "No entries" plus a hint rather than an error. The default journal command now carries
+  `sudo -n`; the test asserts the command's exit status, but an empty result from a
+  successful command is the VERIFICATION.md shape and it was met here.
+- **`tokio::time::timeout` must be built inside the runtime.** Constructing it on the
+  calling thread and handing it to `block_on` panics "there is no reactor running";
+  caught by the loopback test, fixed by building it in the async block.
+- **A rig script must run each repo's cargo from that repo's directory.** The mint script
+  first called croft-stack via `--manifest-path` from the croft worktree: the rustup proxy
+  chose croft's 1.97.1 for croft-stack's 1.94.1-pinned tree, every crate rebuilt, each
+  build script's `rustc` resolved by ITS cwd to the default channel, and a dozen concurrent
+  rustup syncs raced into a half-installed `stable` ("recovering from a partially
+  installed toolchain", "failed to install component: cargo, detected conflict"). rustup
+  rolled itself back and all three toolchains verify; the script now `cd`s. Worth a
+  workspace note: a `--manifest-path` across a toolchain-pinned repo boundary is a
+  toolchain change, not a path.
+- **The relay's own QUIC probes log as "unattributed connection closed".** Six WARN lines
+  of 63 bytes each at every bind — iroh's address-discovery probes to the relay's QUIC
+  port carry no token. Not this port's attach (those are the `admitted` lines), and not
+  filtered by the test, which only reads lines naming the rig's endpoint ids.
+
+Two scope decisions, stated: the wrong-key refusal was not run (Done-when evidence, item
+3); and no mutation run on the port — its rows are network lifecycle and a mutant there
+mostly times out, while the pure part (`wire.rs`) is byte-pinned and the rule it enforces
+already carries call-core's zero-missed baseline.

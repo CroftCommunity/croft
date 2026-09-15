@@ -1,0 +1,43 @@
+# The calling transport realization: one relay-attaching iroh endpoint that
+# camps with a pass and dials by endpoint id.
+#
+# Child plan R2 (`plans/2026-09-08-plan-call-core-and-apple-shell.md`), D1
+# option (b): a SIBLING of `ports/transport-iroh`, not a mode inside it.
+# `transport-iroh` sets `RelayMode::Disabled` and contacts no relay by
+# construction — a guarantee P7 S2's severance claim rests on — and a crate
+# holding both endpoint kinds would downgrade that to a convention
+# (`docs/adr/0004-call-transport-port.md`). The shared surface is small
+# (`Endpoint` construction, `EndpointId`); nothing else of the gossip port is
+# wanted here.
+#
+# This crate is the first production caller of `call-core`'s rules: R0's
+# "a dial never lowers admission" is applied HERE, at the endpoint, through
+# `call_core::dial::rebind`, so a shell cannot reproduce the §15 defect by
+# calling the port carelessly.
+[package]
+name = "call-transport-iroh"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "iroh realization of the croft calling endpoint: bind, camp with a pass, dial"
+
+[dependencies]
+call-core = { path = "../../core/call-core" }
+thiserror = "1"
+iroh = "1.1"
+# For `RelayQuicConfig` only — iroh re-exports `RelayMap`/`RelayConfig` but not
+# the QUIC address-discovery port, and ours is non-default (udp/7824).
+iroh-relay = "1.1"
+# The runtime is owned INSIDE this port, exactly as in transport-iroh: a sync
+# surface over a runtime this crate starts and stops is one lifetime in one
+# language, which is what the Android FFI (D3: assume the switch) will want.
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+tracing = "0.1"
+data-encoding = "2"
+serde_json = "1"
+
+[dev-dependencies]
+# The cross-process lock so the loopback call does not form beside another
+# test binary's swarm during `cargo test --workspace`.
+transport-iroh = { path = "../transport-iroh" }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

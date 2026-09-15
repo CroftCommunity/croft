@@ -36,10 +36,16 @@ standing constraint holds every phase additive while croftcall bakes. **R1 lande
 2026-09-14 (`core/call-core`):** the camp and dial admission rules now exist in Rust as
 a pure pond, a port of `CampAdmission.kt` / `DialAdmission.kt`, graded by the same
 `docs/ENFORCEMENT-SCENARIOS.md` rows (`RUST:` pins beside `PIN:`, walked by
-`core/call-core/tests/enforcement_matrix.rs`). The calling app calls none of that
-either — its first production caller is R3's headless arc binary, and the plan's
-expiry clause (R1 is reverted if R3 has not started when it lands) is the guard
-against it rotting as a second implementation.
+`core/call-core/tests/enforcement_matrix.rs`). **R2 landed
+2026-09-14 (`ports/call-transport-iroh`, ADR-0004):** the calling endpoint lifecycle —
+bind with a persisted key, camp with a pass, dial, accept, hang up — as a SIBLING port of
+`transport-iroh` (whose relay severance stays structural), with R0's rule enforced at the
+endpoint through `call_core::dial::rebind`. The §15 defect is now a `cargo test`: the
+`:live` regression reproduced it against a port without the rule (ten `no_token` refusals
+in ten seconds on the staging journal) and not against the port with it. The calling app
+calls none of that either — its first production caller is R3's headless arc binary, and
+the plan's expiry clause (R1 and R2 are reverted if R3 has not started when they land) is
+the guard against them rotting as a second implementation.
 **P7 S1 landed 2026-08-27: the surface exists and runs on a device.**
 `android/social/` is a SEPARATE dev-only module (owner chose a module over a
 product flavor, so `:app`'s variant names and every runbook command stay
