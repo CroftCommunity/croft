@@ -20,6 +20,16 @@ to the environment and why*.
   app calls none of it until R3; the crate is the shared rules the fast loop
   will run against the real relay.
 
+- **`croft-arc`: the headless calling arc (R3 of the call-core-and-apple-shell plan).**
+  A new binary, `cargo run -p croft-arc -- callee | call <handle>`: app-password session
+  (stored; refused with words when dead), this device's endpoint record under its own
+  rkey, a self-minted camping pass, camp, dial or wait, hang up, each step printed with
+  the endpoint's short id. R1's first production caller; measured against production
+  (both sides admitted with `BudgetBytes(262144)`, a call connected through the relay,
+  the endings verbatim). The shipped Android app is unchanged. Alongside it,
+  `ports/call-transport-iroh` (R2) — the calling endpoint as a sibling port, with "a dial
+  never lowers admission" enforced at the endpoint — which nothing shipped calls yet.
+
 ### Security
 
 - **rustls 0.23.43 → 0.23.45** — RUSTSEC-2026-0285, issued 2026-09-14: rustls did not

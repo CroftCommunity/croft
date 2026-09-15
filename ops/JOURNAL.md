@@ -758,3 +758,28 @@ Same session, same root cause: a lifecycle cancellation was rendering
 "camping pass setup failed: Job was cancelled" on screen; cancellation now
 propagates and only real failures earn words. 169 tests green. The Pixel was
 returned to the published rc.1 build afterwards.
+
+## 2026-09-15 — the R3 live rig: no new toolchain, two environment facts
+
+**What changed:** nothing in `env/`. `croft-arc` builds with the pinned toolchain and
+needs no second target. The `:live` rigs (R2's `ports/call-transport-iroh/live/`, R3's
+`bin/croft-arc/tests/live_arc.rs`) need two things outside this repo: `ssh croft-vps`
+(croft-stack `ansible/inventory.ini`) and the test accounts' app passwords
+(`CroftC/.env`, TESTBED § Accounts).
+
+**Two facts learned the expensive way, recorded so they are not learned again:**
+
+1. **The box's journal needs `sudo`.** The login user is not in `systemd-journal`;
+   `journalctl -u iroh-relay` prints "No entries" plus a hint and exits 0. R2's first live
+   run graded an empty journal as "the relay never admitted us" while the relay had. Both
+   rigs default to `ssh croft-vps sudo -n journalctl …`.
+2. **`cargo … --manifest-path <other repo>` from a toolchain-pinned repo is a toolchain
+   change.** The rustup proxy resolves the toolchain by the cwd's `rust-toolchain.toml`
+   (croft: 1.97.1), not the manifest's (croft-stack: 1.94.1). R2's mint script rebuilt
+   croft-stack under 1.97.1; each build script's `rustc` then resolved by ITS cwd to the
+   default channel, and a dozen concurrent rustup syncs raced into "recovering from a
+   partially installed toolchain" / "failed to install component: cargo, detected
+   conflict". rustup rolled itself back (`rustup run <ver> rustc --version` verified for
+   all three); the script now `cd`s into each repo. Outcome: ten minutes lost, nothing
+   broken, one rule: build a repo from inside it.
+

@@ -42,10 +42,14 @@ bind with a persisted key, camp with a pass, dial, accept, hang up — as a SIBL
 `transport-iroh` (whose relay severance stays structural), with R0's rule enforced at the
 endpoint through `call_core::dial::rebind`. The §15 defect is now a `cargo test`: the
 `:live` regression reproduced it against a port without the rule (ten `no_token` refusals
-in ten seconds on the staging journal) and not against the port with it. The calling app
-calls none of that either — its first production caller is R3's headless arc binary, and
-the plan's expiry clause (R1 and R2 are reverted if R3 has not started when they land) is
-the guard against them rotting as a second implementation.
+in ten seconds on the staging journal) and not against the port with it. **R3 landed
+2026-09-15 (`bin/croft-arc`):** the headless arc — app-password session (refused with words
+when dead, never rendered as signed in), this device's endpoint record under its own rkey,
+a self-minted camping pass, camp, dial or wait, hang up — RUN against production with no
+phone: two processes on one laptop earned `admitted … sponsorship=BudgetBytes(262144)`,
+connected through the relay, and hung up with the endings verbatim. R1's rules and R2's
+port now have a production caller, so the expiry clause is discharged. **The Android app
+still calls none of the Rust** — D3's switch is the next decision, after this.
 **P7 S1 landed 2026-08-27: the surface exists and runs on a device.**
 `android/social/` is a SEPARATE dev-only module (owner chose a module over a
 product flavor, so `:app`'s variant names and every runbook command stay

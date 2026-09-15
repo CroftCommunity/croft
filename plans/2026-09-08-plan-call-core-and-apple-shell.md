@@ -1,6 +1,6 @@
 # Plan — filling `call-core` and standing up the apple shell (roadmap R1–R4)
 
-**Status:** **R2 LANDED 2026-09-14** (`ports/call-transport-iroh`, ADR-0004, croft PR — see Review Log) on top of **R1 LANDED 2026-09-14** (`core/call-core`, croft #18). R3 may start, and the expiry clause covers both: R3 must have started by the time R2 lands or R1 and R2 are reverted. Previously: ACCEPTED 2026-09-10. Three passes complete, **Phase 0 CLOSED** — D1 was probed
+**Status:** **R3 LANDED 2026-09-15** (`bin/croft-arc`, the fast loop — RUN against production, no phone; croft PR — see Review Log) on **R2 LANDED 2026-09-14** (`ports/call-transport-iroh`, ADR-0004, croft #19) on **R1 LANDED 2026-09-14** (`core/call-core`, croft #18). The expiry clause is discharged: R1 and R2 have their production caller. R4 (the macOS shell) is next; D3 (Android onto the core, timing) is now decidable. Previously: ACCEPTED 2026-09-10. Three passes complete, **Phase 0 CLOSED** — D1 was probed
 2026-09-08, and D4/D5/D6 were walked with the owner 2026-09-10 (see *Decisions*). Pass 3's
 escalation is discharged: the severities were reviewed. **R1 may start.** Phase 0's D1 is already RUN and green; D4–D6 are
 not. Nothing below Phase 0 should start until D4–D6 are answered, because two of them can
@@ -429,12 +429,12 @@ data flow, verify the refusal paths (tokenless, wrong key) not just the happy on
 phone and no adb.
 
 **Changes:**
-- [ ] a `bin/` target (crate name TBD) — sign in / load session, camp, dial a named peer,
-      hang up, and print what it observed
-- [ ] session handling: reuse a stored OAuth session; refuse honestly when the refresh
+- [x] a `bin/` target — `bin/croft-arc`: sign in / load session, camp, dial a named peer
+      (or wait to be dialled), hang up, and print what it observed
+- [x] session handling: reuse a stored session; refuse honestly when the refresh
       token is dead (the §15.2 case — `Signed in` over a dead session is the defect this
-      must not reproduce)
-- [ ] `README.md` + `CHANGELOG.md` + `ops/JOURNAL.md` entries
+      must not reproduce). **App-password session, not OAuth** — see Review Log
+- [x] `README.md` + `CHANGELOG.md` + `ops/JOURNAL.md` entries
 
 **Call chain:** `main` → session load → `call-core::camp::decide` → port `attach` →
 `call-core::dial::decide` → port `dial` → relay. This is the first end-to-end chain in the
@@ -474,6 +474,42 @@ and "admitted" reproduces the exact ambiguity that made §13 misread its own evi
    Log with timestamps.
 
 **Validation:** *Broad.* Live against production under enforcement.
+
+**Done, 2026-09-15 — evidence.**
+1. *Behavioural (Done-when 1), no phone attached.* `bin/croft-arc/tests/live_arc.rs`
+   (`:live`): two `croft-arc` processes on one laptop, test account 1 as callee and test
+   account 2 as caller, each: signed in (`createSession`), published its own
+   `ing.croft.iroh.endpoint/croft-arc` record, proved itself (`getServiceAuth`), minted a
+   camping pass at `admit.croft.ing`, re-attached with it, camped on
+   `relay.croft.ing:8443`. Then the caller resolved the callee's `croft-arc` device,
+   `rebind(None)` kept the pass (R0, at the port), dialled through the relay, held 3 s,
+   hung up. Both sides' lines, verbatim:
+   ```
+   [98954ad160] attach: camped on https://relay.croft.ing:8443/
+   [56435e0dcc] attach: camped on https://relay.croft.ing:8443/
+   [56435e0dcc] rebind: kept the camping pass (a dial never lowers admission)
+   [98954ad160] call: incoming from 56435e0dcc (hello "croft-arc") — connected
+   [56435e0dcc] call: connected to 98954ad160 (hello "callee")
+   [56435e0dcc] attach: after the dial: camped on https://relay.croft.ing:8443/
+   [56435e0dcc] call: call ended: you hung up
+   [98954ad160] call: call ended: closed by peer: hangup (code 0)
+   ```
+2. *Verification (Done-when 2), the production journal, timestamps as logged:*
+   ```
+   2026-09-15T03:39:25.785539Z DEBUG handler: croft_relay: admitted endpoint_id=98954ad160 sponsorship=BudgetBytes(262144)
+   2026-09-15T03:39:28.246231Z DEBUG handler: croft_relay: admitted endpoint_id=56435e0dcc sponsorship=BudgetBytes(262144)
+   2026-09-15T03:39:32.070542Z DEBUG usage: usage endpoint_id=56435e0dcc connection_id=ConnectionId(27086) bytes_in=12806 bytes_out=9530 duration_ms=4025
+   2026-09-15T03:39:32.070604Z DEBUG usage: usage endpoint_id=98954ad160 connection_id=ConnectionId(27085) bytes_in=10273 bytes_out=12059 duration_ms=6484
+   ```
+   No `denied`/`no_token` for either id after its `admitted` line (the test asserts
+   this). The `Stream terminated` WARNs that follow are the endpoints SHUTTING DOWN after
+   `done`, not §15's mid-call teardown. The run was repeated twice more (the first run
+   found the port defect below; the third added the repo cleanup) with the same shape.
+3. *Hermetic (on the gate):* 27 rows — args (5), session policy (6, including "dead"
+   never says "signed in"), record reconciliation + wire form + ISO timestamp (6), admit
+   wire mapping mirrored from `Admit.kt` (5), report words with the silence case named
+   (5). Watched RED at compile against the empty crate first. `make gate` green (Review
+   Log); clippy DENY-clean and fmt-clean; both added to the `ports-and-ffi` job.
 
 ---
 
@@ -765,3 +801,46 @@ Two scope decisions, stated: the wrong-key refusal was not run (Done-when eviden
 3); and no mutation run on the port — its rows are network lifecycle and a mutant there
 mostly times out, while the pure part (`wire.rs`) is byte-pinned and the rule it enforces
 already carries call-core's zero-missed baseline.
+
+**2026-09-15 — R3 executed**, same session, stacked on R2 before #19 landed. Tests first:
+six test binaries watched to fail at compile against an empty crate, then the pure
+modules, then the glue, then the live arc. Findings:
+- **The first live arc found a defect in R2's port, and it was the port's, not the
+  arc's.** The callee camped; the caller — which swapped its endpoint two seconds after
+  binding, while the first attach was still mid-handshake — never reached the relay
+  after the swap (iroh: `relay_recv_channel closed` at ERROR; the production journal
+  carried no line for it in twenty seconds). One tokio runtime was shared across the old
+  and new endpoint, and something the close left behind outlived it. Fixed in the port:
+  a runtime per bound endpoint, the old one dropped on swap (cancelling all its tasks),
+  kept alive only by a `Call` that still holds it. Re-measured: the arc completed.
+  Cherry-picked onto the R2 branch so #19 carries it. Worth noting for R2's record: the
+  hermetic swap row and the staging `:live` regression both passed WITHOUT this fix —
+  their swaps happened after the first attach had settled. The timing that exposes it
+  is "bind, mint, swap" back to back, which is exactly what a production caller does.
+- **App password, not OAuth — a stated deviation from the R3 text.** OAuth needs a
+  browser and a redirect; an instrument on a laptop needs neither, the app's own OAuth
+  scope is `transition:generic` (app-password equivalence, `AuthManager.SCOPE`), and the
+  proof the mint verifies is the PDS's `getServiceAuth` either way (probed live
+  2026-09-14: an app-password session mints it). The §15.2 honesty case is the same
+  shape — a stored token is a schedule, the PDS's word is the fact; a refused refresh
+  says "dead … sign in again" and never "signed in". If R4 wants OAuth for a person,
+  that is a shell concern; the arc's session module is the seam.
+- **The arc publishes its OWN device record, never `self`.** Contract v2 is one record
+  per device under any stable rkey, and the camp mint needs only *a* record of the DID
+  naming the endpoint — so `croft-arc` gets `ing.croft.iroh.endpoint/croft-arc` and the
+  phones' `self` records are never touched. The flip session had to borrow and restore
+  a phone's record for the probe; this needs no restoring. The `:live` test deletes its
+  two throwaway records at the end so both repos are left as found.
+- **The camp mint is silent on both sides, and now the arc says so.** The `camp:` line
+  names the silence and points at the relay's `admitted` line as the proof, per this
+  plan's Observability item.
+- **The relay logs the SHUTDOWN as `Stream terminated`.** Both endpoints' `usage` +
+  `actor errored Stream terminated` WARNs appear when `croft-arc` closes them at `done`.
+  Not §15's signature (that was 1 s after a tap, mid-camp); a reader grepping for it
+  should check the timestamp against the arc's `done` line.
+
+Scope, stated: no dial-token mint (`/grantCall`) — the arc dials tokenless as the
+decision layer says for a callee with no grant, which is the enforce-relay arc the plan
+asked for; minting against a grant is the ticket/mutuals path and stays with the app
+until D3. No mutation run on the arc — its pure modules are small and pinned
+(a `camp_outcome` mutant would be caught by the discriminant table); its glue is network.

@@ -1,0 +1,40 @@
+# croft-arc — the headless arc binary (child plan R3, the fast loop).
+#
+# One command on a laptop walks the whole calling arc against production with
+# no phone and no adb: load or create a stored session, camp with a
+# self-minted pass, dial a named peer (or wait to be dialled), hang up, and
+# print what it observed. It is an INSTRUMENT, not a client: it holds no UI
+# state and makes no decision the core does not make. Every admission choice
+# is `call-core`'s; every endpoint act is `call-transport-iroh`'s. This crate
+# is where R1 stops being dead code.
+[package]
+name = "croft-arc"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "the headless croft calling arc: session, camp, dial, hang up, printed"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "croft-arc"
+path = "src/main.rs"
+
+[dependencies]
+call-core = { path = "../../core/call-core" }
+call-transport-iroh = { path = "../../ports/call-transport-iroh" }
+thiserror = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Already in the workspace lockfile via iroh; blocking because the port's
+# surface is synchronous and the binary has no runtime of its own.
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
+data-encoding = "2"
+# For generating the endpoint secret key on first run; the same iroh the port uses.
+iroh = "1.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3"

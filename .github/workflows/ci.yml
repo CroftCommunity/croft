@@ -97,6 +97,10 @@ jobs:
       # the live test included, so a rotting rig recipe is still a red build.
       - name: clippy — call-transport-iroh
         run: cargo clippy -p call-transport-iroh --all-targets -- -D warnings --force-warn missing_docs
+      # R3's headless arc binary: network glue over the port and the core, so
+      # it belongs in this job, not core-purity. Its `:live` arc is #[ignore]d.
+      - name: clippy — croft-arc
+        run: cargo clippy -p croft-arc --all-targets -- -D warnings --force-warn missing_docs
       - name: fmt — store-redb
         run: cargo fmt -p store-redb -- --check
       - name: fmt — croft-ffi
@@ -105,3 +109,5 @@ jobs:
         run: cargo fmt -p transport-iroh -- --check
       - name: fmt — call-transport-iroh
         run: cargo fmt -p call-transport-iroh -- --check
+      - name: fmt — croft-arc
+        run: cargo fmt -p croft-arc -- --check
