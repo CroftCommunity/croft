@@ -14,6 +14,8 @@
 //! Refusals cross as typed errors carrying their detail — see [`error`] for why
 //! that is load-bearing rather than decorative.
 
+/// The calling session and its one call, at the boundary (R4).
+pub mod call;
 /// What can go wrong, in the session's own words.
 pub mod error;
 /// The gossip link: this device's join to a group's swarm.
@@ -25,6 +27,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use social_tree_core::model::GroupId;
+
+pub use call::{ActiveCall, CallError, CallOptions, CallSession, CallView, PeerAddress};
 
 uniffi::setup_scaffolding!();
 

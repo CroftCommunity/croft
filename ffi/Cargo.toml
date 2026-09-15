@@ -39,6 +39,12 @@ keylayer-openmls = { path = "../ports/keylayer-openmls" }
 # and rung 6 (force-stop, relaunch, reload the group) is precisely a moment
 # when there is state and no swarm.
 transport-iroh = { path = "../ports/transport-iroh" }
+# R4: the calling session and its transport port, beside chat's — one
+# library with both iroh integrations is the consolidation D3 costed (one
+# copy of iroh per app, not two), and the calling app switching onto it is
+# D3's decision.
+call-session = { path = "../ports/call-session" }
+call-transport-iroh = { path = "../ports/call-transport-iroh" }
 # The boundary is the one place a failure can go quiet: Rust returns an error,
 # the binding hands the shell an exception, and what happens next is out of this
 # crate's hands. Emitting here leaves something behind to find afterwards.
