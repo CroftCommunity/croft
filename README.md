@@ -24,6 +24,28 @@ dial) and recovery (see `plans/2026-08-20-1-plan-m4-call-time-admission.md`
 and `ops/RUNBOOK-two-device-call-test.md` §11). It is not yet rebuilt on
 the shared core.
 
+**The calling arc runs from a laptop, against production, with no phone (R1–R3 of the
+call-core plan, 2026-09-14/15).** `core/call-core` holds the camp and dial rules as a pure
+pond graded by the same enforcement matrix as the Kotlin; `ports/call-transport-iroh` is
+the calling endpoint as a sibling port with "a dial never lowers admission" enforced at
+the endpoint (ADR-0004); and **`croft-arc`** is the headless instrument that walks the
+whole arc — sign in with an app password, publish this device's `ing.croft.iroh.endpoint`
+record under its own rkey, self-mint a camping pass at `admit.croft.ing`, camp on
+`relay.croft.ing:8443`, then wait to be dialled or dial a named peer, hold, hang up —
+printing each step with the endpoint's short id so a run lays beside the relay journal:
+
+```sh
+CROFT_ARC_HANDLE=… CROFT_ARC_APP_PASSWORD=… cargo run -p croft-arc -- callee --wait 120
+CROFT_ARC_HANDLE=… CROFT_ARC_APP_PASSWORD=… cargo run -p croft-arc -- call <handle> --device croft-arc
+```
+
+Credentials are needed only on the first run (the session, key and pass persist under
+`~/.local/state/croft-arc`); a dead session is refused with words, never rendered as
+signed in. RUN, not inferred: two `croft-arc` processes on one laptop earned
+`admitted … sponsorship=BudgetBytes(262144)` on the production journal, connected through
+the relay, and hung up with the E129 endings verbatim (`bin/croft-arc/tests/live_arc.rs`,
+`:live`). The Android app still calls none of the Rust; D3's switch is after this.
+
 **The core is now reachable from a shell (P7 S0, 2026-08-26).** `ffi/` is no
 longer a placeholder: a Kotlin JVM test drives create-group → send → project
 through the generated uniffi bindings, over `chat-core`'s update/project loop
