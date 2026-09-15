@@ -7,7 +7,7 @@
 //! from a stored token alone, and a refresh the PDS refuses is a REFUSAL with
 //! words, not a retry.
 
-use croft_arc::session::{
+use call_session::session::{
     access_expiry_secs, decide, refusal_words, RefreshFailure, Step, StoredSession,
     REFRESH_MARGIN_SECS,
 };

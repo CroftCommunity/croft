@@ -783,3 +783,39 @@ needs no second target. The `:live` rigs (R2's `ports/call-transport-iroh/live/`
    all three); the script now `cd`s into each repo. Outcome: ten minutes lost, nothing
    broken, one rule: build a repo from inside it.
 
+## 2026-09-15 — the macOS shell (R4): the toolchain it found, two things it learned
+
+**What changed:** nothing in `env/toolchain.yml`. `shell/apple` builds with the Xcode
+this machine has (Xcode 26.3, Swift 6.2.4; `xcodebuild -version` / `swift --version`) and
+the pinned Rust (`aarch64-apple-darwin` is the host target, so no new target). The package
+declares `swift-tools-version: 5.10` on purpose: Swift 5 language mode, because uniffi's
+generated classes are `@unchecked Sendable` and Swift 6's strict concurrency would be a
+fight with code we do not write. Not pinned in `toolchain.yml` because `verify.sh` has no
+Xcode arm and adding one for a single-machine shell is a decision for when a second
+machine builds it; CI's `shell-apple` job on `macos-latest` records both versions in its
+log each run.
+
+**New script:** `env/gen-swift-bindings.sh` (`make shell-apple`) — the Kotlin script's
+shape: build the cdylib, generate the Swift bindings FROM it, run the package's tests
+against it, so the three cannot disagree about a path. The generated Swift and header land
+in gitignored directories under `shell/apple/Sources/`; the package links
+`target/debug/libcroft_ffi.dylib` by rpath (`CROFT_FFI_LIBDIR` overrides).
+
+**Two facts learned, recorded so they are not learned again:**
+
+1. **uniffi's Kotlin object already has `close()`.** An exported method named `close`
+   generates a second `close()` on the Kotlin class (`AutoCloseable`) and the JVM gate
+   fails with "Conflicting overloads" — invisible from Swift, which has no such method.
+   The FFI method is `shut_down`. The Kotlin gate (`make bindings`) is worth running for a
+   Swift-motivated change for exactly this reason.
+2. **Accessibility `set value` on a SwiftUI `TextField` does not reach the binding.** The
+   field displays the value; `@State` keeps the old one; a button whose `disabled` reads
+   the state stays disabled. A scripted run of the window (System Events, no keystrokes —
+   typing a password into whatever is frontmost on a live desktop is not acceptable) found
+   *Sign in* greyed out with the handle visibly filled. The window's fields now prefill
+   from `CROFT_CALL_HANDLE` / `CROFT_CALL_APP_PASSWORD` / `CROFT_CALL_DIAL` /
+   `CROFT_CALL_DEVICE` (the arc's convention), and button clicks through accessibility
+   work as real clicks. Screen read-back: `get value of every static text of group 1 of
+   window 1`; a window behind the terminal is captured by id
+   (`CGWindowListCopyWindowInfo` → `screencapture -l`), not by rectangle.
+

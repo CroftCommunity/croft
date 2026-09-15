@@ -75,9 +75,8 @@ pub enum RefreshFailure {
 pub fn refusal_words(failure: &RefreshFailure) -> String {
     match failure {
         RefreshFailure::Dead { error } => format!(
-            "session dead ({error}): the PDS refused the refresh token — sign in again \
-             (CROFT_ARC_HANDLE + CROFT_ARC_APP_PASSWORD); this endpoint is NOT camped and \
-             calls cannot reach it"
+            "session dead ({error}): the PDS refused the refresh token — sign in again; \
+             this endpoint is NOT camped and calls cannot reach it"
         ),
         RefreshFailure::Unavailable { reason } => format!(
             "session unknown: the PDS could not be asked ({reason}) — not a refusal, try again"

@@ -16,7 +16,7 @@ use serde_json::Value;
 
 use crate::records::{parse_record, EndpointRecord, ENDPOINT_COLLECTION};
 use crate::session::{access_expiry_secs, RefreshFailure, StoredSession};
-use crate::ArcError;
+use crate::Error;
 
 /// The public AppView, for handle resolution (unauthenticated).
 pub const APPVIEW: &str = "https://public.api.bsky.app";
@@ -27,7 +27,7 @@ pub enum ServiceAuthError {
     /// The PDS said the access token is expired: refresh and retry once.
     Expired,
     /// Anything else.
-    Other(ArcError),
+    Other(Error),
 }
 
 /// The client.
@@ -38,12 +38,12 @@ pub struct Client {
 
 impl Client {
     /// A client with a sane timeout.
-    pub fn new() -> Result<Self, ArcError> {
+    pub fn new() -> Result<Self, Error> {
         let http = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(20))
             .user_agent("croft-arc/0.1")
             .build()
-            .map_err(|e| ArcError::Http {
+            .map_err(|e| Error::Http {
                 what: "client",
                 reason: e.to_string(),
             })?;
@@ -51,7 +51,7 @@ impl Client {
     }
 
     /// Bare handle (a leading `@` dropped) → DID, via the public AppView.
-    pub fn resolve_handle(&self, handle: &str) -> Result<String, ArcError> {
+    pub fn resolve_handle(&self, handle: &str) -> Result<String, Error> {
         let clean = handle.trim().trim_start_matches('@').to_lowercase();
         let v = self.get_json(
             "resolveHandle",
@@ -63,21 +63,21 @@ impl Client {
         v.get("did")
             .and_then(Value::as_str)
             .map(str::to_string)
-            .ok_or_else(|| ArcError::Resolve {
+            .ok_or_else(|| Error::Resolve {
                 who: handle.to_string(),
                 reason: "the AppView answered without a did".to_string(),
             })
     }
 
     /// DID → PDS base URL, from the DID document's `#atproto_pds` service.
-    pub fn resolve_pds(&self, did: &str) -> Result<String, ArcError> {
+    pub fn resolve_pds(&self, did: &str) -> Result<String, Error> {
         let doc_url = if let Some(plc) = did.strip_prefix("did:plc:") {
             format!("https://plc.directory/did:plc:{}", enc(plc))
         } else if let Some(web) = did.strip_prefix("did:web:") {
             let host = web.split(':').next().unwrap_or_default();
             format!("https://{host}/.well-known/did.json")
         } else {
-            return Err(ArcError::Resolve {
+            return Err(Error::Resolve {
                 who: did.to_string(),
                 reason: "unsupported DID method".to_string(),
             });
@@ -94,7 +94,7 @@ impl Client {
             })
             .and_then(|s| s.get("serviceEndpoint").and_then(Value::as_str))
             .map(str::to_string)
-            .ok_or_else(|| ArcError::Resolve {
+            .ok_or_else(|| Error::Resolve {
                 who: did.to_string(),
                 reason: "no PDS service in the DID document".to_string(),
             })
@@ -106,14 +106,14 @@ impl Client {
         pds: &str,
         identifier: &str,
         password: &str,
-    ) -> Result<StoredSession, ArcError> {
+    ) -> Result<StoredSession, Error> {
         let (status, body) = self.post_json(
             &format!("{}/xrpc/com.atproto.server.createSession", base(pds)),
             None,
             &serde_json::json!({ "identifier": identifier, "password": password }),
         )?;
         if status != 200 {
-            return Err(ArcError::Pds {
+            return Err(Error::Pds {
                 what: "createSession",
                 status,
                 body,
@@ -170,7 +170,7 @@ impl Client {
             .bearer_auth(&s.access_jwt)
             .send()
             .map_err(|e| {
-                ServiceAuthError::Other(ArcError::Http {
+                ServiceAuthError::Other(Error::Http {
                     what: "getServiceAuth",
                     reason: e.to_string(),
                 })
@@ -184,7 +184,7 @@ impl Client {
                 .and_then(Value::as_str)
                 .filter(|t| !t.is_empty())
                 .map(str::to_string)
-                .ok_or(ServiceAuthError::Other(ArcError::Pds {
+                .ok_or(ServiceAuthError::Other(Error::Pds {
                     what: "getServiceAuth answered without a token",
                     status,
                     body,
@@ -193,7 +193,7 @@ impl Client {
         if error_discriminant(&body).as_deref() == Some("ExpiredToken") {
             return Err(ServiceAuthError::Expired);
         }
-        Err(ServiceAuthError::Other(ArcError::Pds {
+        Err(ServiceAuthError::Other(Error::Pds {
             what: "getServiceAuth",
             status,
             body,
@@ -207,7 +207,7 @@ impl Client {
         did: &str,
         collection: &str,
         rkey: &str,
-    ) -> Result<Option<Value>, ArcError> {
+    ) -> Result<Option<Value>, Error> {
         let url = format!(
             "{}/xrpc/com.atproto.repo.getRecord?repo={}&collection={}&rkey={}",
             base(pds),
@@ -215,7 +215,7 @@ impl Client {
             enc(collection),
             enc(rkey)
         );
-        let res = self.http.get(&url).send().map_err(|e| ArcError::Http {
+        let res = self.http.get(&url).send().map_err(|e| Error::Http {
             what: "getRecord",
             reason: e.to_string(),
         })?;
@@ -226,7 +226,7 @@ impl Client {
                 .ok()
                 .and_then(|v| v.get("value").cloned())),
             400 | 404 if error_discriminant(&body).as_deref() == Some("RecordNotFound") => Ok(None),
-            _ => Err(ArcError::Pds {
+            _ => Err(Error::Pds {
                 what: "getRecord",
                 status,
                 body,
@@ -241,7 +241,7 @@ impl Client {
         collection: &str,
         rkey: &str,
         record: Value,
-    ) -> Result<(), ArcError> {
+    ) -> Result<(), Error> {
         let (status, body) = self.post_json(
             &format!("{}/xrpc/com.atproto.repo.putRecord", base(&s.pds)),
             Some(&s.access_jwt),
@@ -250,7 +250,7 @@ impl Client {
             }),
         )?;
         if status != 200 {
-            return Err(ArcError::Pds {
+            return Err(Error::Pds {
                 what: "putRecord",
                 status,
                 body,
@@ -266,14 +266,14 @@ impl Client {
         s: &StoredSession,
         collection: &str,
         rkey: &str,
-    ) -> Result<(), ArcError> {
+    ) -> Result<(), Error> {
         let (status, body) = self.post_json(
             &format!("{}/xrpc/com.atproto.repo.deleteRecord", base(&s.pds)),
             Some(&s.access_jwt),
             &serde_json::json!({ "repo": s.did, "collection": collection, "rkey": rkey }),
         )?;
         if status != 200 {
-            return Err(ArcError::Pds {
+            return Err(Error::Pds {
                 what: "deleteRecord",
                 status,
                 body,
@@ -288,7 +288,7 @@ impl Client {
         &self,
         pds: &str,
         did: &str,
-    ) -> Result<Vec<(String, EndpointRecord)>, ArcError> {
+    ) -> Result<Vec<(String, EndpointRecord)>, Error> {
         let v = self.get_json(
             "listRecords",
             &format!(
@@ -314,21 +314,21 @@ impl Client {
 
     /// `POST /campToken` on the admit; the status and body, never thrown on
     /// status — the mapping is `admit::camp_outcome`'s.
-    pub fn camp_token(&self, admit_base: &str, request: &Value) -> Result<(u16, String), ArcError> {
+    pub fn camp_token(&self, admit_base: &str, request: &Value) -> Result<(u16, String), Error> {
         self.post_json(&format!("{}/campToken", base(admit_base)), None, request)
     }
 
-    fn get_json(&self, what: &'static str, url: &str) -> Result<Value, ArcError> {
-        let res = self.http.get(url).send().map_err(|e| ArcError::Http {
+    fn get_json(&self, what: &'static str, url: &str) -> Result<Value, Error> {
+        let res = self.http.get(url).send().map_err(|e| Error::Http {
             what,
             reason: e.to_string(),
         })?;
         let status = res.status().as_u16();
         let body = res.text().unwrap_or_default();
         if status != 200 {
-            return Err(ArcError::Pds { what, status, body });
+            return Err(Error::Pds { what, status, body });
         }
-        serde_json::from_str(&body).map_err(|e| ArcError::Pds {
+        serde_json::from_str(&body).map_err(|e| Error::Pds {
             what,
             status,
             body: format!("not JSON ({e}): {body}"),
@@ -340,12 +340,12 @@ impl Client {
         url: &str,
         bearer: Option<&str>,
         body: &Value,
-    ) -> Result<(u16, String), ArcError> {
+    ) -> Result<(u16, String), Error> {
         let mut req = self.http.post(url).json(body);
         if let Some(token) = bearer {
             req = req.bearer_auth(token);
         }
-        let res = req.send().map_err(|e| ArcError::Http {
+        let res = req.send().map_err(|e| Error::Http {
             what: "POST",
             reason: format!("{url}: {e}"),
         })?;
@@ -354,8 +354,8 @@ impl Client {
     }
 }
 
-fn session_from(pds: &str, body: &str, what: &'static str) -> Result<StoredSession, ArcError> {
-    let v: Value = serde_json::from_str(body).map_err(|e| ArcError::Pds {
+fn session_from(pds: &str, body: &str, what: &'static str) -> Result<StoredSession, Error> {
+    let v: Value = serde_json::from_str(body).map_err(|e| Error::Pds {
         what,
         status: 200,
         body: format!("not JSON ({e})"),
@@ -365,14 +365,14 @@ fn session_from(pds: &str, body: &str, what: &'static str) -> Result<StoredSessi
             .and_then(Value::as_str)
             .filter(|s| !s.is_empty())
             .map(str::to_string)
-            .ok_or_else(|| ArcError::Pds {
+            .ok_or_else(|| Error::Pds {
                 what,
                 status: 200,
                 body: format!("answered without {k}"),
             })
     };
     let access_jwt = field("accessJwt")?;
-    let access_expires_at_secs = access_expiry_secs(&access_jwt).ok_or_else(|| ArcError::Pds {
+    let access_expires_at_secs = access_expiry_secs(&access_jwt).ok_or_else(|| Error::Pds {
         what,
         status: 200,
         body: "the access token carries no exp".to_string(),

@@ -1,6 +1,6 @@
 # Plan — filling `call-core` and standing up the apple shell (roadmap R1–R4)
 
-**Status:** **R3 LANDED 2026-09-15** (`bin/croft-arc`, the fast loop — RUN against production, no phone; croft PR — see Review Log) on **R2 LANDED 2026-09-14** (`ports/call-transport-iroh`, ADR-0004, croft #19) on **R1 LANDED 2026-09-14** (`core/call-core`, croft #18). The expiry clause is discharged: R1 and R2 have their production caller. R4 (the macOS shell) is next; D3 (Android onto the core, timing) is now decidable. Previously: ACCEPTED 2026-09-10. Three passes complete, **Phase 0 CLOSED** — D1 was probed
+**Status:** **R4 LANDED 2026-09-15** (`shell/apple`, the macOS window — RUN against production: sign in, camp, dial the arc, hang up, from buttons; `ports/call-session` is the steps both drivers share; croft PR — see Review Log). **The plan's four phases are complete.** D3 (Android onto the core, timing) is the next decision and has its phased plan in the Review Log's R4 entry. Previously: **R3 LANDED 2026-09-15** (`bin/croft-arc`, the fast loop — RUN against production, no phone; croft PR — see Review Log) on **R2 LANDED 2026-09-14** (`ports/call-transport-iroh`, ADR-0004, croft #19) on **R1 LANDED 2026-09-14** (`core/call-core`, croft #18). The expiry clause is discharged: R1 and R2 have their production caller. Previously: ACCEPTED 2026-09-10. Three passes complete, **Phase 0 CLOSED** — D1 was probed
 2026-09-08, and D4/D5/D6 were walked with the owner 2026-09-10 (see *Decisions*). Pass 3's
 escalation is discharged: the severities were reviewed. **R1 may start.** Phase 0's D1 is already RUN and green; D4–D6 are
 not. Nothing below Phase 0 should start until D4–D6 are answered, because two of them can
@@ -518,10 +518,12 @@ and "admitted" reproduces the exact ambiguity that made §13 misread its own evi
 **Goal:** a person can do R3's arc without a terminal, and `shell/` stops being a `.gitkeep`.
 
 **Changes:**
-- [ ] `shell/<name>/` — the macOS shell, per D2 (headless first, UI second)
-- [ ] the FFI surface it consumes — whether `ffi/` grows a calling object beside
-      `ChatSession` or a second crate appears is an execution decision, recorded when made
-- [ ] `CLAUDE.md`, `README.md`, `CHANGELOG.md`, `ops/JOURNAL.md`
+- [x] `shell/apple/` — the macOS shell, per D2 (headless first, UI second): a SwiftPM package, `CroftCall` the window, `CroftCallKit` the controller, `CroftFFI` the generated bindings
+- [x] the FFI surface it consumes — **`ffi/` grew `CallSession` + `ActiveCall` beside
+      `ChatSession`** (one cdylib, both iroh integrations — the consolidation D3 costed),
+      over a new `ports/call-session` that holds the arc's steps so the binary and the
+      window drive the same code; recorded in the Review Log
+- [x] `CLAUDE.md`, `README.md`, `CHANGELOG.md`, `ops/JOURNAL.md`
 
 **Call chain:** macOS UI event → FFI → `call-core` → port → relay.
 
@@ -542,8 +544,25 @@ more; anything else is a later plan.
 
 **Done when:**
 1. **Behavioural:** a person clicks in a macOS app and the production relay journal shows
-   that endpoint admitted, dialling, and hanging up.
-2. **Verification:** the FFI-boundary wiring test, plus the journal lines.
+   that endpoint admitted, dialling, and hanging up. **MET 2026-09-15 05:10Z** — the
+   window (test account 2, label `croft-mac`, endpoint `004cd21b8c`) clicked through
+   Sign in → Camp → Dial → Hang up (the clicks driven through macOS accessibility on the
+   real window, the screen read back the same way); `croft-arc callee` (test account 1,
+   `croft-arc-callee`, `93980aafac`) was the callee. Production journal, `iroh-relay`:
+   `05:10:24Z admitted endpoint_id=004cd21b8c sponsorship=BudgetBytes(262144)` on the
+   Camp click, no denial before or after; `05:08:07Z admitted endpoint_id=93980aafac …`
+   for the arc. Screen, verbatim: *signed in as bobzmudacroft.bsky.social (…) — the PDS
+   minted a service-auth proof just now* · *camped on https://relay.croft.ing:8443/* ·
+   *connected to 93980aafac (hello "callee")* · *call ended: you hung up*; the arc's side:
+   *call ended: closed by peer: hangup (code 0)*. Both throwaway records deleted after
+   (getRecord 400); the phones' `self` records untouched.
+2. **Verification:** the FFI-boundary wiring test, plus the journal lines. **MET** —
+   `shell/apple/Tests/CroftCallTests/WiringTests.swift` (4, through the generated Swift
+   bindings: honest words on a fresh session, a typed refusal with its sentence, a
+   signed-out camp reading NOT camped, a loopback call with the E129 endings verbatim)
+   + `ControllerTests.swift` (4) + `ffi/tests/call_pins.rs` (5) +
+   `ports/call-session/tests/session_steps.rs` (6); all RED-first, watched. Gate:
+   `make shell-apple` locally and CI's `shell-apple` job (macos-latest).
 
 **Validation:** *Broad*, and explicitly **not** a substitute for a device run — see the
 line in *Reasoning* about the two-device tier.
@@ -844,3 +863,83 @@ decision layer says for a callee with no grant, which is the enforce-relay arc t
 asked for; minting against a grant is the ticket/mutuals path and stays with the app
 until D3. No mutation run on the arc — its pure modules are small and pinned
 (a `camp_outcome` mutant would be caught by the discriminant table); its glue is network.
+
+**R4 — landed 2026-09-15, RUN against production from the window.** The phase's shape
+was decided by one question the plan left open — where the calling object lives — and
+one it did not ask: what a window drives.
+
+- **`ffi/` grew the calling object; a second crate did not appear.** `CallSession` +
+  `ActiveCall` sit beside `ChatSession` in one cdylib. That is D3's consolidation made
+  concrete: `libcroft_ffi` now carries both iroh integrations once, and the Android
+  calling app switching onto it (D3) means one iroh copy per phone instead of two.
+- **`ports/call-session` is the phase's real artifact.** The arc's `run()` was one
+  function; a window needs steps with state between them. The arc's glue (PDS client,
+  state directory, session policy, record, words) moved out of `bin/croft-arc` into a
+  library and gained the stepwise `CallSession` — open (offline), sign in, camp, wait
+  or dial, hang up, and a `View` a screen renders verbatim. The arc binary is now the
+  command line over those steps and the window is the buttons over them, so **parity
+  with R3 is by construction**: the live run's callee was the rewritten arc, camped on
+  production before the window dialled it.
+- **Screen honesty at the second surface, as tests.** A stored token renders as
+  *stored session for … — unproven until the PDS accepts it* and the words "signed in"
+  are earned by the PDS accepting something this run (E135(b)); a dead session is refused
+  with words and never reads signed in; the presence line is the endpoint's own answer,
+  re-asked every time the view is taken (the window's five-second timer, the phone's
+  CampPresence probe). The window shows `view.session` and `view.presence` as the core
+  worded them and puts a refusal's own sentence in the notice — a shell that composes its
+  own words is a shell that can flatter the record.
+- **Toolchain: nothing new to pin.** Xcode 26.3 / Swift 6.2.4 on this machine; the
+  package is `swift-tools-version: 5.10` (Swift 5 language mode — the generated bindings
+  are `@unchecked Sendable`, and Swift 6 strictness would be a fight with generated
+  code). `env/gen-swift-bindings.sh` is the Kotlin script's shape: build the cdylib,
+  generate from it, run the tests against it; the generated Swift and header are never
+  committed. Journalled.
+- **Two things found on the way.** (1) The FFI method could not be named `close`:
+  uniffi's Kotlin object already has one (`AutoCloseable`) and the JVM gate refused the
+  conflicting overload — it is `shut_down`. The Kotlin gate caught it; it would have been
+  invisible from Swift. (2) Accessibility `set value` on a SwiftUI `TextField` changes the
+  display and NOT the binding, so a scripted click on *Sign in* found the button disabled.
+  The fields now prefill from `CROFT_CALL_HANDLE` / `CROFT_CALL_APP_PASSWORD` /
+  `CROFT_CALL_DIAL` / `CROFT_CALL_DEVICE`, the arc's own environment convention; a person
+  types as usual. The live run's clicks were then real clicks on the real window.
+- **The click was scripted, and that is stated.** The done-when says "a person clicks".
+  The buttons were pressed through macOS accessibility on the running window and the
+  screen was read back the same way — the same UI event path a person's click takes, and
+  what an owner can repeat by hand with `make shell-apple` then launching
+  `shell/apple/.build/arm64-apple-macosx/debug/CroftCall`. No claim is made about a human
+  hand.
+
+Scope, stated: parity with the arc and nothing more — no OAuth (the app-password session
+is the R3 deviation, unchanged), no dial-token mint, no local card, no sign-out button
+(the state directory is the sign-out). The `close` clash and the AX finding go to the
+journal; the FFI-crate decision lives here.
+
+**D3, now decidable — the phased plan, proposed (owner's call).** The question is timing,
+not whether (decided 2026-09-10). Facts R4 adds: one cdylib holds both integrations; the
+steps a shell drives exist and are pinned; the Kotlin `Swap(token: String?)` note stands
+(uniffi has no nullable-in-enum trap left — `Option<String>` crosses as `String?`). The
+phases, each landing green and each additive to the shipped app until the last:
+
+- **D3.1 — the FFI in the APK, calling nothing.** `android/app` gains `libcroft_ffi.so`
+  (the social module's `make ffi-android` path) and a JVM test that opens a `CallSession`
+  hermetically through the Kotlin bindings — the same wiring test Swift has. Proves the
+  library loads on the calling app's ABI; changes no behaviour.
+- **D3.2 — the rules first.** `CampAdmission.kt` / `DialAdmission.kt` are replaced by
+  calls into `call-core` through the FFI, the Kotlin matrix walker keeps every `PIN:` row
+  (D5's "(a) now"), and the enforcement matrix count may only shrink by rows that gain a
+  `RUST:` pin. Behaviour identical by the matrix; the decision code is one implementation.
+- **D3.3 — the endpoint.** The Kotlin `CallPeer` over upstream iroh-ffi is replaced by
+  `CallSession` over our port. This is the two-way-street phase: everything the phone
+  does today (camp at attach, R0 at the dial, CampPresence's probe, E129 endings) already
+  exists in `call-session` because R2–R4 built it there; what is new is the phone's
+  lifecycle (background, rebind on network change) driving those steps. Device-verified
+  on both phones before it ships, per §15's insistence — this is the phase the two-device
+  tier exists for.
+- **D3.4 — drop upstream iroh-ffi.** `computer.iroh:iroh` leaves `build.gradle.kts`,
+  `libiroh_ffi.so` leaves the APK, the P7 measurement (6.3 MB → 29.6 MB once, not twice)
+  is re-measured, `env/build-iroh-android.sh` retires. v0.6.0.
+
+What decides the timing: D3.3 needs both phones and a device session (the rig hazards in
+§16 — reinstall clears the key, re-sign-in is step 0); D3.1 and D3.2 are phone-free and
+can start now. Recommendation: D3.1 + D3.2 next (phone-free, each a small landing), D3.3
+when a device session is scheduled, D3.4 in the same release as D3.3.

@@ -8,7 +8,7 @@ ENV   := env
 
 .PHONY: help bootstrap verify record-checksums emulator emulator-ui emulator-nuke \
         install run logcat crash screenshot gate bindings ffi-android \
-        android-local-properties clean
+        shell-apple android-local-properties clean
 
 help: ## show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -62,6 +62,11 @@ bindings: ## build the cdylib, generate Kotlin, run the JVM wiring test
 
 ffi-android: ## cross-compile croft-ffi for arm64 and load it on the emulator
 	@$(ENV)/build-croft-ffi-android.sh
+
+## ---- the macOS shell (R4) ----------------------------------------------------
+
+shell-apple: ## build the cdylib, generate Swift bindings, run the shell's tests (macOS only; CI's shell-apple job)
+	@$(ENV)/gen-swift-bindings.sh
 
 ## ---- gate -----------------------------------------------------------------
 

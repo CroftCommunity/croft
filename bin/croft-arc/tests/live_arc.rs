@@ -221,15 +221,15 @@ fn one_command_per_side_walks_the_arc_and_the_relay_journal_says_so() {
     // and its record. The test binary is the arc's own library, so the
     // sessions it just made are the ones that delete.
     for dir in [callee_state.path(), caller_state.path()] {
-        let state = croft_arc::state::StateDir::open(Some(dir.to_path_buf())).expect("state");
+        let state = call_session::state::StateDir::open(Some(dir.to_path_buf())).expect("state");
         let session = state
             .session()
             .expect("readable")
             .expect("the arc stored a session");
-        let pds = croft_arc::atproto::Client::new().expect("client");
+        let pds = call_session::atproto::Client::new().expect("client");
         pds.delete_record(
             &session,
-            croft_arc::records::ENDPOINT_COLLECTION,
+            call_session::records::ENDPOINT_COLLECTION,
             "croft-arc",
         )
         .expect("the rig's record deletes");

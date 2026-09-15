@@ -1,0 +1,33 @@
+# call-session — the calling session a shell holds (child plan R4).
+#
+# Extracted from `bin/croft-arc` when the macOS shell became its second
+# driver: the PDS and admit client, the state directory, the session policy,
+# this device's record, the words — and the stepwise session that composes
+# them with `call-core` and the calling transport port. The headless arc and
+# the macOS app both drive THIS, so "parity with the arc" is by construction
+# rather than by care. Two port realizations live here (the PDS over HTTP,
+# the state on files); every admission decision stays `call-core`'s.
+[package]
+name = "call-session"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "the calling session a shell holds: PDS sign-in, this device's record, the camping pass, the call"
+
+[dependencies]
+call-core = { path = "../../core/call-core" }
+call-transport-iroh = { path = "../call-transport-iroh" }
+thiserror = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Already in the workspace lockfile via iroh; blocking because the port's
+# surface is synchronous and the session owns no runtime of its own.
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
+data-encoding = "2"
+# For generating the endpoint secret key on first run; the same iroh the port uses.
+iroh = "1.1"
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = "3"
+transport-iroh = { path = "../transport-iroh" }

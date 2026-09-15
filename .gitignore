@@ -33,3 +33,10 @@ mutants.out/
 # in git is a binary nobody reviews. `make ffi-android` regenerates it.
 # `libiroh_ffi.so` IS committed because its source is not here.
 android/social/src/main/jniLibs/*/libcroft_ffi.so
+
+# The apple shell's generated uniffi bindings (env/gen-swift-bindings.sh
+# writes them from the built cdylib) and SwiftPM's build directory.
+shell/apple/Sources/croft_ffiFFI/include/
+shell/apple/Sources/CroftFFI/Generated/
+shell/apple/.generated/
+shell/apple/.build/

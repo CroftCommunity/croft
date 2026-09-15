@@ -6,8 +6,8 @@
 
 use call_core::camp::Action as CampAction;
 use call_core::model::{CampPass, CampRefusal};
+use call_session::report::{camp_line, camped_line, ending_line, line};
 use call_transport_iroh::Ending;
-use croft_arc::report::{camp_line, camped_line, ending_line, line};
 
 #[test]
 fn every_line_leads_with_the_endpoints_short_id() {
