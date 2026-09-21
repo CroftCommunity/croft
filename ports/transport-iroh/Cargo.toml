@@ -11,7 +11,7 @@
 # The plan and the S2 runbook both say the gossip transport is "wiring rather
 # than a new dependency — the app already carries iroh on both sides of the
 # FFI". Neither half held: this Rust workspace had no iroh at all, and the
-# Kotlin artifact the CALLING app carries (`computer.iroh:iroh:1.0.0`) ships
+# Kotlin artifact the CALLING app carried until D3.4 (`computer.iroh:iroh:1.0.0`) ships
 # 402 classes and **zero** gossip classes. `computer.iroh` publishes only
 # `iroh` and `iroh-android` on Maven Central; 1.1.0 has no gossip either. So
 # gossip on this stack is a new native dependency wherever it goes, and the

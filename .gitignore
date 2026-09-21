@@ -19,8 +19,8 @@ node_modules/
 
 # env scratch
 /tmp/
-# Where env/ scripts stage things they build: the iroh-ffi clone, the emulator
-# dlopen probe. Reproducible from the scripts, so never committed.
+# Where env/ scripts stage things they build: the emulator dlopen probe (and,
+# until D3.4, the iroh-ffi clone). Reproducible from the scripts, so never committed.
 /.build/
 mutants.out/
 
@@ -31,7 +31,8 @@ mutants.out/
 # Still untracked, and now for a better reason than in S0: it is a 2MB build
 # output of code in this same repo, reproducible with one command, and a binary
 # in git is a binary nobody reviews. `make ffi-android` regenerates it.
-# `libiroh_ffi.so` IS committed because its source is not here.
+# (`libiroh_ffi.so` WAS committed because its source was not here; D3.4 removed
+# it — the calling app's iroh is ours now.)
 android/social/src/main/jniLibs/*/libcroft_ffi.so
 # D3: the calling app carries it too, for the same reason and with the same
 # regeneration command.

@@ -10,6 +10,20 @@ to the environment and why*.
 
 ## [Unreleased]
 
+### Changed
+
+- **android: the calling app runs on the shared Rust core (D3 of the
+  call-core-and-apple-shell plan).** `CampAdmission` / `DialAdmission` keep their shape
+  and delegate every decision to `core/call-core` through `croft-ffi`'s generated Kotlin
+  (the enforcement matrix's `PIN:` rows now grade the Rust); `CallPeer` holds our
+  `CallEndpoint` over `ports/call-transport-iroh` — bind with the persisted key, camp,
+  R0 at the rebind, dial with the record's relay hint, accept, hang up, the E129 ending
+  typed and worded as before, the path line live. **`computer.iroh:iroh` and
+  `libiroh_ffi.so` are removed**; the app's iroh is `libcroft_ffi.so`, one per phone.
+  Behaviour on screen is unchanged and device-verified against production (runbook §17).
+  `Rebind.Swap`'s token is non-null. The APK's native library is larger (22.5 MB
+  stripped vs 18.5 MB) because it carries chat's ports too. (plan D3.1–D3.4)
+
 ### Added
 
 - **`shell/apple`: the macOS calling window (R4 of the call-core-and-apple-shell plan).**

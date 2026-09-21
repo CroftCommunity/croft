@@ -7,8 +7,9 @@ pluginManagement {
 }
 plugins {
     // Lets Gradle download a pinned JDK itself (env/toolchain.yml `jdk:`) instead
-    // of trusting whatever JAVA_HOME points at. The unit-test task needs a 21
-    // launcher because computer.iroh:iroh ships Java-21 bytecode.
+    // of trusting whatever JAVA_HOME points at. (Until D3.4 the unit-test task
+    // also needed a 21 launcher for computer.iroh's Java-21 bytecode; that
+    // artifact is gone and everything runs on the compile JDK.)
     id("org.gradle.toolchains.foojay-resolver-convention") version "0.8.0"
 }
 dependencyResolutionManagement {

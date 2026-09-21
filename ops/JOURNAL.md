@@ -819,3 +819,36 @@ in gitignored directories under `shell/apple/Sources/`; the package links
    window 1`; a window behind the terminal is captured by id
    (`CGWindowListCopyWindowInfo` → `screencapture -l`), not by rectangle.
 
+## 2026-09-21 — D3: the calling app onto the core; what the rig taught
+
+**What changed in `env/`:** `build-iroh-android.sh` retired and `iroh_ffi_tag` left
+`toolchain.yml` (D3.4 — no upstream library to build); `build-croft-ffi-android.sh` now
+installs the arm64 `.so` into BOTH modules, dlopens the calling app's copy, and strips
+symbols for the phone build (`-C strip=symbols`, scoped to that script — 34.6 MB → 22.5 MB;
+the arc and the desktop cdylib keep theirs); the unit-test JDK launcher is back on 17 (the
+21 launcher existed only for `computer.iroh`'s Java-21 bytecode). `make verify` still
+passes; nothing new is pinned.
+
+**Three facts, recorded so they are not learned again:**
+
+1. **ndk-context's initializer aborts the process on a second call.** Android started
+   `MainActivity` twice a second apart on the launch after a reinstall (`START u0` ×2 in
+   logcat), which built two `MainViewModel`s and called our JNI DNS hook twice;
+   `ndk_context::initialize_android_context` `assert!`s its previous value is `None` and
+   the panic is a SIGABRT. The hook is idempotent (`ffi/src/android.rs`). Upstream
+   iroh-ffi's `IrohAndroid.installAndroidContext` has the same shape and presumably the
+   same exposure; we never hit it there.
+2. **A debug build over a debug build from the same keystore keeps the key.** `adb install
+   -r` of this build over §16's debug build on the Pixel kept app data — same endpoint id,
+   published record still valid, no repair. §16's "any reinstall wipes" was measured over
+   the CI-signed release, which IS a different signer. The Samsung carries that release,
+   so it is the fresh-install case (key wiped, `self` to re-publish, browser sign-in).
+3. **The Samsung locks with a pattern; a session cannot draw it.** `input keyevent
+   WAKEUP` + swipe reaches the "Draw unlock pattern" bouncer and stops. A device run
+   that needs both phones needs the owner to unlock the Samsung first — say so at the
+   start of the run, not after the Pixel half is done.
+
+Driving the phone from a session, the parts that worked: `uiautomator dump` + a fresh
+bounds read before every `input tap`; `am start -a android.intent.action.VIEW -d
+"'croftcall://call?…'"` with the quotes; `settings put system user_rotation 0` on the
+Pixel first; logcat filtered to `CroftCall`; the relay journal with `sudo -n`.

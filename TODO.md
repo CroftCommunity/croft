@@ -12,6 +12,15 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
 
 ## Open
 
+- [ ] **Phone-to-phone over our port on BOTH sides.** D3.3 (2026-09-21) was device-verified
+  on the Pixel in both directions against `croft-arc` on the laptop (runbook §17); the
+  Samsung was pattern-locked and carries the CI-signed v0.5.0, so putting the D3 build on
+  it is a fresh install (key wiped → re-publish `self`, browser sign-in — the owner's acts).
+  The two-phone call over `call-transport-iroh` on both ends is owed. [device: android x2]
+- [ ] **A relayed call over our port.** Every D3.3 call went direct on one Wi-Fi (the port
+  reported `relayed …` for a second, then `direct …`). A call that STAYS relayed needs one
+  party off the LAN — the Pixel on cellular. [device: android=pixel]
+
 - [x] **A dial drops the caller's camp — reachability lost on every Connect.** FIXED 2026-09-08; **DEVICE-VERIFIED 2026-09-14** (runbook §16). [device done 2026-09-14: one Connect tap, one line in the relay journal across the whole call — no teardown, no re-admit; and the first connected call of the arc, with the E129 endings verbatim on both screens]
 
   **The fix:** the relay auth token belongs to the endpoint, so changing it costs

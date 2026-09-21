@@ -62,6 +62,13 @@ shell/apple/.build/arm64-apple-macosx/debug/CroftCall
 # two instances on one laptop: CROFT_CALL_STATE_DIR=… CROFT_CALL_LABEL=… (see shell/apple/README.md)
 ```
 
+**The Android calling app runs on the core (D3, 2026-09-21).** `android/app`'s `CampAdmission`
+and `DialAdmission` delegate to `call-core` through the generated Kotlin bindings, and
+`CallPeer` holds `CallEndpoint` over `ports/call-transport-iroh` — upstream iroh-ffi is gone
+from the APK. Two generated inputs the build needs: `make bindings` (the Kotlin source and the
+desktop cdylib the JVM tests load) and `make ffi-android` (the arm64 `.so`, dlopen'd on the
+attached phone). Device-verified on production (runbook §17).
+
 **The core is now reachable from a shell (P7 S0, 2026-08-26).** `ffi/` is no
 longer a placeholder: a Kotlin JVM test drives create-group → send → project
 through the generated uniffi bindings, over `chat-core`'s update/project loop

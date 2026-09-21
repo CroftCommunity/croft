@@ -887,3 +887,99 @@ data, mints a **new** iroh secret key, and leaves the published record naming a 
 no longer exists. Under enforce the phone is then silently unreachable, and the only surface
 that says so is the camp line. Re-publish `rkey=self` with the new id and relaunch; the
 repair takes a minute once you know, and cost twenty when we did not.
+
+## §17 — the calling app over OUR port, DEVICE-VERIFIED both directions (RUN 2026-09-21)
+
+**What was being tested.** D3.3 of the call-core-and-apple-shell plan: `CallPeer` holds
+`uniffi.croft_ffi.CallEndpoint` over `ports/call-transport-iroh` instead of upstream
+iroh-ffi's `Endpoint`, and the camp/dial decisions are `core/call-core`'s through the same
+bindings (D3.2). The condition, written in advance from §16: *the phone must camp under
+enforce, place a call with one Connect tap and no relay verdict after its admit, receive a
+call the same way, and show the E129 endings in the words §16 recorded.*
+
+**The rig.** Pixel `51021FDAP000RF` (`bobzmudacroft`, endpoint `873f3ddc15…`) on a **debug
+build of `claude/d3-android-core` at D3.3** (`c9f63c8`), installed IN PLACE over the §16
+debug build — same debug keystore, so `adb install -r` kept app data and the key: the
+endpoint id on screen matched the published `self` record with no repair. The other party
+was **`croft-arc` on the laptop** (test account 1, label `croft-arc-callee`, endpoint
+`298f91b375…`), because the **Samsung was pattern-locked** and only its owner can clear
+that (see "Left undone"). The phone's screen was read with `uiautomator dump`, the taps
+placed from a fresh dump's bounds each time, logcat filtered to `CroftCall`, the relay
+journal read with `sudo -n journalctl -u iroh-relay`.
+
+### The result
+
+```
+21:07:19   app launched; libcroft_ffi.so loaded (nativeloader); "access token stale;
+           refreshing" → "session refreshed" — the OAuth session survived 7 days idle
+21:07:20–23  relay: denied endpoint_id=873f3ddc15 reason="no_token"  ×5   (tokenless bind
+           while the mint ran — the phones' known shape, §15)
+21:07:26   logcat: "rebound with a token; re-attaching"
+21:07:27   relay: admitted endpoint_id=873f3ddc15 sponsorship=BudgetBytes(262144)
+21:07:30   logcat: "home relay: https://relay.croft.ing:8443/"; screen: "ready, camped on relay"
+21:09:51   deep link → card "@croft-arc-callee … via https://relay.croft.ing:8443"
+21:09:58   ← ONE Connect tap
+21:10:03   screen: "connected (outgoing, direct ip:192.168.50.235:64146)  callee"; "Hang up"
+           arc: "incoming from 873f3ddc15 (hello "croftcall-android") — connected"
+21:10:14   ← Hang up
+           screen: "you ended the call — ready, camped on relay"
+           arc: "call ended: closed by peer: hangup (code 0)"
+21:10:45   arc dials bobzmudacroft.bsky.social --device self (its record names 873f3ddc15)
+21:10:56   screen: "connected (incoming, direct ip:192.168.50.235:54819)  croft-arc-callee"
+21:11:00   logcat: "path change (incoming) …: direct ip:192.168.50.1:54819"  (iroh migrated)
+21:11:04   arc hangs up (--hold 12); screen: "call ended: closed by peer: hangup (code 0)
+           — ready, camped on relay"
+```
+
+**The relay journal carried NO line for the phone after its admit** — through both calls
+and both hang-ups: no `Stream terminated`, no `usage` close, no denial, no re-admit. §16's
+condition, met again on a different endpoint implementation. (The two `usage` + `Stream
+terminated` pairs on `298f91b375` are the arc's own process exits at `done`, R3's recorded
+shape.) Both calls went **direct** on the LAN after connecting; the path line updated live
+when iroh migrated, which §15's runbook could only record as "unknown".
+
+**What this proves and what it does not.** It proves the calling app's endpoint over our
+port camps under enforce, dials, accepts, hangs up, and renders the E129 endings verbatim,
+on a real phone, on production, in both directions — the two-device tier's question for
+D3.3. The other party was the arc, not a second phone: **phone-to-phone over our port on
+both sides is not yet run**, and neither is a relayed (off-LAN) call over our port.
+
+### Left undone, and why
+
+- **The Samsung.** Pattern-locked at run time; a session cannot draw the owner's pattern.
+  It also carries the CI-signed v0.5.0, so installing this build there is a fresh install
+  (wipes the key → re-publish `rkey=self`, §16's hazard) plus a browser sign-in — both the
+  owner's acts. The two-phone run over our port is owed: `[device: android x2]`.
+- **Off-LAN.** Both phones on one Wi-Fi go direct; a relayed call over our port needs one
+  on cellular — the Pixel is the only phone with data: `[device: android=pixel]`.
+
+### D3.4 on the same rig, an hour later
+
+The build with `computer.iroh` and `libiroh_ffi.so` removed (D3.4) was installed in place
+and took an incoming call from the arc the same way:
+
+```
+21:20:29–31  relay: denied endpoint_id=873f3ddc15 reason="no_token"  ×6
+21:20:36   relay: admitted endpoint_id=873f3ddc15 sponsorship=BudgetBytes(262144)
+21:20:39   screen: "ready, camped on relay"
+21:20:52   logcat: "connected (incoming) 298f…: relayed relay:https://relay.croft.ing:8443/"
+21:20:54   logcat: "path change (incoming) 298f…: direct ip:192.168.50.235:63620"   ← the
+           relayed-first, direct-after-holepunch migration §16 could not see
+21:21:03   screen: "call ended: closed by peer: hangup (code 0) — ready, camped on relay"
+```
+
+**One crash on the way, fixed the same hour.** The first D3.4 install's launch started
+`MainActivity` twice a second apart (two `START u0` in logcat — the launch after a
+reinstall), two `MainViewModel`s called the JNI DNS hook twice, and ndk-context's
+initializer `assert!`ed on the second: SIGABRT, the app gone from the screen. The hook is
+idempotent now (`ffi/src/android.rs`); D3.3's run had simply not hit the double start.
+Recorded in `ops/JOURNAL.md`.
+
+### Rig state as left
+
+- **Pixel** — the D3.4 debug build (no upstream iroh in the APK), signed in, camped; same
+  key and record as §16.
+- **Samsung** — untouched: released v0.5.0, session refreshed on launch behind the lock
+  screen, still the CI-signed install.
+- The arc's `croft-arc-callee` record on account 1 was deleted after the run (getRecord
+  400); the phones' `self` records were only read.

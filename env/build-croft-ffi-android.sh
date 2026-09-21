@@ -2,12 +2,17 @@
 # Cross-compile libcroft_ffi.so for Android and install it into the app's
 # jniLibs, then verify the emulator can actually load it.
 #
-# The build recipe is `build-iroh-android.sh`'s, generalized. That script's
-# header lists the five things that must line up and records that each was found
-# by failing; all five apply identically here, so they are not restated — read
-# it, then read this. The differences from that script are only these: the crate
-# is ours and in this workspace (no clone, no pinned upstream tag), and this one
-# does not stop at producing a file.
+# The build recipe was first written for upstream iroh-ffi's .so
+# (`build-iroh-android.sh`, retired in D3.4 once the calling app carried no
+# upstream library). Five things must line up, each found by failing and
+# recorded in ops/JOURNAL.md ("Five traps, each found only by running"):
+# the C compiler and archiver per target (CC_/AR_ — `ring` has a C build
+# script), the API level from toolchain.yml's min_sdk and not a README's
+# example, the toolchain resolved through rustup and not the cwd's default,
+# `cargo` resolved through rustup and not Homebrew's on PATH, and `rustc`
+# exported absolutely (Homebrew's is the SAME version with zero Android
+# targets). All five are enforced below; this script also does not stop at
+# producing a file.
 #
 # **Producing the `.so` is not the test.** The class of bug the emulator exists
 # to catch — the one that ate the inherited croftcall client — is a native
@@ -59,11 +64,15 @@ for abi_target in "arm64-v8a:aarch64-linux-android:aarch64_linux_android:AARCH64
   [ -x "$clang" ] || { echo "no clang wrapper: $clang"; exit 1; }
 
   echo "==> building croft-ffi for $target (API $API)"
+  # Stripped for the phone only (D3.4's re-measure: 34.6 MB → 22.5 MB). Scoped
+  # to this build rather than the workspace's release profile, so the arc and
+  # the desktop cdylib keep their symbols for backtraces.
   env \
     PATH="$TC/bin:$(dirname "$RUSTC_BIN"):$PATH" \
     "CC_${envsuffix}=$clang" \
     "AR_${envsuffix}=$TC/bin/llvm-ar" \
     "CARGO_TARGET_${upper}_LINKER=$clang" \
+    "CARGO_TARGET_${upper}_RUSTFLAGS=-C strip=symbols" \
     "$CARGO_BIN" build --release -p croft-ffi --target "$target"
 
   so="$root/target/$target/release/libcroft_ffi.so"
@@ -74,7 +83,7 @@ for abi_target in "arm64-v8a:aarch64-linux-android:aarch64_linux_android:AARCH64
   # not contain it, and shipping our .so into `app/` would have put 2MB of a
   # library nothing called into the calling APK. D3 is the calling app
   # switching onto this library (rules first, then the endpoint), so it now
-  # genuinely carries it; `libiroh_ffi.so` leaves in D3.4 when nothing calls
+  # genuinely carries it; `libiroh_ffi.so` left in D3.4, once nothing called
   # it any more.
   for module in social app; do
     out="$root/android/$module/src/main/jniLibs/$abi"

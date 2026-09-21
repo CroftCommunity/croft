@@ -53,9 +53,15 @@ port now have a production caller, so the expiry clause is discharged. **R4 land
 became a library both drivers share, the calling object crossed the FFI beside `ChatSession`
 (one cdylib, both iroh integrations), and a SwiftUI window RAN the arc on production from
 buttons — sign in, camp (`admitted … sponsorship=`), dial the arc, hang up, the screen
-reading what the core worded. The call-core-and-apple-shell plan is complete. **The Android
-app still calls none of the Rust** — D3's switch is the next decision; its phased proposal
-is in that plan's Review Log (R4 entry).
+reading what the core worded. The call-core-and-apple-shell plan is complete. **D3 landed
+2026-09-21: the Android calling app runs on the core.** Its camp and dial decisions are
+`call-core`'s and its endpoint is `call-transport-iroh`'s, both through `croft-ffi`'s
+generated Kotlin; `computer.iroh` and `libiroh_ffi.so` are gone from the APK (one iroh per
+phone). Device-verified on the Pixel against production in both directions (runbook §17:
+camped under enforce, one-tap call, incoming call, both E129 endings verbatim, no relay
+line after the admit); phone-to-phone over our port on both sides is owed (the Samsung was
+locked). The shipped v0.5.0 still carries upstream iroh-ffi and the §15 dial defect; the
+release that carries D3 is v0.6.0, the owner's cut.
 **P7 S1 landed 2026-08-27: the surface exists and runs on a device.**
 `android/social/` is a SEPARATE dev-only module (owner chose a module over a
 product flavor, so `:app`'s variant names and every runbook command stay

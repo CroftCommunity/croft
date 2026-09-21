@@ -1,8 +1,8 @@
-// Root build file. Version alignment note: if Gradle sync fights you on plugin
-// versions, mirror the versions used in n0's reference app
-// (github.com/n0-computer/hello-iroh-ffi/tree/main/kotlin-android), which is the
-// known-good combination for the computer.iroh artifact. Kotlin must be 2.2+:
-// the published iroh artifact carries Kotlin 2.2 metadata.
+// Root build file. The plugin versions were first aligned to n0's reference
+// app (the known-good combination for the computer.iroh artifact); since D3.4
+// (2026-09-21) the calling app carries no upstream iroh artifact — its iroh is
+// ours, inside libcroft_ffi — and these versions are simply the pinned ones
+// (env/toolchain.yml). Kotlin 2.2 is what uniffi 0.31's generated source needs.
 plugins {
     id("com.android.application") version "8.7.3" apply false
     id("org.jetbrains.kotlin.android") version "2.2.0" apply false
