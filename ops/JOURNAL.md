@@ -852,3 +852,13 @@ Driving the phone from a session, the parts that worked: `uiautomator dump` + a 
 bounds read before every `input tap`; `am start -a android.intent.action.VIEW -d
 "'croftcall://call?…'"` with the quotes; `settings put system user_rotation 0` on the
 Pixel first; logcat filtered to `CroftCall`; the relay journal with `sudo -n`.
+
+**Addendum, the same evening — the Samsung half.** The OAuth login page accepted the
+account password from `CroftC/.env` typed over adb (`input text` with the value quoted for
+the device shell and spaces as `%s`; the value never printed). Chrome's web content is NOT
+in `uiautomator`'s tree — only the URL bar — so the page was read with `screencap` and the
+fields tapped by coordinates from the image. `adb uninstall` + `install` of a build signed
+with this machine's debug keystore is the one-time cost; from then on `install -r` keeps
+the data. And a phone whose app is backgrounded is not callable (the endpoint shuts down
+on background by design) — foreground the callee before dialling it, or the caller waits
+20 s for "no answer".

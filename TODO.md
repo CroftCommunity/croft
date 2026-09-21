@@ -12,11 +12,20 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
 
 ## Open
 
-- [ ] **Phone-to-phone over our port on BOTH sides.** D3.3 (2026-09-21) was device-verified
+- [x] **Phone-to-phone over our port on BOTH sides.** D3.3 (2026-09-21) was device-verified
   on the Pixel in both directions against `croft-arc` on the laptop (runbook §17); the
-  Samsung was pattern-locked and carries the CI-signed v0.5.0, so putting the D3 build on
-  it is a fresh install (key wiped → re-publish `self`, browser sign-in — the owner's acts).
-  The two-phone call over `call-transport-iroh` on both ends is owed. [device: android x2]
+  Samsung was pattern-locked and carried the CI-signed v0.5.0, so putting the D3 build on
+  it was a fresh install (key wiped → `self` re-published, browser sign-in). RUN the same
+  evening once the owner unlocked it: both directions connected direct, endings verbatim,
+  no relay line for either phone (runbook §17). [device done 2026-09-21: samsung↔pixel over
+  call-transport-iroh on production, both directions]
+- [ ] **A backgrounded phone is not callable, and the caller only learns it after 20 s.**
+  Surfaced by the §17 two-phone run: the Pixel had been backgrounded, its endpoint was shut
+  down (the iroh Android guidance the app follows — no foreground service), and the
+  Samsung's dial timed out with "no answer within 20s". Honest on both screens, but the
+  product question — stay callable while backgrounded — is a foreground service plus
+  push-to-wake, a later phase. Recorded so the next device run foregrounds the callee
+  first. [device: android x2]
 - [ ] **A relayed call over our port.** Every D3.3 call went direct on one Wi-Fi (the port
   reported `relayed …` for a second, then `direct …`). A call that STAYS relayed needs one
   party off the LAN — the Pixel on cellular. [device: android=pixel]

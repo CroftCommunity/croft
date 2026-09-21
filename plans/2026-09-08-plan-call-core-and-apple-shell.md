@@ -994,9 +994,12 @@ the next; the whole app suite is the grade.
   calls — a SIGABRT of the whole app. The hook is idempotent now (first call wins).
   D3.3's first run had simply not hit the double start.
 
-Owed from this landing, on the device queue: **phone-to-phone over our port on both
-sides** `[device: android x2]` (the Samsung was pattern-locked; it also carries the
-CI-signed v0.5.0, so installing this build there is a fresh install — key wiped, `self`
-record to re-publish, browser sign-in — the owner's acts); **a relayed call over our port**
-`[device: android=pixel]` (both parties on one Wi-Fi went direct). The release cut that
+Owed from this landing, on the device queue: ~~phone-to-phone over our port on both
+sides~~ **RUN the same evening** once the owner unlocked the Samsung — fresh install, `self`
+re-published, browser sign-in, then both directions connected direct with the endings
+verbatim and no relay line for either phone (runbook §17, last block); **a relayed call over
+our port** `[device: android=pixel]` (both parties on one Wi-Fi went direct) is still owed,
+and the run surfaced that **a backgrounded phone is not callable** (by the shut-down-on-
+background policy; a foreground service is a later phase). The doubled *"dial failed:
+reason=dial failed: …"* the Samsung showed is fixed in the follow-up (`CallRefusal.kt`). The release cut that
 carries D3 is v0.6.0, the owner's (`ops/RELEASING.md`).
