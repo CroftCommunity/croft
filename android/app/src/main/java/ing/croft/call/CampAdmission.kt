@@ -1,6 +1,15 @@
 package ing.croft.call
 
 import ing.croft.call.caps.Admit
+import uniffi.croft_ffi.CampAction as CoreAction
+import uniffi.croft_ffi.CampFailure as CoreFailure
+import uniffi.croft_ffi.CampOutcome as CoreOutcome
+import uniffi.croft_ffi.CampPass as CorePass
+import uniffi.croft_ffi.CampPlan as CorePlan
+import uniffi.croft_ffi.CampRefusal as CoreRefusal
+import uniffi.croft_ffi.campAction
+import uniffi.croft_ffi.campFailureNote
+import uniffi.croft_ffi.campPlan
 
 /**
  * The pure half of camp-at-attach (Phase 11 M4e, O1): whether this attach
@@ -8,10 +17,19 @@ import ing.croft.call.caps.Admit
  * Decisions only — no I/O, no clock reads; the ViewModel performs the plan
  * and feeds the outcome back, exactly [DialAdmission]'s shape.
  *
+ * **D3.2 (2026-09-21): the decisions are `call-core`'s.** This object keeps
+ * the shape the ViewModel and the enforcement matrix's `PIN:` rows were
+ * written against and delegates every decision through the FFI
+ * (`uniffi.croft_ffi.campPlan` / `campAction` / `campFailureNote`), so the
+ * shipped app and the Rust rules are ONE implementation graded by the same
+ * rows. The words come back from the core verbatim; nothing here re-words a
+ * refusal.
+ *
  * Posture (plan M4e), deliberately unlike dial:
  * - **the token is the cache** (O1 point 3): a minted pass is reused across
- *   reconnects until [REMINT_MARGIN_MILLIS] before its expiry — the identity
- *   round-trip happens once per pass lifetime, not per connectivity flap;
+ *   reconnects until the core's re-mint margin before its expiry — the
+ *   identity round-trip happens once per pass lifetime, not per connectivity
+ *   flap;
  * - a camp REFUSAL still camps tokenless WITH the worded reason — in open
  *   mode reception must keep working, and under enforce the relay's refusal
  *   is the visible gate;
@@ -21,7 +39,9 @@ import ing.croft.call.caps.Admit
  */
 object CampAdmission {
 
-    /** Re-mint when the pass is within this margin of its expiry. */
+    /** Re-mint when the pass is within this margin of its expiry. Mirrors
+     *  the core's margin; the matrix's boundary rows (exactly at the margin,
+     *  one past it) are what catch a drift between the two. */
     const val REMINT_MARGIN_MILLIS: Long = 60_000
 
     /** A minted camping pass: the opaque token and when the WIRE said it
@@ -41,13 +61,12 @@ object CampAdmission {
         data class CampTokenless(val note: String?) : Plan
     }
 
-    fun plan(signedIn: Boolean, cached: CampPass?, nowMs: Long): Plan {
-        if (!signedIn) return Plan.CampTokenless(note = null)
-        if (cached != null && nowMs + REMINT_MARGIN_MILLIS < cached.expiresAtMillis) {
-            return Plan.UseCached(cached.token)
+    fun plan(signedIn: Boolean, cached: CampPass?, nowMs: Long): Plan =
+        when (val p = campPlan(signedIn, cached?.let { CorePass(it.token, it.expiresAtMillis) }, nowMs)) {
+            is CorePlan.UseCached -> Plan.UseCached(p.token)
+            is CorePlan.Mint -> Plan.Mint
+            is CorePlan.CampTokenless -> Plan.CampTokenless(p.note)
         }
-        return Plan.Mint
-    }
 
     /** What a camp-mint outcome does to the camp. */
     sealed interface Action {
@@ -58,30 +77,14 @@ object CampAdmission {
         data class CampTokenless(val note: String?) : Action
     }
 
-    fun action(outcome: Admit.CampOutcome, nowMs: Long): Action = when (outcome) {
-        is Admit.CampOutcome.Minted -> Action.Camp(
-            authToken = outcome.token,
-            pass = CampPass(outcome.token, nowMs + outcome.expiresInSecs * 1000),
-        )
-        is Admit.CampOutcome.Refused -> Action.CampTokenless(
-            when (outcome.reason) {
-                Admit.CampRefusal.ENDPOINT_UNBOUND -> "this device is not published by your account"
-                Admit.CampRefusal.JWT_INVALID -> "identity proof was not accepted"
-                Admit.CampRefusal.REPLAY -> "identity proof was already used — try again"
-                Admit.CampRefusal.PROOF_UNSUPPORTED ->
-                    "the admission service does not accept identity proofs"
-                Admit.CampRefusal.NO_PROOF -> "no identity proof was presented"
-                Admit.CampRefusal.UNKNOWN_KEY -> "this key is not trusted by the admission service"
-                Admit.CampRefusal.UNKNOWN -> "the camping pass was refused"
-            },
-        )
-        Admit.CampOutcome.Unavailable -> Action.CampTokenless(
-            note = "admission service unreachable — camping without a pass",
-        )
-        Admit.CampOutcome.BadRequest -> Action.CampTokenless(
-            note = "client error building the camping request",
-        )
-    }
+    fun action(outcome: Admit.CampOutcome, nowMs: Long): Action =
+        when (val a = campAction(outcome.toCore(), nowMs)) {
+            is CoreAction.Camp -> Action.Camp(
+                authToken = a.authToken,
+                pass = CampPass(a.pass.token, a.pass.expiresAtMillis),
+            )
+            is CoreAction.CampTokenless -> Action.CampTokenless(a.note)
+        }
 
     /**
      * Words for a camp attempt that threw, or null when there is nothing
@@ -90,7 +93,25 @@ object CampAdmission {
      * refusal — and rendering it as "camping pass setup failed" put a scary,
      * unactionable line on screen during device runs (2026-08-28).
      */
-    fun failureNote(t: Throwable): String? =
-        if (t is kotlinx.coroutines.CancellationException) null
-        else "camping pass setup failed: ${t.message}"
+    fun failureNote(t: Throwable): String? = campFailureNote(
+        if (t is kotlinx.coroutines.CancellationException) CoreFailure.Cancelled
+        else CoreFailure.Error(t.message ?: t.toString()),
+    )
+
+    private fun Admit.CampOutcome.toCore(): CoreOutcome = when (this) {
+        is Admit.CampOutcome.Minted -> CoreOutcome.Minted(token, expiresInSecs)
+        is Admit.CampOutcome.Refused -> CoreOutcome.Refused(
+            when (reason) {
+                Admit.CampRefusal.NO_PROOF -> CoreRefusal.NO_PROOF
+                Admit.CampRefusal.PROOF_UNSUPPORTED -> CoreRefusal.PROOF_UNSUPPORTED
+                Admit.CampRefusal.JWT_INVALID -> CoreRefusal.JWT_INVALID
+                Admit.CampRefusal.REPLAY -> CoreRefusal.REPLAY
+                Admit.CampRefusal.UNKNOWN_KEY -> CoreRefusal.UNKNOWN_KEY
+                Admit.CampRefusal.ENDPOINT_UNBOUND -> CoreRefusal.ENDPOINT_UNBOUND
+                Admit.CampRefusal.UNKNOWN -> CoreRefusal.UNKNOWN
+            },
+        )
+        Admit.CampOutcome.Unavailable -> CoreOutcome.Unavailable
+        Admit.CampOutcome.BadRequest -> CoreOutcome.BadRequest
+    }
 }

@@ -20,6 +20,8 @@ pub mod call;
 pub mod error;
 /// The gossip link: this device's join to a group's swarm.
 pub mod link;
+/// The camp and dial rules as functions (D3.2).
+pub mod rules;
 /// One substrate instance, the ports beside it, and the pond's loop over both.
 pub mod session;
 
@@ -30,6 +32,11 @@ use social_tree_core::model::GroupId;
 
 pub use call::{
     croft_relay_url, ActiveCall, CallError, CallOptions, CallSession, CallView, PeerAddress,
+};
+pub use rules::{
+    camp_action, camp_failure_note, camp_plan, dial_action, dial_plan, dial_rebind, CampAction,
+    CampFailure, CampOutcome, CampPass, CampPlan, CampRefusal, DialAction, DialCallee, DialOutcome,
+    DialPlan, DialRefusal, ProofSource, RebindDecision,
 };
 
 uniffi::setup_scaffolding!();

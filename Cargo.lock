@@ -676,6 +676,7 @@ dependencies = [
 name = "croft-ffi"
 version = "0.0.0"
 dependencies = [
+ "call-core",
  "call-session",
  "call-transport-iroh",
  "chat-core",

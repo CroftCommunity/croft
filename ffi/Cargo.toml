@@ -44,6 +44,9 @@ transport-iroh = { path = "../ports/transport-iroh" }
 # copy of iroh per app, not two), and the calling app switching onto it is
 # D3's decision.
 call-session = { path = "../ports/call-session" }
+# D3.2: the camp and dial rules cross as functions, so the calling app's
+# Kotlin decision objects delegate to the core instead of duplicating it.
+call-core = { path = "../core/call-core" }
 call-transport-iroh = { path = "../ports/call-transport-iroh" }
 # The boundary is the one place a failure can go quiet: Rust returns an error,
 # the binding hands the shell an exception, and what happens next is out of this
