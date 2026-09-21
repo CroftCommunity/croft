@@ -12,6 +12,7 @@ import ing.croft.call.caps.Redeem
 import ing.croft.call.identity.AuthManager
 import ing.croft.call.identity.IdentityStore
 import ing.croft.call.net.CallPeer
+import ing.croft.call.net.CroftAndroid
 import ing.croft.call.net.CroftRelay
 import ing.croft.call.net.UrlHttp
 import ing.croft.call.net.UrlHttpForm
@@ -21,7 +22,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import computer.iroh.IrohAndroid
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -30,16 +30,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val callee: StateFlow<Callee?> = _callee
 
     init {
-        // Required once before the first Endpoint is constructed: iroh's DNS
-        // resolver reads system DNS via LinkProperties, which needs the
-        // process JavaVM and a Context installed. (Reference app quirk list.)
-        IrohAndroid.installAndroidContext(app.applicationContext)
-        if (BuildConfig.DEBUG) {
-            // Native iroh logs to logcat — the M4d rig needs to see the
-            // relay attach story; release builds stay quiet.
-            try { computer.iroh.setLogLevel(computer.iroh.LogLevel.DEBUG) } catch (_: Throwable) {}
-        }
-        peer = CallPeer(IdentityStore(app.applicationContext), viewModelScope)
+        // Required once before the first endpoint binds: iroh's DNS resolver
+        // reads system DNS via LinkProperties, which needs the process JavaVM
+        // and a Context installed (D3.3: our library's JNI door, the same
+        // hook upstream iroh-ffi exposed as IrohAndroid.installAndroidContext).
+        CroftAndroid.installContext(app.applicationContext)
+        peer = CallPeer(IdentityStore(app.applicationContext), viewModelScope, CroftRelay.PRODUCTION)
     }
 
     fun onDeepLink(c: Callee?) {
@@ -266,7 +262,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                             _dialStatus.value = REBIND_FAILED
                             return@launch
                         }
-                        peer.dial(c.endpointId, callerLabel = "croftcall-android")
+                        peer.dial(c.endpointId, relayUrl = c.relayUrl, callerLabel = "croftcall-android")
                     }
                     is DialAdmission.Plan.Mint -> {
                         _dialStatus.value = "requesting admission…"
@@ -304,7 +300,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                     _dialStatus.value = REBIND_FAILED
                                     return@launch
                                 }
-                                peer.dial(c.endpointId, callerLabel = "croftcall-android")
+                                peer.dial(c.endpointId, relayUrl = c.relayUrl, callerLabel = "croftcall-android")
                             }
                         }
                     }

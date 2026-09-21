@@ -100,6 +100,28 @@ impl Call {
         self.peer_hello.as_deref()
     }
 
+    /// One honest line about which path the connection is using, from
+    /// iroh's own path snapshot: `direct <addr>`, `relayed <addr>`, or
+    /// `path unknown` for anything short of a selected path with a definite
+    /// type — the runbook's rule, and `PathSummary.kt`'s words before D3.
+    /// A snapshot, not a watch: iroh migrates paths after connect (a relayed
+    /// first snapshot becomes direct once holepunching lands), so a shell
+    /// re-asks while the call is up.
+    #[must_use]
+    pub fn path_summary(&self) -> String {
+        let paths = self.conn.paths();
+        let Some(selected) = paths.iter().find(|p| p.is_selected()) else {
+            return "path unknown".to_string();
+        };
+        if selected.is_ip() {
+            format!("direct {}", selected.remote_addr())
+        } else if selected.is_relay() {
+            format!("relayed {}", selected.remote_addr())
+        } else {
+            "path unknown".to_string()
+        }
+    }
+
     /// Hang up (E129): close with application code 0 and reason `hangup`,
     /// exactly as the app does, so a phone on the other end renders the same
     /// "closed by peer: hangup (code 0)" it renders today.

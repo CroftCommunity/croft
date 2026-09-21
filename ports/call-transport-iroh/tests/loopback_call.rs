@@ -120,3 +120,44 @@ fn a_dial_to_an_endpoint_nobody_is_running_is_refused_with_words() {
     );
     caller.shutdown();
 }
+
+#[test]
+fn a_loopback_call_reports_its_path_as_direct_in_the_screens_words() {
+    let _swarm = SwarmLock::acquire();
+    let callee = bind(0x45);
+    let caller = bind(0x46);
+    let peer = PeerAddr {
+        endpoint_id: callee.endpoint_id(),
+        relay_url: None,
+        addrs: direct_addrs(&callee),
+    };
+    let accepting = std::thread::spawn(move || {
+        let call = callee
+            .accept_next(PATIENCE)
+            .expect("accept does not fail")
+            .expect("a call arrives");
+        (callee, call)
+    });
+    let outgoing = caller
+        .dial(&peer, "caller-hello", PATIENCE)
+        .expect("connects");
+    let (callee, incoming) = accepting.join().expect("accept thread");
+
+    // The words `PathSummary.kt` committed to, now the port's: report what
+    // the snapshot says, never infer. Over loopback the selected path is IP.
+    assert!(
+        outgoing.path_summary().starts_with("direct "),
+        "{}",
+        outgoing.path_summary()
+    );
+    assert!(
+        incoming.path_summary().starts_with("direct "),
+        "{}",
+        incoming.path_summary()
+    );
+    outgoing.hang_up();
+    let _ = outgoing.ended(PATIENCE);
+    let _ = incoming.ended(PATIENCE);
+    caller.shutdown();
+    callee.shutdown();
+}

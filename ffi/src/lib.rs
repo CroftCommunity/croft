@@ -14,8 +14,13 @@
 //! Refusals cross as typed errors carrying their detail — see [`error`] for why
 //! that is load-bearing rather than decorative.
 
+/// Android only: the JNI hook that hands iroh's DNS resolver a Context (D3.3).
+#[cfg(target_os = "android")]
+pub mod android;
 /// The calling session and its one call, at the boundary (R4).
 pub mod call;
+/// The calling endpoint as an object (D3.3).
+pub mod endpoint;
 /// What can go wrong, in the session's own words.
 pub mod error;
 /// The gossip link: this device's join to a group's swarm.
@@ -31,8 +36,10 @@ use std::sync::Mutex;
 use social_tree_core::model::GroupId;
 
 pub use call::{
-    croft_relay_url, ActiveCall, CallError, CallOptions, CallSession, CallView, PeerAddress,
+    croft_relay_url, ActiveCall, CallEnding, CallError, CallOptions, CallSession, CallView,
+    PeerAddress,
 };
+pub use endpoint::{CallEndpoint, EndpointOptions};
 pub use rules::{
     camp_action, camp_failure_note, camp_plan, dial_action, dial_plan, dial_rebind, CampAction,
     CampFailure, CampOutcome, CampPass, CampPlan, CampRefusal, DialAction, DialCallee, DialOutcome,
