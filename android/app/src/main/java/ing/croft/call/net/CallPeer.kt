@@ -234,11 +234,10 @@ class CallPeer(
                 connected(call, peerEndpointId, "outgoing", call.peerHello())
             } catch (t: Throwable) {
                 // The matrix requires words: "dial failed: null" reached a
-                // real screen on 2026-09-08 (§15.3). The port's refusals carry
-                // them; this is the floor for anything else.
-                val why = t.message?.takeIf { it.isNotBlank() }
-                    ?: "the connection was refused and gave no reason (${t.javaClass.simpleName})"
-                _state.value = State.Failed("dial failed: $why")
+                // real screen on 2026-09-08 (§15.3), and "dial failed:
+                // reason=dial failed: …" on 2026-09-21 (§17). CallRefusal
+                // reads the port's own sentence off a typed refusal.
+                _state.value = State.Failed(CallRefusal.dialFailure(t))
             }
         }
     }

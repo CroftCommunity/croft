@@ -975,11 +975,63 @@ initializer `assert!`ed on the second: SIGABRT, the app gone from the screen. Th
 idempotent now (`ffi/src/android.rs`); D3.3's run had simply not hit the double start.
 Recorded in `ops/JOURNAL.md`.
 
+### The Samsung, an hour after that — phone-to-phone over our port on BOTH sides (RUN)
+
+The owner unlocked the Samsung. Fresh install of the D3.4 build over the CI-signed v0.5.0
+(`adb uninstall` then `install`: the key is wiped, as §16's hazard says), which came up
+signed out with a new id and the honest line — *"ready — NOT camped on relay; calls cannot
+reach this device"*. Repair as the hazard prescribes: account 1's `self` record
+re-published naming `1a0c160324…` (putRecord 200, label kept); the handle typed and the
+browser sign-in opened over adb; the owner's password entered on the PDS page (from
+`CroftC/.env`, owner-authorized, never echoed); Authorize tapped. The redirect landed,
+the mint ran, and the relay said so:
+
+```
+22:06:38–39  relay: denied endpoint_id=1a0c160324 reason="no_token"  ×3
+22:06:43   relay: admitted endpoint_id=1a0c160324 sponsorship=BudgetBytes(262144)
+22:06:44   samsung: "ready, camped on relay"
+```
+
+Then the two calls, one Connect tap each, from a fresh `uiautomator` dump every time:
+
+```
+22:07:20   samsung → pixel: Connect …  "dial failed: reason=dial failed: no answer within 20s"
+           — the PIXEL had been backgrounded ~45 min; its endpoint shuts down on background
+           (by design, no foreground service), so nobody was listening. Its screen read
+           "ready — NOT camped on relay; calls cannot reach this device" — honest.
+22:07:57   pixel foregrounded by the next deep link: relay: admitted endpoint_id=873f3ddc15 …
+           (no no_token first: CallPeer re-binds WITH the remembered pass)
+22:07:58   pixel → samsung: ONE Connect tap
+           pixel:   "connected (outgoing, direct ip:192.168.50.139:50815)  callee"
+           samsung: "connected (incoming, direct ip:192.168.50.15:36956)  croftcall-android"
+22:08:17   pixel hangs up → "you ended the call — ready, camped on relay"
+           samsung: "call ended: closed by peer: hangup (code 0) — ready, camped on relay"
+22:09:27   samsung → pixel (pixel foregrounded): ONE Connect tap
+           samsung: "connected (outgoing, direct ip:192.168.50.15:36956)  callee"
+           pixel:   "connected (incoming, direct ip:192.168.50.139:50815)  croftcall-android"
+22:09:46   samsung hangs up → "you ended the call — ready, camped on relay"
+           pixel: "call ended: closed by peer: hangup (code 0) — ready, camped on relay"
+```
+
+**The relay journal carried NO line for either phone from 22:07:58 through both calls and
+both hang-ups.** Both camps held; both directions connected direct on the LAN; the endings
+were the same words on both phones, whichever side hung up. Phone-to-phone over our port
+on both sides is DONE — `[device done 2026-09-21: samsung↔pixel over call-transport-iroh,
+production, both directions]`.
+
+Two things the run surfaced, neither a port defect: **a backgrounded phone is not
+callable** (the §16-era policy, now visible because the other phone dialled it — a
+foreground service is the fix, a later phase), and the Samsung's failed dial rendered
+*"dial failed: reason=dial failed: no answer within 20s"* — uniffi builds a generated
+exception's message from the variant's fields (the P7 S1 finding again, in a new coat) and
+`CallPeer` prefixed it a second time. Fixed after the run (`CallRefusal.kt`, pinned).
+
 ### Rig state as left
 
 - **Pixel** — the D3.4 debug build (no upstream iroh in the APK), signed in, camped; same
   key and record as §16.
-- **Samsung** — untouched: released v0.5.0, session refreshed on launch behind the lock
-  screen, still the CI-signed install.
+- **Samsung** — the D3.4 debug build (fresh install; this machine's debug keystore, so the
+  next `adb install -r` from here keeps its data), signed in as `ngvalidation2112`, camped;
+  its `self` record names the new id `1a0c160324…`. The CI-signed v0.5.0 is gone from it.
 - The arc's `croft-arc-callee` record on account 1 was deleted after the run (getRecord
   400); the phones' `self` records were only read.

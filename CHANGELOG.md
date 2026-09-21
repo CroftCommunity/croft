@@ -23,6 +23,10 @@ to the environment and why*.
   Behaviour on screen is unchanged and device-verified against production (runbook §17).
   `Rebind.Swap`'s token is non-null. The APK's native library is larger (22.5 MB
   stripped vs 18.5 MB) because it carries chat's ports too. (plan D3.1–D3.4)
+- **android: a refused dial shows the port's own sentence once.** The two-phone run
+  (runbook §17) rendered "dial failed: reason=dial failed: no answer within 20s" — a uniffi
+  exception's message is its fields, and the screen prefixed it again. `CallRefusal` reads
+  the `reason` off a typed refusal; other throwables keep the prefix, a silent one is named.
 
 ### Added
 
