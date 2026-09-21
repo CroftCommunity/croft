@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "ing.croft.call"
-        minSdk = 26            // matches iroh reference app floor (Android 8.0)
+        minSdk = 26            // Android 8.0; the NDK build of libcroft_ffi targets API 26
         targetSdk = 35
         versionCode = 6
         versionName = "0.5.0"
@@ -42,26 +42,45 @@ android {
         "\"" + (project.findProperty("croftAdmitBase") ?: "https://admit.croft.ing") + "\"",
     )
 
+    // D3.1: the croft core's uniffi bindings join the CALLING app's source set,
+    // exactly as they joined the social module's — generated Kotlin SOURCE from
+    // the built cdylib (`env/gen-kotlin-bindings.sh`), never committed.
+    sourceSets.getByName("main") {
+        java.srcDir(rootProject.file("../ffi/kotlin/build/generated/uniffi"))
+    }
+
     testOptions {
         // DeepLink.parse reads android.net.Uri, so its JVM unit tests run under
         // Robolectric; androidResources lets Robolectric load the resource table.
         unitTests.isIncludeAndroidResources = true
         unitTests.isReturnDefaultValues = true
+        unitTests.all {
+            // Where the DESKTOP cdylib lands, so JNA can find it when the unit
+            // tests drive the real bindings on the JVM (D3.1's wiring test).
+            it.systemProperty(
+                "jna.library.path",
+                rootProject.file("../target/debug").absolutePath,
+            )
+            // The two real inputs gradle cannot see (the social module's
+            // note, verbatim in spirit): a rebuilt cdylib or regenerated
+            // bindings with unchanged test code must not read as up-to-date.
+            it.inputs.files(
+                fileTree(rootProject.file("../target/debug")) {
+                    include("libcroft_ffi.*")
+                },
+            ).withPropertyName("croftFfiLibrary").withPathSensitivity(PathSensitivity.NONE)
+            it.inputs.dir(rootProject.file("../ffi/kotlin/build/generated/uniffi"))
+                .withPropertyName("generatedBindings")
+                .withPathSensitivity(PathSensitivity.RELATIVE)
+        }
     }
 }
 
-// computer.iroh:iroh ships Java-21 bytecode; the app is fine (D8 dexes it for
-// Android) but JVM unit tests that load those classes need a 21 runtime. Only
-// the test launcher moves to 21 — compile stays at 17 (compileOptions above) so
-// the produced APK is unchanged. The JDK comes via Gradle toolchains + the
-// foojay resolver (settings.gradle.kts), not from JAVA_HOME.
-val javaToolchains = project.extensions.getByType<JavaToolchainService>()
+// D3.4: the unit-test launcher is back on the compile JDK (17). The 21
+// launcher existed only because computer.iroh:iroh shipped Java-21 bytecode,
+// and that artifact is gone — the calling app's iroh is ours, inside
+// libcroft_ffi, reached through uniffi (JNA), which has no bytecode floor.
 tasks.withType<Test>().configureEach {
-    javaLauncher.set(
-        javaToolchains.launcherFor {
-            languageVersion.set(JavaLanguageVersion.of(21))
-        }
-    )
     // EnforcementMatrixTest reads the repo-root matrix doc; without declaring
     // it an input, a doc-only edit leaves the test task up-to-date and the
     // gate silently passes stale (found live: a planted bogus PIN produced a
@@ -72,17 +91,20 @@ tasks.withType<Test>().configureEach {
 }
 
 dependencies {
-    // iroh Kotlin bindings from Maven Central. Per n0's reference Android app,
-    // this artifact bundles libiroh_ffi.so for every Android ABI (no NDK).
-    // If your resolved version lacks Android ABIs (older docs said the artifact
-    // was single-platform), fall back to building iroh-ffi from source; see README.
-    implementation("computer.iroh:iroh:1.0.0") {
-        // Quirk from the reference app: the artifact declares plain-jar JNA
-        // transitively, but Android needs the @aar variant which bundles
-        // libjnidispatch.so per ABI. Keeping both duplicates classes at packaging.
-        exclude(group = "net.java.dev.jna", module = "jna")
-    }
+    // D3.4 (2026-09-21): no upstream iroh artifact. The calling app's iroh is
+    // OURS — call-transport-iroh inside libcroft_ffi.so (env/build-croft-ffi-android.sh
+    // cross-compiles it into jniLibs; the uniffi bindings are generated Kotlin
+    // source, see sourceSets above). One iroh per phone, not two: the
+    // consolidation the call-core-and-apple-shell plan's D3 costed.
+    //
+    // JNA is what the generated bindings load the library through. The @aar
+    // variant bundles libjnidispatch.so per Android ABI; the plain jar below is
+    // for the desktop JVM the unit tests run on.
     implementation("net.java.dev.jna:jna:5.14.0@aar")  // uniffi requires JNA >= 5.12
+    // The PLAIN jar for JVM unit tests: the @aar carries only the Android
+    // ABIs' libjnidispatch, a desktop test needs darwin/linux's (the social
+    // module's D1 finding — wrong, it reads as a binding bug and is not one).
+    testImplementation("net.java.dev.jna:jna:5.14.0")
 
     implementation("androidx.security:security-crypto:1.1.0-alpha06") // EncryptedSharedPreferences
     implementation("androidx.activity:activity-compose:1.9.3")
@@ -96,6 +118,10 @@ dependencies {
     // WireFormat is plain Kotlin; DeepLink needs android.net.Uri, so Robolectric
     // provides the framework classes on the JVM (no device, runs in `./gradlew test`).
     testImplementation("junit:junit:4.13.2")
+    // kotlin.test's assertions take the message LAST (the social module's
+    // note): the order that reads as a sentence, and the order a JUnit 4
+    // `assertTrue(message, condition)` silently inverts when both are Strings.
+    testImplementation(kotlin("test"))
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("androidx.test:core:1.6.1")
     // The workflow harness (M4): FixtureExchange serves every backend the

@@ -1,26 +1,40 @@
 package ing.croft.call.net
 
-import computer.iroh.RelayConfig
+import uniffi.croft_ffi.EndpointOptions
 
 /**
  * The croft relay, as the client dials it. The relay's front page is the
  * source of truth for these values — https://relay.croft.ing/ advertises
  * "connect via https://relay.croft.ing:8443 (relay) and udp/7824 (QUIC)"
- * (probed 2026-08-17). Both ports are nonstandard, which is why this is a
- * RelayConfig and not a bare URL: RelayMode.customFromUrls would dial the
- * defaults and miss.
+ * (probed 2026-08-17). Both ports are nonstandard, which is why the target
+ * carries a QUIC port and not a bare URL.
  *
- * authToken becomes an `Authorization: Bearer` header on the relay upgrade
- * request (iroh-ffi src/relay.rs). Null = the pre-M4 posture (production
- * runs admission="open", which admits token-less connections); M4c passes
- * the token `/grantCall` minted for this endpoint.
+ * D3.3: the values reach the endpoint as OUR port's `EndpointOptions`
+ * (`call-transport-iroh`, through `uniffi.croft_ffi.CallEndpoint`), not
+ * upstream iroh-ffi's `RelayConfig`. The admission token rides the same
+ * options at bind and `CallEndpoint.rebind` afterwards; null = tokenless,
+ * which an enforcing relay refuses (the M4 posture).
  */
 object CroftRelay {
-    fun config(authToken: String? = null): RelayConfig = RelayConfig(
-        url = ing.croft.call.BuildConfig.CROFT_RELAY_URL,
-        quicPort = ing.croft.call.BuildConfig.CROFT_RELAY_QUIC_PORT.toUShort(),
-        authToken = authToken,
-    )
+    val URL: String = ing.croft.call.BuildConfig.CROFT_RELAY_URL
+    val QUIC_PORT: UShort = ing.croft.call.BuildConfig.CROFT_RELAY_QUIC_PORT.toUShort()
+
+    /** A relay to camp on, and how peers are found. */
+    data class Target(val url: String, val quicPort: UShort, val discoveryN0: Boolean) {
+        fun endpointOptions(secret: ByteArray?, token: String?): EndpointOptions = EndpointOptions(
+            secretKey = secret,
+            relayUrl = url,
+            quicPort = quicPort,
+            token = token,
+            discoveryN0 = discoveryN0,
+        )
+    }
+
+    /** Production: the croft relay with n0's discovery (DNS/pkarr). */
+    val PRODUCTION = Target(URL, QUIC_PORT, discoveryN0 = true)
+
+    fun endpointOptions(secret: ByteArray?, token: String?): EndpointOptions =
+        PRODUCTION.endpointOptions(secret, token)
 
     /** croft-admit, the mint (declared at services/croft-admit.toml). */
     val ADMIT_BASE: String = ing.croft.call.BuildConfig.CROFT_ADMIT_BASE

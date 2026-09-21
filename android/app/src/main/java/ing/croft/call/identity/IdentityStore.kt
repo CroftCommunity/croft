@@ -13,7 +13,7 @@ import android.util.Base64
  * pattern: persist ep.secretKey().toBytes() somewhere durable (it names
  * EncryptedSharedPreferences) and re-bind with EndpointOptions(secretKey = ...).
  */
-class IdentityStore(context: Context) {
+class IdentityStore(context: Context) : ing.croft.call.net.SecretKeyStore {
     private val prefs = EncryptedSharedPreferences.create(
         context,
         "croftcall.identity",
@@ -22,10 +22,10 @@ class IdentityStore(context: Context) {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
     )
 
-    fun loadSecretKey(): ByteArray? =
+    override fun loadSecretKey(): ByteArray? =
         prefs.getString(KEY, null)?.let { Base64.decode(it, Base64.NO_WRAP) }
 
-    fun saveSecretKey(bytes: ByteArray) {
+    override fun saveSecretKey(bytes: ByteArray) {
         prefs.edit().putString(KEY, Base64.encodeToString(bytes, Base64.NO_WRAP)).apply()
     }
 

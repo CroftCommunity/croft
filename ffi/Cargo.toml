@@ -44,12 +44,25 @@ transport-iroh = { path = "../ports/transport-iroh" }
 # copy of iroh per app, not two), and the calling app switching onto it is
 # D3's decision.
 call-session = { path = "../ports/call-session" }
+# D3.2: the camp and dial rules cross as functions, so the calling app's
+# Kotlin decision objects delegate to the core instead of duplicating it.
+call-core = { path = "../core/call-core" }
+# D3.3: the endpoint object generates a key when the shell has none to persist yet.
+iroh = "1.1"
 call-transport-iroh = { path = "../ports/call-transport-iroh" }
 # The boundary is the one place a failure can go quiet: Rust returns an error,
 # the binding hands the shell an exception, and what happens next is out of this
 # crate's hands. Emitting here leaves something behind to find afterwards.
 # Routing these to logcat needs android app code and belongs to S1.
 tracing = "0.1"
+
+# D3.3: on Android, the JNI hook that hands iroh's DNS resolver the JVM and
+# a Context (ffi/src/android.rs). jni 0.21 is the version already in the
+# lockfile through iroh-dns's own Android path; iroh-dns is where the hook
+# lives (iroh re-exports its `dns` module, not this function).
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+iroh-dns = "1.1"
 
 [dev-dependencies]
 tempfile = "3"

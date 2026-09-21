@@ -1,8 +1,6 @@
 package ing.croft.call.net
 
 import android.util.Log
-import ing.croft.call.DialAdmission
-import ing.croft.call.identity.IdentityStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -11,47 +9,33 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import computer.iroh.*
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withContext
+import uniffi.croft_ffi.ActiveCall
+import uniffi.croft_ffi.CallEndpoint
+import uniffi.croft_ffi.PeerAddress
 
 /**
- * Owns the iroh endpoint: bind with a persistent identity, run the accept
- * loop (so this device is callable), and dial a callee by endpoint id.
+ * Owns the endpoint: bind with a persistent identity, run the accept loop
+ * (so this device is callable), and dial a callee by endpoint id.
  *
- * API grounding notes, so future edits know what is solid vs to-verify:
+ * **D3.3 (2026-09-21): the endpoint is OUR port.** `uniffi.croft_ffi.CallEndpoint`
+ * over `call-transport-iroh`, where the lifecycle rules live: R0 at
+ * `rebind` (a dial never lowers admission, §15.3) and the id stable across
+ * a token swap are enforced there, not here. The v0 hello, the E129 ending
+ * and the path words come back typed. What stays here is the phone's
+ * lifecycle — coroutines over blocking calls, the state machine the screen
+ * renders, stop on background and re-bind on foreground — and the honesty
+ * probe: `homeRelay` is the endpoint's OWN reachability answer, re-asked
+ * every few seconds (E135(a): a refused attach must read NOT camped).
  *
- * SOLID (from docs.iroh.computer/languages/kotlin, retrieved 2026-08-02):
- *   Endpoint.bind(EndpointOptions(preset = presetN0(), alpns = listOf(ALPN)))
- *   ep.id(), ep.shutdown(), ep.secretKey().toBytes()
- *   EndpointOptions(secretKey = persistedBytes, preset = presetN0(), ...)
- *
- * VERIFIED 2026-08-02 (was TO-VERIFY) against n0's reference Android app
- *   hello-iroh-ffi/kotlin-android/.../net/IrohPeer.kt + net/PeerSession.kt.
- *   The accept/connect/stream shape is NOT `ep.accept()`/`stream.send`; it is:
- *     accept : ep.acceptNext() -> incoming.accept() -> accepting.connect() -> Connection
- *     dial   : EndpointId.fromString(id) -> EndpointAddr(id, null, emptyList())
- *              -> ep.connect(addr, ALPN) -> Connection
- *     streams: conn.acceptBi()/conn.openBi() -> BiStream; bi.send()/bi.recv()
- *              give the SendStream/RecvStream halves; write is send.writeAll(bytes),
- *              read is recv.readExact(size: ULong) -> ByteArray.
- *   See docs/adr/0002-callpeer-api-verification.md for the full before/after.
- *
- * Relay note: preset presetN0() uses n0's public relays. Pointing at
- * relay.croft.ing is isolated in [endpointOptions] so wiring it up touches
- * exactly one function. VERIFIED 2026-08-17 against the shipped
- * computer.iroh:iroh 1.0.0 jar (javap, not docs): EndpointOptions has a
- * `relayMode: RelayMode` field, and RelayMode.customFromUrls(urls) /
- * RelayMode.custom(RelayMap) / RelayMap.fromUrls(urls) all exist; RelayConfig
- * carries an authToken. The preset/relayMode interaction is also VERIFIED
- * (iroh-ffi v1.0.0 src/endpoint.rs, Endpoint::bind): the preset applies
- * first as the baseline — crucially installing the crypto provider — and
- * explicit fields like relayMode are layered on top "so they always win".
- * So rung 3 keeps preset = presetN0() and sets relayMode on top; note the
- * preset's discovery services (n0 DNS/pkarr) remain in use either way.
+ * Every port call blocks for its patience and runs on [Dispatchers.IO];
+ * the accept loop asks in short slices so a `rebind` (which waits for the
+ * readers) lands within one.
  */
 class CallPeer(
-    private val identity: IdentityStore,
+    private val keys: SecretKeyStore,
     private val scope: CoroutineScope,
+    private val relay: CroftRelay.Target = CroftRelay.PRODUCTION,
 ) {
     sealed interface State {
         data object Idle : State
@@ -62,9 +46,9 @@ class CallPeer(
             val peer: String,
             val direction: String,
             val peerHello: String?,
-            // From PathSummary over the connection's own path snapshots; starts
-            // as whatever is selected at connect (usually the relay) and updates
-            // live as iroh migrates, e.g. after a successful holepunch.
+            // The port's own path snapshot, re-read while connected: iroh
+            // migrates paths after connect (relayed first, direct once
+            // holepunching lands), so the line updates live.
             val path: String = "path unknown",
         ) : State
         data class Failed(val message: String) : State
@@ -82,71 +66,102 @@ class CallPeer(
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state
 
-    /** The endpoint's HOME RELAY url — null when the relay attach has not
-     *  succeeded (E135(a): under enforce a refused camp must not read as
-     *  camped). Fed by `watchHomeRelay`, NOT by polling `addr().relayUrl()`:
-     *  measured on hardware 2026-08-28 (runbook §13 step 3), `addr()` keeps
-     *  reporting the CONFIGURED relay while an enforcing relay refuses every
-     *  attach, so the poll could never tell the two apart. The earlier
-     *  poll-not-watch note here cited the `conn.watchPaths()` reactor failure
-     *  (JOURNAL 2026-08-17) — that lesson is about a Connection watcher; this
-     *  Endpoint watcher is verified separately on-device, and its
-     *  registration is guarded so a reactor failure degrades honestly instead
-     *  of breaking bind. */
+    /** The relay this endpoint is ATTACHED to — null when it is attached to
+     *  none, whatever is configured or bound (E135(a)). The port answers from
+     *  `Endpoint.online()`, prompt when attached and blocked while an
+     *  enforcing relay refuses; the probe's timeout turns "still blocked"
+     *  into an answer. */
     private val _homeRelay = MutableStateFlow<String?>(null)
     val homeRelay: StateFlow<String?> = _homeRelay
-    /** Drives the reachability probe (E135(a)); see `_homeRelay`. */
-    private var relayPoll: Job? = null
 
-    private var endpoint: Endpoint? = null
+    private var endpoint: CallEndpoint? = null
+    private var relayPoll: Job? = null
+    private var acceptJob: Job? = null
     private var pathPoll: Job? = null
 
-    /** The live call's connection (E129) — held so hang-up can close it and
-     *  the closed-watcher can end the state honestly. One call at a time. */
+    /** The live call (E129) — held so hang-up can close it. One at a time. */
     @Volatile
-    private var activeConn: Connection? = null
+    private var activeCall: ActiveCall? = null
 
-    /** Set by [hangUp] before closing, read by the closed-watcher so a local
-     *  ending never masquerades as the transport's. */
-    @Volatile
-    private var localHangUp = false
-
-    /** The relay admission token the NEXT bind presents (M4c). */
+    /** The admission token the NEXT bind presents (after a stop/start). */
     @Volatile
     private var authToken: String? = null
 
-    /**
-     * Publish the connected state and keep its path summary live. The summary
-     * is re-read from conn.paths() every couple of seconds while connected,
-     * because iroh migrates paths after the fact — verified on-device
-     * 2026-08-17: the callee's first snapshot said relayed while the caller's
-     * already said direct. Every change goes to logcat — the two-device test
-     * had to record "direct or relayed: unknown" because nothing said, and
-     * this line is what says.
-     *
-     * A poll, not conn.watchPaths(): the watch callback fails at runtime from
-     * Kotlin with "there is no reactor running, must be called from the
-     * context of a Tokio 1.x runtime" (iroh-ffi 1.0.0, seen on both devices);
-     * conn.paths() works from any thread.
-     */
-    private fun connected(conn: Connection, peer: String, direction: String, hello: String?) {
-        val initial = PathSummary.describe(try { conn.paths() } catch (t: Throwable) { emptyList() })
-        Log.i(TAG, "connected ($direction) $peer: $initial")
-        activeConn = conn
-        localHangUp = false
-        _state.value = State.Connected(peer, direction, hello, initial)
-        // The closed-watcher (E129): `closed()` suspends until the connection
-        // ends — hang-up, remote close, or transport death alike — and
-        // returns the reason. Before this watcher, a remote ending left the
-        // state STUCK at Connected (the path poll just broke silently).
+    /** Bind (or re-bind after background) with the persistent identity. */
+    fun start() {
+        if (endpoint != null) return
+        _state.value = State.Binding
         scope.launch(Dispatchers.IO) {
-            val reason = try { conn.closed() } catch (t: Throwable) { t.message }
+            try {
+                val ep = CallEndpoint.bind(relay.endpointOptions(secret = keys.loadSecretKey(), token = authToken))
+                keys.saveSecretKey(ep.secretKey())
+                endpoint = ep
+                _state.value = State.Ready(ep.endpointId())
+                relayPoll?.cancel()
+                _homeRelay.value = null
+                relayPoll = scope.launch(Dispatchers.IO) {
+                    while (endpoint === ep) {
+                        val url = try {
+                            ep.attachedRelay(ONLINE_PROBE_TIMEOUT_SECS)
+                        } catch (c: kotlinx.coroutines.CancellationException) {
+                            throw c
+                        } catch (t: Throwable) {
+                            Log.w(TAG, "attach probe failed: ${t.message}")
+                            null
+                        }
+                        if (endpoint !== ep) break
+                        if (_homeRelay.value != url) {
+                            Log.i(TAG, "home relay: ${url ?: "NOT ATTACHED"}")
+                            _homeRelay.value = url
+                        }
+                        delay(ONLINE_PROBE_INTERVAL_MS)
+                    }
+                }
+                acceptJob = acceptLoop(ep)
+            } catch (t: Throwable) {
+                _state.value = State.Failed("bind failed: ${t.message}")
+            }
+        }
+    }
+
+    /** Callable = alive + camped on the relay + accepting. */
+    private fun acceptLoop(ep: CallEndpoint) = scope.launch(Dispatchers.IO) {
+        while (endpoint === ep) {
+            val call = try {
+                ep.acceptNext(ACCEPT_SLICE_SECS)
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                if (endpoint !== ep) break
+                Log.w(TAG, "accept failed: ${t.message}")
+                delay(500)
+                continue
+            } ?: continue
+            connected(call, call.peerEndpointId(), "incoming", call.peerHello())
+        }
+    }
+
+    /**
+     * Publish the connected state, watch for the ending, and keep the path
+     * line live. The closed-watcher (E129) blocks on the port until the
+     * call ends — hang-up, remote close, or transport death alike — and the
+     * ending arrives TYPED, so the words never guess remote-end from an
+     * error string.
+     */
+    private fun connected(call: ActiveCall, peer: String, direction: String, hello: String?) {
+        val ownId = endpoint?.endpointId().orEmpty()
+        val initial = call.path()
+        Log.i(TAG, "connected ($direction) $peer: $initial")
+        activeCall = call
+        _state.value = State.Connected(peer, direction, hello, initial)
+        scope.launch(Dispatchers.IO) {
+            var ending = call.ending(ENDING_SLICE_SECS)
+            while (ending == null && activeCall === call) ending = call.ending(ENDING_SLICE_SECS)
             val current = _state.value
-            if (current is State.Connected && current.peer == peer) {
-                val ownId = endpoint?.id()?.toString().orEmpty()
-                val ended = CallEnding.ended(ownId, peer, localHangUp, reason)
+            if (ending != null && current is State.Connected && current.peer == peer) {
+                val ended = CallEnding.ended(ownId, peer, ending)
                 Log.i(TAG, "call ended ($direction) $peer: ${ended.message}")
-                activeConn = null
+                activeCall = null
                 pathPoll?.cancel()
                 _state.value = ended
             }
@@ -157,9 +172,7 @@ class CallPeer(
                 delay(2_000)
                 val current = _state.value
                 if (current !is State.Connected || current.peer != peer) break
-                val summary = PathSummary.describe(
-                    try { conn.paths() } catch (t: Throwable) { break }
-                )
+                val summary = try { call.path() } catch (t: Throwable) { break }
                 if (summary != current.path) {
                     Log.i(TAG, "path change ($direction) $peer: $summary")
                     _state.value = current.copy(path = summary)
@@ -168,148 +181,61 @@ class CallPeer(
         }
     }
 
-    // Rung 3: the endpoint camps on OUR relay. The preset stays — it installs
-    // the baseline (crucially the crypto provider; iroh-ffi Endpoint::bind
-    // applies the preset first, then explicit fields win) — and relayMode
-    // overrides just the relay map. n0's discovery services (DNS/pkarr)
-    // remain in use; only the relay moves to relay.croft.ing.
-    private fun croftRelayMode(): RelayMode {
-        val map = RelayMap.empty()
-        map.insert(CroftRelay.config(authToken))
-        return RelayMode.custom(map)
+    /**
+     * Bind [token] on the relay upgrade (M4c). The port decides: a dial never
+     * lowers admission (R0), the same token is not a rebind, and the
+     * endpoint id is asserted stable across a swap. Returns the endpoint id,
+     * or null when there is no endpoint to bind it on.
+     */
+    suspend fun rebindWithToken(token: String?): String? {
+        val ep = endpoint
+        if (ep == null) {
+            // Nothing bound (backgrounded): remember the token for the bind.
+            token?.let { authToken = it }
+            start()
+            val settled = state.first { it is State.Ready || it is State.Failed }
+            return (settled as? State.Ready)?.endpointId
+        }
+        val swapped = withContext(Dispatchers.IO) {
+            try {
+                ep.rebind(token)
+            } catch (t: Throwable) {
+                Log.w(TAG, "rebind failed: ${t.message}")
+                return@withContext null
+            }
+        } ?: return null
+        if (swapped) {
+            authToken = token
+            // The re-attach is in flight; the probe re-asks and says so.
+            _homeRelay.value = null
+            Log.i(TAG, "rebound with a token; re-attaching")
+        }
+        return ep.endpointId()
     }
 
     /**
-     * Re-bind with [token] on the relay upgrade (M4c). The persisted secret
-     * key makes the EndpointId stable across the swap — asserted, because
-     * the mint bound the token to that id and a drift would make every
-     * token worthless. Suspends until the endpoint is Ready (or Failed).
+     * Dial by endpoint id, with the record's relay hint when there is one;
+     * iroh discovery resolves the rest. [addrs] are direct addresses when a
+     * card carries them (a JVM test's loopback; a local card later).
      */
-    suspend fun rebindWithToken(token: String?): String? {
-        val before = (state.value as? State.Ready)?.endpointId
-        // A dial never lowers our admission (§15.3). Keeping a live pass costs
-        // nothing; dropping it costs the camp, and under enforce that is real
-        // unreachability. The policy is pure and pinned by RebindPolicyTest.
-        val decision = DialAdmission.rebind(current = authToken, wanted = token)
-        if (decision is DialAdmission.Rebind.Keep && before != null) return before
-        if (decision is DialAdmission.Rebind.Swap) authToken = decision.token
-        stop()
-        // stop() flips to Idle asynchronously; wait for it before rebinding.
-        state.first { it is State.Idle }
-        start()
-        val settled = state.first { it is State.Ready || it is State.Failed }
-        val after = (settled as? State.Ready)?.endpointId ?: return null
-        check(before == null || before == after) {
-            "EndpointId changed across token swap: $before -> $after"
-        }
-        return after
-    }
-
-    private fun endpointOptions(secret: ByteArray?): EndpointOptions =
-        if (secret != null) {
-            EndpointOptions(
-                secretKey = secret, preset = presetN0(),
-                alpns = listOf(WireFormat.ALPN), relayMode = croftRelayMode(),
-            )
-        } else {
-            EndpointOptions(
-                preset = presetN0(),
-                alpns = listOf(WireFormat.ALPN), relayMode = croftRelayMode(),
-            )
-        }
-
-    /** Bind (or re-bind after background) with the persistent identity. */
-    fun start() {
-        if (endpoint != null) return
-        _state.value = State.Binding
-        scope.launch(Dispatchers.IO) {
-            try {
-                val ep = Endpoint.bind(endpointOptions(identity.loadSecretKey()))
-                identity.saveSecretKey(ep.secretKey().toBytes())
-                endpoint = ep
-                _state.value = State.Ready(ep.id().toString())
-                relayPoll?.cancel()
-                _homeRelay.value = null
-                relayPoll = scope.launch(Dispatchers.IO) {
-                    while (endpoint === ep) {
-                        // `online()` is the reachability truth: it returns
-                        // promptly once the endpoint has its home relay and
-                        // blocks while the relay refuses the attach. The
-                        // timeout is what turns "still blocked" into an
-                        // answer; it only bites when NOT online, because an
-                        // online endpoint returns immediately.
-                        val online = try {
-                            withTimeoutOrNull(ONLINE_PROBE_TIMEOUT_MS) { ep.online() } != null
-                        } catch (c: kotlinx.coroutines.CancellationException) {
-                            // Rebind/stop cancelled us: honor it rather than
-                            // reporting a refusal we did not observe.
-                            throw c
-                        } catch (t: Throwable) {
-                            Log.w(TAG, "online probe failed: ${t.message}")
-                            false
-                        }
-                        val url = CampPresence.attachedRelay(
-                            online = online,
-                            relayUrl = try { ep.addr().relayUrl() } catch (t: Throwable) { null },
-                        )
-                        if (_homeRelay.value != url) {
-                            Log.i(TAG, "home relay: ${url ?: "NOT ATTACHED"}")
-                            _homeRelay.value = url
-                        }
-                        delay(ONLINE_PROBE_INTERVAL_MS)
-                    }
-                }
-                acceptLoop(ep)
-            } catch (t: Throwable) {
-                _state.value = State.Failed("bind failed: ${t.message}")
-            }
-        }
-    }
-
-    /** Callable = alive + camped on the relay + accepting. */
-    private fun acceptLoop(ep: Endpoint) = scope.launch(Dispatchers.IO) {
-        while (true) {
-            try {
-                val incoming = ep.acceptNext() ?: break
-                launch {
-                    try {
-                        val conn = incoming.accept().connect()
-                        val bi = conn.acceptBi()
-                        val hello = readHello(bi)
-                        bi.send().writeAll(WireFormat.encodeHello("callee"))
-                        connected(conn, conn.remoteId().toString(), "incoming", hello)
-                    } catch (_: Throwable) {
-                        // per-connection failure; keep accepting others
-                    }
-                }
-            } catch (t: Throwable) {
-                // endpoint shut down or transient accept error; loop exits on shutdown
-                if (endpoint == null) break
-            }
-        }
-    }
-
-    /** Dial by endpoint id alone: iroh discovery resolves the rest. */
-    fun dial(peerEndpointId: String, callerLabel: String) {
+    fun dial(
+        peerEndpointId: String,
+        relayUrl: String? = null,
+        addrs: List<String> = emptyList(),
+        callerLabel: String,
+    ) {
         val ep = endpoint ?: run {
             _state.value = State.Failed("endpoint not ready"); return
         }
         _state.value = State.Dialing(peerEndpointId)
         scope.launch(Dispatchers.IO) {
             try {
-                val id = EndpointId.fromString(peerEndpointId)
-                val addr = EndpointAddr(id, null, emptyList())
-                val conn = ep.connect(addr, WireFormat.ALPN)
-                val bi = conn.openBi()
-                bi.send().writeAll(WireFormat.encodeHello(callerLabel))
-                val hello = readHello(bi)
-                connected(conn, peerEndpointId, "outgoing", hello)
+                val call = ep.dial(PeerAddress(peerEndpointId, relayUrl, addrs), callerLabel, DIAL_PATIENCE_SECS)
+                connected(call, peerEndpointId, "outgoing", call.peerHello())
             } catch (t: Throwable) {
-                // uniffi builds a generated exception's message from the
-                // variant's FIELDS, so a fieldless variant crosses with an
-                // EMPTY message (the P7 S1 finding, met again here). "dial
-                // failed: null" reached a real screen on 2026-09-08 (§15.3);
-                // the matrix requires words, and null is not words.
+                // The matrix requires words: "dial failed: null" reached a
+                // real screen on 2026-09-08 (§15.3). The port's refusals carry
+                // them; this is the floor for anything else.
                 val why = t.message?.takeIf { it.isNotBlank() }
                     ?: "the connection was refused and gave no reason (${t.javaClass.simpleName})"
                 _state.value = State.Failed("dial failed: $why")
@@ -317,27 +243,21 @@ class CallPeer(
         }
     }
 
-    /** Read one length-prefixed hello frame off the recv half of [bi]. */
-    private suspend fun readHello(bi: BiStream): String? = try {
-        val recv = bi.recv()
-        val header = recv.readExact(2u)
-        val body = recv.readExact(WireFormat.frameLength(header).toUInt())
-        String(body, Charsets.UTF_8)
-    } catch (t: Throwable) { null }
+    /** This endpoint's direct addresses, as iroh currently knows them. */
+    fun localAddrs(): List<String> = endpoint?.localAddrs() ?: emptyList()
 
     /**
-     * Hang up the live call (E129): close the connection with an application
-     * code; the closed-watcher lands the [State.Ended] with "you ended the
-     * call". The endpoint stays bound and camped — still callable.
+     * Hang up the live call (E129): the port closes with code 0 `hangup`;
+     * the closed-watcher lands [State.Ended] with "you ended the call". The
+     * endpoint stays bound and camped — still callable.
      */
     fun hangUp() {
-        val conn = activeConn ?: return
-        localHangUp = true
+        val call = activeCall ?: return
         scope.launch(Dispatchers.IO) {
             try {
-                conn.close(0L, "hangup".toByteArray())
+                call.hangUp()
             } catch (t: Throwable) {
-                Log.w(TAG, "hang-up close failed: ${t.message}")
+                Log.w(TAG, "hang-up failed: ${t.message}")
             }
         }
     }
@@ -346,11 +266,10 @@ class CallPeer(
     fun stop() {
         val ep = endpoint ?: return
         endpoint = null
-        activeConn = null
-        pathPoll?.cancel()
-        pathPoll = null
-        relayPoll?.cancel()
-        relayPoll = null
+        activeCall = null
+        pathPoll?.cancel(); pathPoll = null
+        relayPoll?.cancel(); relayPoll = null
+        acceptJob?.cancel(); acceptJob = null
         _homeRelay.value = null
         scope.launch(Dispatchers.IO) {
             try { ep.shutdown() } catch (_: Throwable) {}
@@ -361,7 +280,11 @@ class CallPeer(
     private companion object {
         const val TAG = "CroftCall"
         /** Long enough that a slow-but-succeeding attach is not called a refusal. */
-        const val ONLINE_PROBE_TIMEOUT_MS = 6_000L
+        const val ONLINE_PROBE_TIMEOUT_SECS = 6uL
         const val ONLINE_PROBE_INTERVAL_MS = 5_000L
+        /** The accept slice: a rebind waits at most this long for the loop. */
+        const val ACCEPT_SLICE_SECS = 2uL
+        const val ENDING_SLICE_SECS = 30uL
+        const val DIAL_PATIENCE_SECS = 20uL
     }
 }

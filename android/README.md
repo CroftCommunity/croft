@@ -16,20 +16,26 @@ what makes publishing it in a PDS record sane.
 ## Build
 
 - JDK 17+, Android Studio (SDK platform 35), device/emulator API 26+.
-- Kotlin 2.2+ is required: the published iroh artifact carries Kotlin 2.2 metadata.
-- Dependency `computer.iroh:iroh` comes from Maven Central. Per n0's reference
-  Android app, it bundles `libiroh_ffi.so` for every Android ABI (no NDK, no
-  Rust). Caveat: the docs site's Kotlin page (older) says the artifact is
-  single-platform and Android requires building iroh-ffi from source. If Gradle
-  packaging fails for missing Android ABIs, that fallback is documented at
-  docs.iroh.computer/languages/kotlin under "Building from source".
-- JNA quirk (from the reference app): the iroh artifact pulls plain-jar JNA
-  transitively, but Android needs the `@aar` variant bundling libjnidispatch.so.
-  app/build.gradle.kts excludes the jar and declares the aar; keep it that way
-  or packaging fails with duplicate classes.
+- Kotlin 2.2+ (what uniffi 0.31's generated source needs) and the pinned Rust
+  toolchain + NDK from `env/toolchain.yml` (`make bootstrap`).
+- **The calling app's iroh is ours (D3, 2026-09-21).** `CallPeer` holds
+  `uniffi.croft_ffi.CallEndpoint` over `ports/call-transport-iroh`, and the camp
+  and dial decisions are `core/call-core`'s through the same bindings. Nothing
+  from `computer.iroh` is on the classpath any more. Two generated inputs the
+  build needs, both from one command:
+  - `libcroft_ffi.so` in `app/src/main/jniLibs/arm64-v8a/` — `make ffi-android`
+    (`env/build-croft-ffi-android.sh`) cross-compiles it and dlopens it on the
+    attached arm64 device;
+  - the Kotlin bindings under `ffi/kotlin/build/generated/uniffi` — `make bindings`
+    (`env/gen-kotlin-bindings.sh`) builds the desktop cdylib and generates them;
+    the JVM unit tests load that cdylib from `target/debug`.
+- JNA: the `@aar` variant bundles `libjnidispatch.so` per Android ABI; the plain
+  jar is a test dependency for the desktop JVM. Keep both or the wrong one
+  fails with `UnsatisfiedLinkError` on the side you did not run.
 
 ```
-./gradlew assembleDebug
+make bindings && make ffi-android   # the two generated inputs
+cd android && ./gradlew assembleDebug
 ./gradlew installDebug
 ```
 
@@ -40,22 +46,18 @@ adb shell am start -a android.intent.action.VIEW \
   -d "croftcall://call?endpoint=<PEER_ENDPOINT_ID>&handle=alice.test"
 ```
 
-## Honesty ledger: verified vs to-verify
+## Honesty ledger
 
-Verified against docs.iroh.computer/languages/kotlin (fetched 2026-08-02):
-`Endpoint.bind(EndpointOptions(preset = presetN0(), alpns = ...))`, `ep.id()`,
-`ep.shutdown()`, `ep.secretKey().toBytes()`, rebinding with
-`EndpointOptions(secretKey = ...)`, `IrohAndroid.installAndroidContext(...)`
-(the latter from the reference app's quirk list), and the background/foreground
-policy (shutdown on background, re-bind on foreground, foreground service if
-you must stay callable while backgrounded).
-
-To verify before first compile, marked `VERIFY` in `net/CallPeer.kt`: exact
-Kotlin names for accept loop, `connect`, bi-streams, and stream read/write.
-The docs state the API maps 1:1 to Rust; confirm names against the Dokka
-reference (n0-computer.github.io/iroh-ffi/kotlin/) and the reference
-implementation `hello-iroh-ffi/kotlin-android/.../net/IrohPeer.kt`, which is
-the same accept/connect/bi-stream shape this file follows.
+The endpoint surface `CallPeer.kt` drives is our own (`ffi/src/endpoint.rs` over
+`ports/call-transport-iroh`), so there is no upstream API to verify names
+against any more; the port's hermetic tests and `CallPeerWiringTest` (a loopback
+call on the JVM through the generated bindings) are the contract. Two things
+carried over from upstream, with their reasons in the source: the Android DNS
+hook (`CroftAndroid.installContext`, once before the first bind — iroh's resolver
+reads the phone's nameservers through JNI) and the background/foreground policy
+(shutdown on background, re-bind on foreground with the persisted key; a
+foreground service if you must stay callable while backgrounded — not built).
+Device-verified 2026-09-21 on the Pixel against production (runbook §17).
 
 ## Deliberately deferred
 

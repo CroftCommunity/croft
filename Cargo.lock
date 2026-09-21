@@ -676,9 +676,13 @@ dependencies = [
 name = "croft-ffi"
 version = "0.0.0"
 dependencies = [
+ "call-core",
  "call-session",
  "call-transport-iroh",
  "chat-core",
+ "iroh",
+ "iroh-dns",
+ "jni 0.21.1",
  "keylayer-openmls",
  "social-tree-core",
  "store-redb",

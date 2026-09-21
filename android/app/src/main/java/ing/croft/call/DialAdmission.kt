@@ -1,11 +1,26 @@
 package ing.croft.call
 
 import ing.croft.call.caps.Admit
+import uniffi.croft_ffi.DialAction as CoreAction
+import uniffi.croft_ffi.DialCallee as CoreCallee
+import uniffi.croft_ffi.DialOutcome as CoreOutcome
+import uniffi.croft_ffi.DialPlan as CorePlan
+import uniffi.croft_ffi.DialRefusal as CoreRefusal
+import uniffi.croft_ffi.ProofSource as CoreProof
+import uniffi.croft_ffi.RebindDecision
+import uniffi.croft_ffi.dialAction
+import uniffi.croft_ffi.dialPlan
+import uniffi.croft_ffi.dialRebind
 
 /**
  * The pure half of mint-at-dial (Phase 11 M4c): which proof this dial
  * presents, and what each mint outcome does to the dial. Decisions only —
  * no I/O; the ViewModel performs the plan and feeds the outcome back.
+ *
+ * **D3.2 (2026-09-21): the decisions are `call-core`'s.** The shape stays
+ * (the ViewModel and the matrix's `PIN:` rows are written against it) and
+ * every decision goes through the FFI (`uniffi.croft_ffi.dialPlan` /
+ * `dialAction` / `dialRebind`); the words come back verbatim.
  *
  * Posture (plan M4c):
  * - a REFUSAL never dials — "not permitted" must never look like a
@@ -41,16 +56,18 @@ object DialAdmission {
         data class DialTokenless(val note: String?) : Plan
     }
 
-    fun plan(callee: Callee, signedIn: Boolean): Plan {
-        val grant = callee.grant
-        val did = callee.did
-        if (grant == null || did == null) return Plan.DialTokenless(note = null)
-        callee.ticketSecret?.let {
-            return Plan.Mint(calleeDid = did, grant = grant, proof = ProofSource.Ticket(it))
+    fun plan(callee: Callee, signedIn: Boolean): Plan =
+        when (val p = dialPlan(CoreCallee(callee.did, callee.grant, callee.ticketSecret), signedIn)) {
+            is CorePlan.Mint -> Plan.Mint(
+                calleeDid = p.calleeDid,
+                grant = p.grant,
+                proof = when (val source = p.proof) {
+                    is CoreProof.Ticket -> ProofSource.Ticket(source.secret)
+                    is CoreProof.ServiceAuth -> ProofSource.ServiceAuth
+                },
+            )
+            is CorePlan.DialTokenless -> Plan.DialTokenless(p.note)
         }
-        if (signedIn) return Plan.Mint(calleeDid = did, grant = grant, proof = ProofSource.ServiceAuth)
-        return Plan.DialTokenless(note = "sign in to present this grant")
-    }
 
     /** What a mint outcome does to the dial. */
     sealed interface Action {
@@ -61,26 +78,11 @@ object DialAdmission {
         data class Refuse(val message: String) : Action
     }
 
-    fun action(outcome: Admit.Outcome): Action = when (outcome) {
-        is Admit.Outcome.Minted -> Action.Dial(authToken = outcome.token, note = null)
-        is Admit.Outcome.Refused -> Action.Refuse(
-            when (outcome.reason) {
-                Admit.Refusal.CAP_REVOKED -> "this invite has been revoked"
-                Admit.Refusal.CAP_NOT_FOUND -> "this invite no longer exists"
-                Admit.Refusal.CAP_MISMATCH -> "this invite does not admit you"
-                Admit.Refusal.JWT_INVALID -> "identity proof was not accepted"
-                Admit.Refusal.REPLAY -> "identity proof was already used — try again"
-                Admit.Refusal.QUOTA_EXHAUSTED -> "the sponsoring account is out of quota"
-                Admit.Refusal.NO_CAP -> "no invite was presented"
-                Admit.Refusal.UNKNOWN -> "the call was not permitted"
-            },
-        )
-        Admit.Outcome.Unavailable -> Action.Dial(
-            authToken = null,
-            note = "admission service unreachable — dialing without a token",
-        )
-        Admit.Outcome.BadRequest -> Action.Refuse("client error building the admission request")
-    }
+    fun action(outcome: Admit.Outcome): Action =
+        when (val a = dialAction(outcome.toCore())) {
+            is CoreAction.Dial -> Action.Dial(authToken = a.authToken, note = a.note)
+            is CoreAction.Refuse -> Action.Refuse(a.message)
+        }
 
     /** What a dial must do to the endpoint's currently bound relay token. */
     sealed interface Rebind {
@@ -90,8 +92,10 @@ object DialAdmission {
          */
         data object Keep : Rebind
 
-        /** Bind [token]; the endpoint stops and re-attaches, and the camp gaps. */
-        data class Swap(val token: String?) : Rebind
+        /** Bind [token]; the endpoint stops and re-attaches, and the camp
+         *  gaps. Never null (D3's note): the only downgrade available is
+         *  giving up a token, and that is a [Keep]. */
+        data class Swap(val token: String) : Rebind
     }
 
     /**
@@ -109,12 +113,30 @@ object DialAdmission {
      * live camping pass, the re-attach was refused ~20 times with `no_token`,
      * and the phone stayed unreachable for four minutes until it was restarted.
      * Open mode had hidden it completely — a tokenless re-attach was admitted
-     * anyway.
+     * anyway. The rule is `call_core::dial::rebind`, R0, enforced at the
+     * Rust port's endpoint too.
      */
-    fun rebind(current: String?, wanted: String?): Rebind = when {
-        wanted == current -> Rebind.Keep
-        // The only downgrade available: giving up a token we already hold.
-        wanted == null -> Rebind.Keep
-        else -> Rebind.Swap(wanted)
+    fun rebind(current: String?, wanted: String?): Rebind =
+        when (val d = dialRebind(current, wanted)) {
+            is RebindDecision.Keep -> Rebind.Keep
+            is RebindDecision.Swap -> Rebind.Swap(d.token)
+        }
+
+    private fun Admit.Outcome.toCore(): CoreOutcome = when (this) {
+        is Admit.Outcome.Minted -> CoreOutcome.Minted(token)
+        is Admit.Outcome.Refused -> CoreOutcome.Refused(
+            when (reason) {
+                Admit.Refusal.NO_CAP -> CoreRefusal.NO_CAP
+                Admit.Refusal.CAP_NOT_FOUND -> CoreRefusal.CAP_NOT_FOUND
+                Admit.Refusal.CAP_REVOKED -> CoreRefusal.CAP_REVOKED
+                Admit.Refusal.CAP_MISMATCH -> CoreRefusal.CAP_MISMATCH
+                Admit.Refusal.JWT_INVALID -> CoreRefusal.JWT_INVALID
+                Admit.Refusal.REPLAY -> CoreRefusal.REPLAY
+                Admit.Refusal.QUOTA_EXHAUSTED -> CoreRefusal.QUOTA_EXHAUSTED
+                Admit.Refusal.UNKNOWN -> CoreRefusal.UNKNOWN
+            },
+        )
+        Admit.Outcome.Unavailable -> CoreOutcome.Unavailable
+        Admit.Outcome.BadRequest -> CoreOutcome.BadRequest
     }
 }

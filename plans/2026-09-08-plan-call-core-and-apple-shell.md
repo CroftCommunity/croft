@@ -1,6 +1,6 @@
 # Plan — filling `call-core` and standing up the apple shell (roadmap R1–R4)
 
-**Status:** **R4 LANDED 2026-09-15** (`shell/apple`, the macOS window — RUN against production: sign in, camp, dial the arc, hang up, from buttons; `ports/call-session` is the steps both drivers share; croft PR — see Review Log). **The plan's four phases are complete.** D3 (Android onto the core, timing) is the next decision and has its phased plan in the Review Log's R4 entry. Previously: **R3 LANDED 2026-09-15** (`bin/croft-arc`, the fast loop — RUN against production, no phone; croft PR — see Review Log) on **R2 LANDED 2026-09-14** (`ports/call-transport-iroh`, ADR-0004, croft #19) on **R1 LANDED 2026-09-14** (`core/call-core`, croft #18). The expiry clause is discharged: R1 and R2 have their production caller. Previously: ACCEPTED 2026-09-10. Three passes complete, **Phase 0 CLOSED** — D1 was probed
+**Status:** **D3 LANDED 2026-09-21** — the Android calling app runs on the core: its camp and dial decisions are `call-core`'s and its endpoint is `call-transport-iroh`'s through `croft-ffi`, upstream iroh-ffi is gone from the APK, device-verified on the Pixel against production in both directions (runbook §17; phone-to-phone over our port on BOTH sides is still owed — the Samsung was pattern-locked). Previously: **R4 LANDED 2026-09-15** (`shell/apple`, the macOS window — RUN against production: sign in, camp, dial the arc, hang up, from buttons; `ports/call-session` is the steps both drivers share; croft PR — see Review Log). **The plan's four phases are complete.** D3 (Android onto the core, timing) is the next decision and has its phased plan in the Review Log's R4 entry. Previously: **R3 LANDED 2026-09-15** (`bin/croft-arc`, the fast loop — RUN against production, no phone; croft PR — see Review Log) on **R2 LANDED 2026-09-14** (`ports/call-transport-iroh`, ADR-0004, croft #19) on **R1 LANDED 2026-09-14** (`core/call-core`, croft #18). The expiry clause is discharged: R1 and R2 have their production caller. Previously: ACCEPTED 2026-09-10. Three passes complete, **Phase 0 CLOSED** — D1 was probed
 2026-09-08, and D4/D5/D6 were walked with the owner 2026-09-10 (see *Decisions*). Pass 3's
 escalation is discharged: the severities were reviewed. **R1 may start.** Phase 0's D1 is already RUN and green; D4–D6 are
 not. Nothing below Phase 0 should start until D4–D6 are answered, because two of them can
@@ -943,3 +943,60 @@ What decides the timing: D3.3 needs both phones and a device session (the rig ha
 §16 — reinstall clears the key, re-sign-in is step 0); D3.1 and D3.2 are phone-free and
 can start now. Recommendation: D3.1 + D3.2 next (phone-free, each a small landing), D3.3
 when a device session is scheduled, D3.4 in the same release as D3.3.
+
+**D3 — landed 2026-09-21, four phases as four commits, one PR.** Owner's go on the phased
+proposal above the same day, both phones in hand. Each phase RED-first and green before
+the next; the whole app suite is the grade.
+
+- **D3.1 — the library in the APK, calling nothing.** The uniffi bindings join `:app`'s
+  source set as they joined `:social`'s; the JVM tests find the desktop cdylib on
+  `jna.library.path` with the same two declared inputs; `env/build-croft-ffi-android.sh`
+  installs the arm64 `.so` into both modules and dlopens the calling app's copy.
+  `FfiWiringTest` opens a `CallSession` through the bindings on the JVM; the `.so` was
+  pushed to the Samsung and LOADED AND RESOLVED on arm64.
+- **D3.2 — the rules.** `croft-ffi` exports `campPlan`/`campAction`/`campFailureNote` and
+  `dialPlan`/`dialAction`/`dialRebind` with mirrored boundary types
+  (`ffi/tests/rules_pins.rs`, 8); the Kotlin `CampAdmission`/`DialAdmission` keep their
+  shape and delegate. Every word matched string for string before the swap, so no matrix
+  row moved. **The check on the check:** with the tree committed, `dial_rebind` was
+  mutated to ignore `current` — the Kotlin row *"the same token is not a rebind"* failed,
+  the restore from HEAD made it pass. The Kotlin walker now grades the Rust; D5's "(b)
+  eventually" is no longer needed for that.
+- **D3.3 — the endpoint.** `CallPeer` holds `uniffi.croft_ffi.CallEndpoint` over the port:
+  bind with the persisted key (`SecretKeyStore`, which `IdentityStore` implements), the
+  accept loop in two-second slices (an `RwLock` on the Rust side, so a `rebind` lands
+  within one), R0 and id-stability enforced by the port, the ending TYPED
+  (`ActiveCall.ending()`; `CallEnding` words it as the phones already show), the path
+  line from the port's snapshot. `WireFormat.kt` and `PathSummary.kt` are gone — the port
+  pins the wire and the words. On Android the one JNI door, `CroftAndroid.installContext`
+  → `iroh_dns::install_android_jni_context`, gives iroh's DNS resolver the phone's
+  nameservers. `CallPeerWiringTest` is the JVM proof (two peers, loopback, both endings);
+  **runbook §17 is the device proof** — the Pixel over our port camped under enforce
+  (`admitted … sponsorship=`), placed a call with one tap, received one from the arc,
+  showed both E129 endings verbatim, and the relay journal carried no line for the phone
+  after its admit.
+- **D3.4 — upstream iroh-ffi is gone.** `computer.iroh:iroh` leaves the Gradle files and
+  lockfile, `libiroh_ffi.so` leaves the APK, `env/build-iroh-android.sh` and
+  `iroh_ffi_tag` retire, the unit-test launcher returns to the compile JDK (the 21
+  launcher existed only for that artifact's bytecode; 169 tests green on 17). One iroh
+  per phone. **Re-measured honestly:** the calling app's native library is now ours and
+  it is BIGGER than the one it replaces — 34.6 MB unstripped / 22.5 MB stripped against
+  18.5 MB — because `libcroft_ffi` carries chat's ports (openmls, redb, gossip) beside
+  calling's; the consolidation pays off per PHONE (two apps, one iroh), not per APK. The
+  release cross-compile now strips symbols (`-C strip=symbols` in the Android script
+  only; the arc keeps its backtraces). Measured: the unsigned release APK is 31.0 MB with
+  the stripped library (43.1 MB before stripping); the published v0.5.0 asset, a
+  debug-signed APK with upstream's 18.5 MB library, is 42.0 MB — not the same build type,
+  so the honest comparison is library to library: 22.5 MB ours vs 18.5 MB theirs.
+- **Found on the device, fixed the same hour:** ndk-context's initializer `assert!`s it
+  was never called before, and a launch after a reinstall started `MainActivity` twice a
+  second apart (two `START u0` in logcat), two `MainViewModel`s, two `installContext`
+  calls — a SIGABRT of the whole app. The hook is idempotent now (first call wins).
+  D3.3's first run had simply not hit the double start.
+
+Owed from this landing, on the device queue: **phone-to-phone over our port on both
+sides** `[device: android x2]` (the Samsung was pattern-locked; it also carries the
+CI-signed v0.5.0, so installing this build there is a fresh install — key wiped, `self`
+record to re-publish, browser sign-in — the owner's acts); **a relayed call over our port**
+`[device: android=pixel]` (both parties on one Wi-Fi went direct). The release cut that
+carries D3 is v0.6.0, the owner's (`ops/RELEASING.md`).

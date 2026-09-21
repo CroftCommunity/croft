@@ -18,7 +18,7 @@ use std::time::Duration;
 
 use call_session::report::ending_line;
 use call_session::steps::{self, Options, Presence};
-use call_transport_iroh::{Call, Direction, Discovery, PeerAddr};
+use call_transport_iroh::{Call, Direction, Discovery, Ending, PeerAddr};
 
 /// The production relay, as the port names it — so a shell's default is the
 /// product's commitment and not a string it typed.
@@ -155,7 +155,7 @@ impl CallError {
         }
     }
 
-    fn closed() -> Self {
+    pub(crate) fn closed() -> Self {
         CallError::Closed {
             reason: "this session was closed; open another".to_string(),
         }
@@ -176,6 +176,14 @@ impl From<call_session::Error> for CallError {
             }
             E::State { .. } => CallError::State { reason },
             E::Transport(_) => CallError::Transport { reason },
+        }
+    }
+}
+
+impl From<call_transport_iroh::CallTransportError> for CallError {
+    fn from(e: call_transport_iroh::CallTransportError) -> Self {
+        CallError::Transport {
+            reason: e.to_string(),
         }
     }
 }
@@ -335,9 +343,30 @@ pub struct ActiveCall {
 }
 
 impl ActiveCall {
-    fn wrap(call: Call) -> Arc<Self> {
+    pub(crate) fn wrap(call: Call) -> Arc<Self> {
         Arc::new(ActiveCall { call })
     }
+}
+
+/// How a call ended (E129), as observed on this side — typed, so a shell
+/// chooses its own words for a local hang-up and passes the peer's reason
+/// through verbatim, never guessing remote-end from an error.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum CallEnding {
+    /// This side hung up.
+    LocalHangUp,
+    /// The peer closed with an application code and reason.
+    ClosedByPeer {
+        /// The application close code.
+        code: u64,
+        /// The reason bytes, as UTF-8 (lossy).
+        reason: String,
+    },
+    /// The transport lost the connection.
+    Lost {
+        /// What iroh said.
+        reason: String,
+    },
 }
 
 #[uniffi::export]
@@ -369,5 +398,23 @@ impl ActiveCall {
             .ended(Duration::from_secs(patience_secs))
             .as_ref()
             .map(ending_line)
+    }
+
+    /// The same wait, typed (D3.3): for a shell that words its own endings.
+    pub fn ending(&self, patience_secs: u64) -> Option<CallEnding> {
+        self.call
+            .ended(Duration::from_secs(patience_secs))
+            .map(|e| match e {
+                Ending::LocalHangUp => CallEnding::LocalHangUp,
+                Ending::ClosedByPeer { code, reason } => CallEnding::ClosedByPeer { code, reason },
+                Ending::Lost { reason } => CallEnding::Lost { reason },
+            })
+    }
+
+    /// Which path the call is using right now, in the screen's words:
+    /// `direct <addr>`, `relayed <addr>`, or `path unknown`. A snapshot —
+    /// re-ask while the call is up, iroh migrates paths after connect.
+    pub fn path(&self) -> String {
+        self.call.path_summary()
     }
 }
