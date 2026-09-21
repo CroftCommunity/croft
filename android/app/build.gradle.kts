@@ -42,11 +42,37 @@ android {
         "\"" + (project.findProperty("croftAdmitBase") ?: "https://admit.croft.ing") + "\"",
     )
 
+    // D3.1: the croft core's uniffi bindings join the CALLING app's source set,
+    // exactly as they joined the social module's — generated Kotlin SOURCE from
+    // the built cdylib (`env/gen-kotlin-bindings.sh`), never committed.
+    sourceSets.getByName("main") {
+        java.srcDir(rootProject.file("../ffi/kotlin/build/generated/uniffi"))
+    }
+
     testOptions {
         // DeepLink.parse reads android.net.Uri, so its JVM unit tests run under
         // Robolectric; androidResources lets Robolectric load the resource table.
         unitTests.isIncludeAndroidResources = true
         unitTests.isReturnDefaultValues = true
+        unitTests.all {
+            // Where the DESKTOP cdylib lands, so JNA can find it when the unit
+            // tests drive the real bindings on the JVM (D3.1's wiring test).
+            it.systemProperty(
+                "jna.library.path",
+                rootProject.file("../target/debug").absolutePath,
+            )
+            // The two real inputs gradle cannot see (the social module's
+            // note, verbatim in spirit): a rebuilt cdylib or regenerated
+            // bindings with unchanged test code must not read as up-to-date.
+            it.inputs.files(
+                fileTree(rootProject.file("../target/debug")) {
+                    include("libcroft_ffi.*")
+                },
+            ).withPropertyName("croftFfiLibrary").withPathSensitivity(PathSensitivity.NONE)
+            it.inputs.dir(rootProject.file("../ffi/kotlin/build/generated/uniffi"))
+                .withPropertyName("generatedBindings")
+                .withPathSensitivity(PathSensitivity.RELATIVE)
+        }
     }
 }
 
@@ -83,6 +109,10 @@ dependencies {
         exclude(group = "net.java.dev.jna", module = "jna")
     }
     implementation("net.java.dev.jna:jna:5.14.0@aar")  // uniffi requires JNA >= 5.12
+    // The PLAIN jar for JVM unit tests: the @aar carries only the Android
+    // ABIs' libjnidispatch, a desktop test needs darwin/linux's (the social
+    // module's D1 finding — wrong, it reads as a binding bug and is not one).
+    testImplementation("net.java.dev.jna:jna:5.14.0")
 
     implementation("androidx.security:security-crypto:1.1.0-alpha06") // EncryptedSharedPreferences
     implementation("androidx.activity:activity-compose:1.9.3")
@@ -96,6 +126,10 @@ dependencies {
     // WireFormat is plain Kotlin; DeepLink needs android.net.Uri, so Robolectric
     // provides the framework classes on the JVM (no device, runs in `./gradlew test`).
     testImplementation("junit:junit:4.13.2")
+    // kotlin.test's assertions take the message LAST (the social module's
+    // note): the order that reads as a sentence, and the order a JUnit 4
+    // `assertTrue(message, condition)` silently inverts when both are Strings.
+    testImplementation(kotlin("test"))
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("androidx.test:core:1.6.1")
     // The workflow harness (M4): FixtureExchange serves every backend the
