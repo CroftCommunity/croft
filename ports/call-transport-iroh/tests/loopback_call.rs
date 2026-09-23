@@ -18,7 +18,17 @@ fn unroutable_relay() -> RelayTarget {
     RelayTarget::new("https://192.0.2.1:443")
 }
 
+/// Tracing to stderr under `RUST_LOG`, so a failing dial can say where it
+/// went — a loopback dial that "gets no answer" is otherwise a blank.
+fn logging() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
+        .try_init();
+}
+
 fn bind(seed: u8) -> CallEndpoint {
+    logging();
     CallEndpoint::bind(BindOptions {
         secret_key: [seed; 32],
         relay: unroutable_relay(),
@@ -28,13 +38,23 @@ fn bind(seed: u8) -> CallEndpoint {
     .expect("binds")
 }
 
-/// The callee's direct addresses, once iroh has found its local interfaces.
+/// The callee's addresses rewritten to loopback PROPER. The port reports the
+/// LAN address; a dial to the host's own LAN address is a UDP hairpin that the
+/// macOS application firewall in stealth mode silently drops — measured
+/// 2026-09-23 with a raw socket (the LAN address: no packet; 127.0.0.1:
+/// delivered), after two days of green. Loopback is what these tests claim.
 fn direct_addrs(ep: &CallEndpoint) -> Vec<String> {
     let deadline = std::time::Instant::now() + Duration::from_secs(5);
     loop {
         let addrs = ep.local_addrs();
         if !addrs.is_empty() || std::time::Instant::now() > deadline {
-            return addrs;
+            let mut out: Vec<String> = addrs
+                .iter()
+                .filter_map(|a| a.parse::<std::net::SocketAddr>().ok())
+                .map(|a| format!("127.0.0.1:{}", a.port()))
+                .collect();
+            out.dedup();
+            return out;
         }
         std::thread::sleep(Duration::from_millis(50));
     }
@@ -57,6 +77,7 @@ fn a_call_connects_exchanges_hellos_and_ends_with_the_hang_up_named() {
         !peer.addrs.is_empty(),
         "the callee must have a direct address to be dialled on"
     );
+    tracing::info!(addrs = ?peer.addrs, "the callee's direct addresses");
 
     // Accept on its own thread: the callee's accept and the caller's dial
     // both block, as they would in two shells.

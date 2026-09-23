@@ -72,8 +72,13 @@ class CallPeerWiringTest {
         val aId = a.awaitState<CallPeer.State.Ready>().endpointId
         val bId = b.awaitState<CallPeer.State.Ready>().endpointId
 
+        // Loopback PROPER, not the LAN address the port reports: a dial to the
+        // host's own LAN address is a UDP hairpin the macOS firewall in stealth
+        // mode drops (measured 2026-09-23; the Rust loopback tests say the same).
         val addrs = generateSequence { b.localAddrs().takeIf { it.isNotEmpty() } ?: run { Thread.sleep(50); null } }
             .first()
+            .map { "127.0.0.1:" + it.substringAfterLast(':') }
+            .distinct()
         a.dial(bId, relayUrl = null, addrs = addrs, callerLabel = "croftcall-android")
 
         val outgoing = a.awaitState<CallPeer.State.Connected>()

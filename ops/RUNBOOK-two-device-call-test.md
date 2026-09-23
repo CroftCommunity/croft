@@ -1026,10 +1026,54 @@ foreground service is the fix, a later phase), and the Samsung's failed dial ren
 exception's message from the variant's fields (the P7 S1 finding again, in a new coat) and
 `CallPeer` prefixed it a second time. Fixed after the run (`CallRefusal.kt`, pinned).
 
+### Two days later — the relayed call over our port, Pixel on LTE (RUN 2026-09-23)
+
+The last owed item: a party off the LAN. The Pixel's Wi-Fi was turned off over adb
+(`svc wifi disable`; LTE stayed up), both apps relaunched, the Samsung on the house Wi-Fi.
+
+**The Pixel on LTE took ~65 s to camp** — the tokenless bind was refused `no_token` five
+times over 30 s while the mint ran over cellular (IPv6), then *"rebound with a token"* and
+*"home relay: https://relay.croft.ing:8443/"* — and **its camp then FLAPPED between calls**:
+`home relay: NOT ATTACHED` at 16:33:42, attached 16:33:49, NOT ATTACHED 16:34:00, attached
+16:34:16, with the relay journal showing the matching `usage` closes and fresh
+`admitted … sponsorship=` lines (the remembered pass re-attaches, never tokenless). The
+screen tracked it honestly. Cause not established — a carrier-side idle timeout or the
+IPv6 path is the shape of it, and it did not happen on Wi-Fi in any run; recorded as
+observed, not explained.
+
+The calls, one Connect tap each, the path line read at +10 s and +25 s:
+
+```
+21:32:58   samsung(wifi) → pixel(LTE): Connect
+21:33:08   pixel:   "connected (incoming) …: relayed relay:https://relay.croft.ing:8443/"
+           samsung: "connected (outgoing, relayed relay:https://relay.croft.ing:8443/)  callee"
+21:33:13   both: path change → direct  (samsung sees 174.210.164.32:12660 — the Pixel's LTE
+           public address; the pixel sees 136.35.97.150 — the house's)
+21:33:32   samsung hangs up → "you ended the call — ready, camped on relay";
+           pixel: "call ended: closed by peer: hangup (code 0)"
+21:35:39   pixel(LTE) → samsung(wifi): Connect
+21:35:48   pixel: "connected (outgoing) …: relayed relay:…"; 21:35:50 path change → direct
+           samsung: "connected (incoming, direct ip:174.210.164.32:12660)  croftcall-android"
+21:36:14   pixel hangs up → "you ended the call — ready, camped on relay";
+           samsung: "call ended: closed by peer: hangup (code 0) — ready, camped on relay"
+```
+
+**Both calls connected THROUGH THE RELAY first** — the `relayed relay:https://relay.croft.ing:8443/`
+snapshot on both sides — and holepunched to direct across the carrier NAT within ~5 s;
+the relay journal carried no line for either phone during the second call. So the
+relayed path over our port is exercised and reported on screen, and a call that STAYS
+relayed was not observed — iroh's holepunch succeeded across LTE↔Wi-Fi both ways. Owed
+item closed: `[device done 2026-09-23: pixel on LTE ↔ samsung on Wi-Fi over
+call-transport-iroh, both directions, relayed then direct]`.
+
+One rig trap, again: the Pixel had returned to landscape between runs (`accelerometer_rotation`
+back on), which put Connect and the footer below `uiautomator`'s dump — a call that "had no
+Connect button". Lock portrait immediately before every Pixel run, not once per session.
+
 ### Rig state as left
 
 - **Pixel** — the D3.4 debug build (no upstream iroh in the APK), signed in, camped; same
-  key and record as §16.
+  key and record as §16. Wi-Fi back on, auto-rotate back on.
 - **Samsung** — the D3.4 debug build (fresh install; this machine's debug keystore, so the
   next `adb install -r` from here keeps its data), signed in as `ngvalidation2112`, camped;
   its `self` record names the new id `1a0c160324…`. The CI-signed v0.5.0 is gone from it.

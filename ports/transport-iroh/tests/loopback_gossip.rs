@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use transport_iroh::frame::ArtifactKind;
 use transport_iroh::testing::SwarmLock;
-use transport_iroh::{GossipTransport, TopicKey};
+use transport_iroh::{DialCard, GossipTransport, TopicKey};
 
 /// Long enough for a swarm to form on loopback under a loaded machine, short
 /// enough that a genuine hang fails the suite rather than the CI job's wall
@@ -43,6 +43,23 @@ fn topic(seed: u8) -> TopicKey {
     TopicKey::from_group_id(&[seed; 32])
 }
 
+/// The card's addresses rewritten to loopback PROPER. The card carries the
+/// host's LAN address; a dial to the host's own LAN address is a UDP hairpin
+/// this machine's firewall in stealth mode drops — measured 2026-09-23 with a
+/// raw socket, and seen here as "the swarm must form" timing out under the
+/// full gate while the file passed alone. Loopback is what these tests claim.
+/// The severance test below reads the card as published and is left alone.
+fn loopback(card: DialCard) -> DialCard {
+    let mut addrs: Vec<String> = card
+        .addrs
+        .iter()
+        .filter_map(|a| a.parse::<std::net::SocketAddr>().ok())
+        .map(|a| format!("127.0.0.1:{}", a.port()))
+        .collect();
+    addrs.dedup();
+    DialCard { addrs, ..card }
+}
+
 /// A founds the swarm; B is handed A's dial card the way a scanned QR would
 /// hand it over, and nothing else. Deliberately one-way: on a real device run
 /// only one phone shows a code, so a test where both sides know each other up
@@ -51,7 +68,7 @@ fn topic(seed: u8) -> TopicKey {
 fn a_welcome_crosses_from_the_device_that_minted_it() {
     let _swarm = SwarmLock::acquire();
     let a = GossipTransport::start(&[1u8; 32], topic(0xAA), &[]).expect("A starts");
-    let card = a.dial_card();
+    let card = loopback(a.dial_card());
 
     let b = GossipTransport::start(&[2u8; 32], topic(0xAA), &[card]).expect("B starts");
     assert!(
@@ -77,7 +94,8 @@ fn a_welcome_crosses_from_the_device_that_minted_it() {
 fn sealed_messages_cross_in_both_directions() {
     let _swarm = SwarmLock::acquire();
     let a = GossipTransport::start(&[3u8; 32], topic(0xBB), &[]).expect("A starts");
-    let b = GossipTransport::start(&[4u8; 32], topic(0xBB), &[a.dial_card()]).expect("B starts");
+    let b = GossipTransport::start(&[4u8; 32], topic(0xBB), &[loopback(a.dial_card())])
+        .expect("B starts");
     assert!(
         a.wait_for_peer(PATIENCE),
         "the swarm must form before A sends"
@@ -101,7 +119,8 @@ fn sealed_messages_cross_in_both_directions() {
 fn the_kind_survives_the_crossing() {
     let _swarm = SwarmLock::acquire();
     let a = GossipTransport::start(&[5u8; 32], topic(0xCC), &[]).expect("A starts");
-    let b = GossipTransport::start(&[6u8; 32], topic(0xCC), &[a.dial_card()]).expect("B starts");
+    let b = GossipTransport::start(&[6u8; 32], topic(0xCC), &[loopback(a.dial_card())])
+        .expect("B starts");
     assert!(
         a.wait_for_peer(PATIENCE),
         "the swarm must form before A sends"
@@ -125,7 +144,7 @@ fn the_kind_survives_the_crossing() {
 fn a_transport_on_a_different_topic_hears_nothing() {
     let _swarm = SwarmLock::acquire();
     let a = GossipTransport::start(&[7u8; 32], topic(0xD1), &[]).expect("A starts");
-    let card = a.dial_card();
+    let card = loopback(a.dial_card());
 
     let same = GossipTransport::start(&[8u8; 32], topic(0xD1), std::slice::from_ref(&card))
         .expect("same topic");

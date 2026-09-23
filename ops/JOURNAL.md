@@ -862,3 +862,42 @@ with this machine's debug keystore is the one-time cost; from then on `install -
 the data. And a phone whose app is backgrounded is not callable (the endpoint shuts down
 on background by design) — foreground the callee before dialling it, or the caller waits
 20 s for "no answer".
+
+**Addendum 2026-09-23 — the LTE run.** `svc wifi disable` / `enable` over adb takes the
+Pixel off and back onto the LAN cleanly (LTE data stays up; `dumpsys connectivity` names the
+default). On LTE the mint took ~65 s and the camp flapped every 15–30 s between calls (TODO
+row); the calls themselves connected relayed and holepunched to direct across the carrier
+NAT within ~5 s, both directions. And the landscape trap bit again: the Pixel's auto-rotate
+had come back, the dump lost the bottom of the screen, and a call "had no Connect button" —
+`settings put system accelerometer_rotation 0` + `user_rotation 0` immediately before every
+Pixel run, and restore `accelerometer_rotation 1` after.
+
+## 2026-09-23 — the hermetic loopback tests dialled the LAN address, and the host stopped delivering it
+
+**What happened.** A record-only diff failed `make gate`: every calling loopback test
+(`ports/call-transport-iroh/tests/loopback_call.rs`, `ffi/tests/endpoint_pins.rs` and
+`call_pins.rs`, `ports/call-session/tests/session_steps.rs`) reported *"no answer within
+15s"* on a dial that had been green for two days. iroh's debug trace showed the dial going
+to the callee's reported direct address — the host's own LAN address, `192.168.50.235:<port>`
+— and nothing arriving. A raw-socket probe settled it in one line each: a UDP packet to
+the host's own LAN address was **dropped**; one to `127.0.0.1` was **delivered**. The
+macOS application firewall on this machine is on with stealth mode (`socketfilterfw
+--getglobalstate --getstealthmode`), which is the shape of a silently dropped hairpin; the
+test binary itself shows as permitted, so the exact rule is not pinned down and is not
+claimed. What IS established: the tests were dialling the LAN address while calling
+themselves "loopback", and the host stopped delivering that.
+
+**What changed.** Every hermetic loopback dial now rewrites the port's reported
+addresses to `127.0.0.1:<port>` — loopback proper, which no host firewall filters — in the
+four Rust test files, the Kotlin `CallPeerWiringTest` and the Swift `WiringTests`. The
+port's `local_addrs()` is unchanged (iroh excludes loopback from its addrs on purpose; the
+product dials real peers). `transport-iroh`'s gossip loopback dialled the LAN address too:
+it passed alone (twice, 4 s each) and then failed under the full gate — "the swarm must form
+before A sends", 62 s — so its cards are rewritten the same way, except the severance test,
+which reads the card as published and stays as it was. The social module's JVM pairing
+test (`GossipWiringTest`) went the same way one gate later and got the same rewrite.
+
+**The rule for the next time a hermetic network test goes red without a code change:**
+probe the path with a raw socket before reading the library's trace — one line says
+"delivered" or "dropped" and names the layer.
+

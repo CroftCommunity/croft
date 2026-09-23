@@ -4,6 +4,7 @@ import org.junit.Test
 import uniffi.croft_ffi.ArtifactBox
 import uniffi.croft_ffi.ChatSession
 import uniffi.croft_ffi.FfiException
+import uniffi.croft_ffi.DialCard
 import uniffi.croft_ffi.GossipLink
 import uniffi.croft_ffi.Intent
 import uniffi.croft_ffi.TreeRow
@@ -35,6 +36,17 @@ import java.nio.file.Files
  * hunts appears only on the far device.
  */
 class GossipWiringTest {
+
+    /**
+     * The card's addresses rewritten to loopback PROPER. The card carries the
+     * host's LAN address; a dial to the host's own LAN address is a UDP hairpin
+     * this machine's firewall in stealth mode drops (measured 2026-09-23 with a
+     * raw socket; the Rust loopback tests say the same). Loopback is what a
+     * JVM pairing test claims. The card as PUBLISHED is what a phone scans.
+     */
+    private fun loopback(card: DialCard): DialCard =
+        card.copy(addrs = card.addrs.map { "127.0.0.1:" + it.substringAfterLast(':') }.distinct())
+
 
     private val groupIdBytes = ByteArray(32) { 0x5A }
 
@@ -71,7 +83,7 @@ class GossipWiringTest {
         // B offers its key package through its own link; A reads the code.
         val linkB = GossipLink.start(ByteArray(32) { 22 }, groupIdBytes, emptyList())
         val readByA = readPairingCode(linkB.pairingCode(b.mlsKeyPackage(), ByteArray(0)))
-        val linkA = GossipLink.start(ByteArray(32) { 11 }, groupIdBytes, listOf(readByA.card))
+        val linkA = GossipLink.start(ByteArray(32) { 11 }, groupIdBytes, listOf(loopback(readByA.card)))
 
         // Both sides. Gossip does not retransmit, so a Welcome sent while the
         // far side's membership is still forming is delivered to nobody and
@@ -147,7 +159,7 @@ class GossipWiringTest {
 
         val linkB = GossipLink.start(ByteArray(32) { 44 }, groupIdBytes, emptyList())
         val code = readPairingCode(linkB.pairingCode(b.mlsKeyPackage(), ByteArray(0)))
-        val linkA = GossipLink.start(ByteArray(32) { 33 }, groupIdBytes, listOf(code.card))
+        val linkA = GossipLink.start(ByteArray(32) { 33 }, groupIdBytes, listOf(loopback(code.card)))
         assertTrue(linkA.waitForPeer(patienceMs))
 
         linkA.broadcastWelcome(a.invite(code.keyPackage))

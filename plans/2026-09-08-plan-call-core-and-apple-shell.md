@@ -998,7 +998,10 @@ Owed from this landing, on the device queue: ~~phone-to-phone over our port on b
 sides~~ **RUN the same evening** once the owner unlocked the Samsung — fresh install, `self`
 re-published, browser sign-in, then both directions connected direct with the endings
 verbatim and no relay line for either phone (runbook §17, last block); **a relayed call over
-our port** `[device: android=pixel]` (both parties on one Wi-Fi went direct) is still owed,
+our port** was RUN 2026-09-23 (Pixel on LTE, Samsung on Wi-Fi, both directions: relayed on
+both sides first, direct across the carrier NAT within ~5 s; a call that STAYS relayed was
+not observed — runbook §17, last block; the camp on LTE flapped between calls, a new TODO
+row),
 and the run surfaced that **a backgrounded phone is not callable** (by the shut-down-on-
 background policy; a foreground service is a later phase). The doubled *"dial failed:
 reason=dial failed: …"* the Samsung showed is fixed in the follow-up (`CallRefusal.kt`). The release cut that

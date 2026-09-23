@@ -36,12 +36,23 @@ fn collecting(lines: &mut Vec<String>) -> impl FnMut(&str) + '_ {
     move |l| lines.push(l.to_string())
 }
 
-fn direct_addrs(s: &CallSession) -> Vec<String> {
+/// The callee's addresses rewritten to loopback PROPER. The port reports the
+/// LAN address; a dial to the host's own LAN address is a UDP hairpin that the
+/// macOS application firewall in stealth mode silently drops — measured
+/// 2026-09-23 with a raw socket (the LAN address: no packet; 127.0.0.1:
+/// delivered), after two days of green. Loopback is what these tests claim.
+fn direct_addrs(ep: &CallSession) -> Vec<String> {
     let deadline = std::time::Instant::now() + Duration::from_secs(5);
     loop {
-        let addrs = s.local_addrs();
+        let addrs = ep.local_addrs();
         if !addrs.is_empty() || std::time::Instant::now() > deadline {
-            return addrs;
+            let mut out: Vec<String> = addrs
+                .iter()
+                .filter_map(|a| a.parse::<std::net::SocketAddr>().ok())
+                .map(|a| format!("127.0.0.1:{}", a.port()))
+                .collect();
+            out.dedup();
+            return out;
         }
         std::thread::sleep(Duration::from_millis(50));
     }
