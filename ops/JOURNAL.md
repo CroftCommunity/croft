@@ -871,3 +871,32 @@ NAT within ~5 s, both directions. And the landscape trap bit again: the Pixel's 
 had come back, the dump lost the bottom of the screen, and a call "had no Connect button" —
 `settings put system accelerometer_rotation 0` + `user_rotation 0` immediately before every
 Pixel run, and restore `accelerometer_rotation 1` after.
+
+## 2026-09-23 — the hermetic loopback tests dialled the LAN address, and the host stopped delivering it
+
+**What happened.** A record-only diff failed `make gate`: every calling loopback test
+(`ports/call-transport-iroh/tests/loopback_call.rs`, `ffi/tests/endpoint_pins.rs` and
+`call_pins.rs`, `ports/call-session/tests/session_steps.rs`) reported *"no answer within
+15s"* on a dial that had been green for two days. iroh's debug trace showed the dial going
+to the callee's reported direct address — the host's own LAN address, `192.168.50.235:<port>`
+— and nothing arriving. A raw-socket probe settled it in one line each: a UDP packet to
+the host's own LAN address was **dropped**; one to `127.0.0.1` was **delivered**. The
+macOS application firewall on this machine is on with stealth mode (`socketfilterfw
+--getglobalstate --getstealthmode`), which is the shape of a silently dropped hairpin; the
+test binary itself shows as permitted, so the exact rule is not pinned down and is not
+claimed. What IS established: the tests were dialling the LAN address while calling
+themselves "loopback", and the host stopped delivering that.
+
+**What changed.** Every hermetic loopback dial now rewrites the port's reported
+addresses to `127.0.0.1:<port>` — loopback proper, which no host firewall filters — in the
+four Rust test files, the Kotlin `CallPeerWiringTest` and the Swift `WiringTests`. The
+port's `local_addrs()` is unchanged (iroh excludes loopback from its addrs on purpose; the
+product dials real peers). `transport-iroh`'s gossip loopback still dials the LAN address
+and still passes — a different endpoint mode (relay disabled) that the same host does
+deliver, so the rewrite is scoped to the calling tests and the difference is recorded, not
+explained.
+
+**The rule for the next time a hermetic network test goes red without a code change:**
+probe the path with a raw socket before reading the library's trace — one line says
+"delivered" or "dropped" and names the layer.
+

@@ -30,11 +30,16 @@ final class WiringTests: XCTestCase {
         )
     }
 
+    /// Loopback PROPER, not the LAN address the port reports: a dial to the
+    /// host's own LAN address is a UDP hairpin the macOS firewall in stealth
+    /// mode drops (measured 2026-09-23; the Rust loopback tests say the same).
     private func directAddrs(_ s: CallSession) -> [String] {
         let deadline = Date().addingTimeInterval(5)
         while true {
             let addrs = s.localAddrs()
-            if !addrs.isEmpty || Date() > deadline { return addrs }
+            if !addrs.isEmpty || Date() > deadline {
+                return Array(Set(addrs.map { "127.0.0.1:" + ($0.split(separator: ":").last.map(String.init) ?? "0") }))
+            }
             Thread.sleep(forTimeInterval: 0.05)
         }
     }
