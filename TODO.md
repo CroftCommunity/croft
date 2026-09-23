@@ -25,10 +25,21 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
   Samsung's dial timed out with "no answer within 20s". Honest on both screens, but the
   product question — stay callable while backgrounded — is a foreground service plus
   push-to-wake, a later phase. Recorded so the next device run foregrounds the callee
-  first. [device: android x2]
-- [ ] **A relayed call over our port.** Every D3.3 call went direct on one Wi-Fi (the port
-  reported `relayed …` for a second, then `direct …`). A call that STAYS relayed needs one
-  party off the LAN — the Pixel on cellular. [device: android=pixel]
+  first. (since 2026-09-21) [device: android x2]
+- [x] **A relayed call over our port.** RUN 2026-09-23 (runbook §17, last block): the Pixel
+  on LTE, the Samsung on Wi-Fi, both directions — connected `relayed relay:https://relay.croft.ing:8443/`
+  on both sides, then holepunched to direct across the carrier NAT within ~5 s, endings
+  verbatim, no relay line during the call. A call that STAYS relayed was not observed;
+  the relayed path is exercised and reported. [device done 2026-09-23: pixel on LTE ↔
+  samsung on Wi-Fi over call-transport-iroh, both directions, relayed then direct]
+- [ ] **The camp flaps on LTE.** Observed 2026-09-23 (§17, last block): the Pixel on
+  cellular lost and regained its relay attachment every 15–30 s between calls — `home
+  relay: NOT ATTACHED` / attached, the journal showing `usage` closes and fresh
+  `admitted … sponsorship=` re-admits with the remembered pass. The screen tracked it
+  honestly; calls placed while attached connected. Not seen on Wi-Fi in any run. Cause not
+  established (carrier idle timeout? the IPv6 path?) — measure with a longer idle on LTE
+  and the relay's keepalive interval in hand before naming one. (since 2026-09-23)
+  [device: android=pixel]
 
 - [x] **A dial drops the caller's camp — reachability lost on every Connect.** FIXED 2026-09-08; **DEVICE-VERIFIED 2026-09-14** (runbook §16). [device done 2026-09-14: one Connect tap, one line in the relay journal across the whole call — no teardown, no re-admit; and the first connected call of the arc, with the E129 endings verbatim on both screens]
 

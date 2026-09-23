@@ -862,3 +862,12 @@ with this machine's debug keystore is the one-time cost; from then on `install -
 the data. And a phone whose app is backgrounded is not callable (the endpoint shuts down
 on background by design) — foreground the callee before dialling it, or the caller waits
 20 s for "no answer".
+
+**Addendum 2026-09-23 — the LTE run.** `svc wifi disable` / `enable` over adb takes the
+Pixel off and back onto the LAN cleanly (LTE data stays up; `dumpsys connectivity` names the
+default). On LTE the mint took ~65 s and the camp flapped every 15–30 s between calls (TODO
+row); the calls themselves connected relayed and holepunched to direct across the carrier
+NAT within ~5 s, both directions. And the landscape trap bit again: the Pixel's auto-rotate
+had come back, the dump lost the bottom of the screen, and a call "had no Connect button" —
+`settings put system accelerometer_rotation 0` + `user_rotation 0` immediately before every
+Pixel run, and restore `accelerometer_rotation 1` after.
