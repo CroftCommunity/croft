@@ -894,7 +894,8 @@ port's `local_addrs()` is unchanged (iroh excludes loopback from its addrs on pu
 product dials real peers). `transport-iroh`'s gossip loopback dialled the LAN address too:
 it passed alone (twice, 4 s each) and then failed under the full gate — "the swarm must form
 before A sends", 62 s — so its cards are rewritten the same way, except the severance test,
-which reads the card as published and stays as it was.
+which reads the card as published and stays as it was. The social module's JVM pairing
+test (`GossipWiringTest`) went the same way one gate later and got the same rewrite.
 
 **The rule for the next time a hermetic network test goes red without a code change:**
 probe the path with a raw socket before reading the library's trace — one line says
