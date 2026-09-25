@@ -38,7 +38,13 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
   `admitted … sponsorship=` re-admits with the remembered pass. The screen tracked it
   honestly; calls placed while attached connected. Not seen on Wi-Fi in any run. Cause not
   established (carrier idle timeout? the IPv6 path?) — measure with a longer idle on LTE
-  and the relay's keepalive interval in hand before naming one. (since 2026-09-23)
+  and the relay's keepalive interval in hand before naming one (iroh pings its relay
+  every 15 s, `PING_INTERVAL` in `socket/transports/relay/actor.rs`; the observed period
+  is 15–30 s). The phone-side instrument is missing: **E128** (native iroh logging on
+  Android produces nothing, `discovery/alpha/ROADMAP_TODO.md`) is exactly the gap this
+  measurement hits, so the plan runs the laptop's `croft-arc callee --wait 600` with
+  `RUST_LOG=iroh=debug` on the Pixel's hotspot against a Wi-Fi control, and reads the
+  relay journal's `usage … duration_ms` per connection. (since 2026-09-23)
   [device: android=pixel]
 
 - [x] **A dial drops the caller's camp — reachability lost on every Connect.** FIXED 2026-09-08; **DEVICE-VERIFIED 2026-09-14** (runbook §16). [device done 2026-09-14: one Connect tap, one line in the relay journal across the whole call — no teardown, no re-admit; and the first connected call of the arc, with the E129 endings verbatim on both screens]
@@ -96,6 +102,19 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
   **E135(b)** wording decision should be made against, and it also refutes the prepared
   step-0 check ("shows the handle field instead of Signed in") — that cannot see this
   state.
+
+- [ ] **Schedule the OAuth refresh so an idle phone keeps its session (E113).** [device: android]
+  `AuthManager.freshAccessToken()` refreshes on-foreground only (M4b), so an app that is
+  not opened for days never refreshes, and a refresh token has a lifetime: dead after
+  ~10 days idle (§15.2, `invalid_grant`), dead after 6 days (§16, re-sign-in became step 0
+  of every device run), alive after 7 (§17, 2026-09-21: "access token stale; refreshing"
+  → "session refreshed"). The lifetime is therefore NOT established by idle days alone —
+  measure it before choosing a period: the PDS's refresh-token lifetime and inactivity
+  rule for a public client, from its OAuth metadata and one deliberate idle soak. Then a
+  periodic refresh (WorkManager) inside that window, decision rules in the core first.
+  Elevated from roadmap E113 by the triage queue (row 6, 2026-09-14); a roadmap row is
+  never proposable as work, this row is. Pairs with the E135(b) row above: the refresh
+  that does die must then read as dead, not `Signed in`. (since 2026-09-25)
 
 - [ ] **Adopt openmls 0.9.0 / openmls_rust_crypto 0.6.0 — ordinary work, not urgent.** [device: android]
   Our pins are exact and deliberate (`=0.8.1`, `=0.5.1`, "the exact versions the
