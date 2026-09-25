@@ -103,7 +103,8 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
   step-0 check ("shows the handle field instead of Signed in") — that cannot see this
   state.
 
-- [ ] **Schedule the OAuth refresh so an idle phone keeps its session (E113).** [device: android]
+- [ ] **Schedule the OAuth refresh so an idle phone keeps its session (E113).** (since 2026-09-25)
+  [device: android]
   `AuthManager.freshAccessToken()` refreshes on-foreground only (M4b), so an app that is
   not opened for days never refreshes, and a refresh token has a lifetime: dead after
   ~10 days idle (§15.2, `invalid_grant`), dead after 6 days (§16, re-sign-in became step 0
@@ -114,7 +115,7 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
   periodic refresh (WorkManager) inside that window, decision rules in the core first.
   Elevated from roadmap E113 by the triage queue (row 6, 2026-09-14); a roadmap row is
   never proposable as work, this row is. Pairs with the E135(b) row above: the refresh
-  that does die must then read as dead, not `Signed in`. (since 2026-09-25)
+  that does die must then read as dead, not `Signed in`.
 
 - [ ] **Adopt openmls 0.9.0 / openmls_rust_crypto 0.6.0 — ordinary work, not urgent.** [device: android]
   Our pins are exact and deliberate (`=0.8.1`, `=0.5.1`, "the exact versions the
