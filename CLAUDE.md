@@ -61,7 +61,12 @@ phone). Device-verified on the Pixel against production in both directions (runb
 camped under enforce, one-tap call, incoming call, both E129 endings verbatim, no relay
 line after the admit); phone-to-phone over our port on both sides is owed (the Samsung was
 locked). The shipped v0.5.0 still carries upstream iroh-ffi and the §15 dial defect; the
-release that carries D3 is v0.6.0, the owner's cut.
+release that carries D3 is v0.6.0, the owner's cut. **The backbone moved under it
+2026-09-24 with no client change: relay + admit v0.2.1** (croft-stack — jsonwebtoken 11 for
+the camping pass, k256/p256 0.14 for the service-auth proof), staging first, then
+production; the Samsung camped through the new admit on 8443 the next morning
+(`denied no_token` ×3 → `admitted … BudgetBytes(262144)`, croft-stack
+`sessions/2026-09-24-crypto-majors-v0.2.1.md`).
 **P7 S1 landed 2026-08-27: the surface exists and runs on a device.**
 `android/social/` is a SEPARATE dev-only module (owner chose a module over a
 product flavor, so `:app`'s variant names and every runbook command stay
