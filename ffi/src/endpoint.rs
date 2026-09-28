@@ -101,6 +101,12 @@ impl CallEndpoint {
             .flatten()
     }
 
+    /// Why the relay connection last dropped, in iroh's words, or none while
+    /// it never has. The attach line prints it when NOT attached.
+    pub fn last_relay_error(&self) -> Option<String> {
+        self.read(|p| p.last_relay_error()).ok().flatten()
+    }
+
     /// Direct `ip:port` addresses, as iroh currently knows them.
     pub fn local_addrs(&self) -> Vec<String> {
         self.read(|p| p.local_addrs()).unwrap_or_default()

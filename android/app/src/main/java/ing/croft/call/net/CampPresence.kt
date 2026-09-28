@@ -20,6 +20,20 @@ object CampPresence {
     fun attachedRelay(online: Boolean, relayUrl: String?): String? =
         if (online) relayUrl?.takeIf { it.isNotBlank() } else null
 
+    /**
+     * The attach log line. When NOT attached it carries iroh's last relay
+     * error verbatim (`RelayStatus::last_error()` through the port), so the
+     * next device run says WHY the connection dropped — the relay journal
+     * (2026-09-21/23) showed the Pixel closing its own relay connection every
+     * few minutes on Wi-Fi and LTE alike, and no run could name the reason.
+     */
+    fun attachLog(homeRelay: String?, lastError: String?): String =
+        when {
+            !homeRelay.isNullOrEmpty() -> "home relay: $homeRelay"
+            lastError.isNullOrBlank() -> "home relay: NOT ATTACHED"
+            else -> "home relay: NOT ATTACHED (last relay error: $lastError)"
+        }
+
     fun line(homeRelay: String?): String =
         if (homeRelay.isNullOrEmpty()) {
             "ready — NOT camped on relay; calls cannot reach this device"

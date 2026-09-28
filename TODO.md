@@ -17,8 +17,7 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
   Samsung was pattern-locked and carried the CI-signed v0.5.0, so putting the D3 build on
   it was a fresh install (key wiped → `self` re-published, browser sign-in). RUN the same
   evening once the owner unlocked it: both directions connected direct, endings verbatim,
-  no relay line for either phone (runbook §17). [device done 2026-09-21: samsung↔pixel over
-  call-transport-iroh on production, both directions]
+  no relay line for either phone (runbook §17). [device done 2026-09-21: android x2]
 - [ ] **A backgrounded phone is not callable, and the caller only learns it after 20 s.**
   Surfaced by the §17 two-phone run: the Pixel had been backgrounded, its endpoint was shut
   down (the iroh Android guidance the app follows — no foreground service), and the
@@ -30,24 +29,22 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
   on LTE, the Samsung on Wi-Fi, both directions — connected `relayed relay:https://relay.croft.ing:8443/`
   on both sides, then holepunched to direct across the carrier NAT within ~5 s, endings
   verbatim, no relay line during the call. A call that STAYS relayed was not observed;
-  the relayed path is exercised and reported. [device done 2026-09-23: pixel on LTE ↔
-  samsung on Wi-Fi over call-transport-iroh, both directions, relayed then direct]
-- [ ] **The camp flaps on LTE.** Observed 2026-09-23 (§17, last block): the Pixel on
-  cellular lost and regained its relay attachment every 15–30 s between calls — `home
-  relay: NOT ATTACHED` / attached, the journal showing `usage` closes and fresh
-  `admitted … sponsorship=` re-admits with the remembered pass. The screen tracked it
-  honestly; calls placed while attached connected. Not seen on Wi-Fi in any run. Cause not
-  established (carrier idle timeout? the IPv6 path?) — measure with a longer idle on LTE
-  and the relay's keepalive interval in hand before naming one (iroh pings its relay
-  every 15 s, `PING_INTERVAL` in `socket/transports/relay/actor.rs`; the observed period
-  is 15–30 s). The phone-side instrument is missing: **E128** (native iroh logging on
-  Android produces nothing, `discovery/alpha/ROADMAP_TODO.md`) is exactly the gap this
-  measurement hits, so the plan runs the laptop's `croft-arc callee --wait 600` with
-  `RUST_LOG=iroh=debug` on the Pixel's hotspot against a Wi-Fi control, and reads the
-  relay journal's `usage … duration_ms` per connection. (since 2026-09-23)
+  the relayed path is exercised and reported. [device done 2026-09-23: android x2]
+- [ ] **The Pixel re-makes its relay connection every few minutes; the Samsung never does.**
+  Recorded 2026-09-23 as "the camp flaps on LTE"; READ from the relay journal 2026-09-28
+  (§17, "The flap, measured"): it happens on Wi-Fi too (09-21: 6 spontaneous reconnects,
+  lifetimes 22 s–11 min), the phone closes each time and is re-admitted within ~0.5 s,
+  the Samsung held one connection per session both days. Detached ~1–2% of the time; a
+  call in a gap is delayed, not lost. On Android iroh 1.1.0 drops an established relay
+  connection by itself only on a missed pong (5 s after a 15 s ping) or a stream error —
+  the network-change path is a no-op there — so late pongs under the Pixel's radio power
+  management is the hypothesis, not the finding. The instrument is in: the attach line
+  now prints iroh's last relay error (`lastRelayError`). The run that decides it needs
+  the Pixel at rest on the house Wi-Fi for thirty minutes with logcat, no hotspot.
+  Whether it is worth fixing is decided after that reading. (since 2026-09-23)
   [device: android=pixel]
 
-- [x] **A dial drops the caller's camp — reachability lost on every Connect.** FIXED 2026-09-08; **DEVICE-VERIFIED 2026-09-14** (runbook §16). [device done 2026-09-14: one Connect tap, one line in the relay journal across the whole call — no teardown, no re-admit; and the first connected call of the arc, with the E129 endings verbatim on both screens]
+- [x] **A dial drops the caller's camp — reachability lost on every Connect.** FIXED 2026-09-08; **DEVICE-VERIFIED 2026-09-14** (runbook §16). [device done 2026-09-14: android x2]
 
   **The fix:** the relay auth token belongs to the endpoint, so changing it costs
   a `stop()`/`start()`. `rebindWithToken` swapped unconditionally, and the

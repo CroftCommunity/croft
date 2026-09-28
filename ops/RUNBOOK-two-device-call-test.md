@@ -1070,6 +1070,59 @@ One rig trap, again: the Pixel had returned to landscape between runs (`accelero
 back on), which put Connect and the footer below `uiautomator`'s dump — a call that "had no
 Connect button". Lock portrait immediately before every Pixel run, not once per session.
 
+### The flap, measured from the relay journal (READ 2026-09-28; no phone touched)
+
+The LTE block above says the camp "did not happen on Wi-Fi in any run". Nobody had read
+the journal for the control. The relay logs an `admitted` per attach and a `usage …
+duration_ms` per close, so both phones' whole attach history for both device days is on
+record (`ssh croft-vps sudo -n journalctl -u iroh-relay -o short-iso --since "2026-09-21
+00:00" --until "2026-09-24 06:00"`, filtered by endpoint id):
+
+| Phone, day | Connections | Spontaneous reconnects | Detached in total | Typical gap | Connection lifetimes |
+|---|---|---|---|---|---|
+| Pixel, 09-21, **Wi-Fi** | 10 | 6 | 16 s of 107 min | 0.5 s | 22 s … 11 min |
+| Pixel, 09-23, LTE | 18 | 16 | 52 s of 80 min | 0.6 s | 10 s … 13 min |
+| Samsung, 09-21, Wi-Fi | 1 | 0 | 0 | — | 13 min |
+| Samsung, 09-23, Wi-Fi | 2 | 0 | 0 | — | 12 and 17 min |
+
+Three corrections to the block above, each from the table:
+
+1. **It is the Pixel, not the carrier.** The Pixel re-makes its connection on Wi-Fi too;
+   the Samsung, same build, same relay, never did except when relaunched. A hotspot run
+   would measure the wrong variable; the Pixel on the house Wi-Fi reproduces it.
+2. **The phone ends the connection.** Every close is followed by a re-admit within about
+   half a second (the immediate-reconnect path iroh takes after an *established*
+   connection fails), and on 09-23 the phone's line read `NOT ATTACHED` seconds before
+   the server saw the stream end. The server-side reasons split 16 "Stream terminated"
+   (a clean close from the client) to 9 "Broken pipe" (the server writing to a socket
+   the client had already dropped) — neither is a middlebox or relay timeout signature.
+3. **The cost is small.** Detached one to two percent of the time, in half-second gaps;
+   a call arriving in a gap is delayed while iroh retries, not lost. The 15–30 s period
+   recorded above was real but confined to the minutes the phone was being driven over
+   adb (uiautomator dumps, screencaps, deep links) on BOTH days; at rest the connection
+   lived 4–13 minutes.
+
+**What the client can do by itself, read in iroh 1.1.0.** On Android the relay client
+drops an established connection for exactly two reasons of its own: no pong within 5 s of
+a ping (`PING_TIMEOUT`, `iroh-relay/src/ping_tracker.rs`; pings every 15 s,
+`PING_INTERVAL`), or the stream erroring underneath it. The third reason on other
+platforms — a network change forcing a re-check of the connection's local address — cannot
+fire on Android: netwatch's route monitor there is a deliberate no-op ("Very sad monitor.
+Android doesn't allow us to do this", `netwatch/src/netmon/android.rs`) and its wall-time
+poll is one hour on mobile. Nothing in our tree calls `network_change()` or rebinds between
+calls. iroh's tracker carries the same "Ping timeout" reconnect shape on Linux (#4070,
+#4476), cause unfound. So the working hypothesis is a pong arriving late on the Pixel —
+radio power management fits the driven-versus-rest split — and it is a hypothesis.
+
+**The instrument, landed with this reading.** iroh keeps the last disconnect reason on the
+home-relay status (`RelayStatus::last_error()`); the port now exposes it
+(`CallEndpoint::last_relay_error`, through the FFI as `lastRelayError`) and the app's
+attach line prints it: `home relay: NOT ATTACHED (last relay error: Ping timeout)`. The
+next Pixel run reads the reason off logcat with no native logging (E128 stays open, but
+this measurement no longer waits on it). The run that decides it: the Pixel at rest on
+the house Wi-Fi, foregrounded, thirty minutes, logcat filtered to `home relay:` — the
+reasons and their times against the journal's closes.
+
 ### Rig state as left
 
 - **Pixel** — the D3.4 debug build (no upstream iroh in the APK), signed in, camped; same

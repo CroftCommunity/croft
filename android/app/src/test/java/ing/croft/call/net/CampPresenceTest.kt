@@ -22,6 +22,27 @@ class CampPresenceTest {
         )
     }
 
+    // The relay journal (2026-09-21/23): the Pixel closes its own relay
+    // connection every few minutes at rest, on Wi-Fi and LTE alike; the
+    // Samsung never does. iroh knows why it dropped and says so in
+    // `RelayStatus::last_error()`; the attach log line must carry those
+    // words, or the next run is as blind as the last three.
+    @Test
+    fun `the attach log names the last relay error when NOT attached`() {
+        assertEquals(
+            "home relay: NOT ATTACHED (last relay error: Ping timeout)",
+            CampPresence.attachLog(homeRelay = null, lastError = "Ping timeout"),
+        )
+        assertEquals(
+            "home relay: NOT ATTACHED",
+            CampPresence.attachLog(homeRelay = null, lastError = null),
+        )
+        assertEquals(
+            "home relay: https://relay.croft.ing:8443/",
+            CampPresence.attachLog(homeRelay = "https://relay.croft.ing:8443/", lastError = "Ping timeout"),
+        )
+    }
+
     @Test
     fun `no home relay says NOT camped and what it costs — never silence`() {
         assertEquals(
