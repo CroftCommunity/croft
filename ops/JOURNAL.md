@@ -901,3 +901,30 @@ test (`GossipWiringTest`) went the same way one gate later and got the same rewr
 probe the path with a raw socket before reading the library's trace — one line says
 "delivered" or "dropped" and names the layer.
 
+## 2026-09-28 — the "LTE flap" read from the relay journal: it is the Pixel, on Wi-Fi too
+
+**Why.** The §17 LTE block recorded the Pixel's camp flapping every 15–30 s on cellular
+and said it "did not happen on Wi-Fi in any run". Before planning a hotspot measurement,
+read the evidence already on the box.
+
+**Ran.** `ssh croft-vps sudo -n journalctl -u iroh-relay -o short-iso --no-pager --since
+"2026-09-21 00:00" --until "2026-09-24 06:00"`, filtered by the two phones' endpoint ids;
+a script over the `admitted` / `usage … duration_ms` / `actor errored` lines for
+connection lifetimes, reconnect gaps, and close reasons per phone per day. Read-only.
+
+**Outcome.** The control refuted the claim: the Pixel re-made its relay connection ten
+times on Wi-Fi on 09-21 with the same sub-second client-initiated reconnects as on LTE;
+the Samsung held one connection per session on both days. The flap's cost is ~1–2% of
+time detached in half-second gaps. Full table in the runbook (§17, "The flap, measured").
+Reading iroh 1.1.0 for what a client can do by itself on Android narrowed the cause to a
+missed 5 s pong or a stream error; netwatch's Android monitor is a no-op, so network
+changes are out.
+
+**Consequence.** The TODO row is retitled and the hotspot run is off the plan; the Pixel
+on the house Wi-Fi reproduces it. The port exposes iroh's `RelayStatus::last_error()`
+and the attach line prints it, so the next run names the reason. Two rules for the next
+reader: **read the journal for the control before writing "not seen on X"** — the relay's
+per-connection `usage` lines are a measurement that costs one ssh; and **the client's own
+last error is an instrument that needs no native logging** — E128 is not a prerequisite
+for reading why a relay connection dropped.
+

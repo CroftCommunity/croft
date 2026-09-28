@@ -249,6 +249,20 @@ impl CallEndpoint {
         })
     }
 
+    /// Why the relay connection last dropped, in iroh's words ("Ping
+    /// timeout", a stream error, a refused dial), or none while it has never
+    /// failed. The relay journal (2026-09-21/23) shows a phone closing its
+    /// own relay connection every few minutes; this is the client's side of
+    /// that story, readable without native logging (E128).
+    #[must_use]
+    pub fn last_relay_error(&self) -> Option<String> {
+        self.endpoint
+            .home_relay_status()
+            .get()
+            .into_iter()
+            .find_map(|status| status.last_error().map(|e| format!("{e:#}")))
+    }
+
     /// This endpoint's direct `ip:port` addresses, as iroh currently knows
     /// them. Empty until iroh has looked at the local interfaces.
     #[must_use]

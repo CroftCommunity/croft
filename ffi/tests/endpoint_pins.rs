@@ -84,6 +84,49 @@ fn a_dial_never_lowers_admission_and_a_swap_keeps_the_id() {
 }
 
 #[test]
+fn the_last_relay_error_crosses_the_ffi_as_words() {
+    // The relay journal (2026-09-21/23) shows the Pixel closing its own relay
+    // connection every few minutes; iroh knows why and the shell must be able
+    // to print it. A relay nothing listens on is refused at once, so the
+    // reason arrives within seconds.
+    let _swarm = SwarmLock::acquire();
+    // iroh reports a status only for a relay it selected as home, and it
+    // selects by `GET /ping`: a loopback listener that answers the probe and
+    // drops the relay upgrade is enough to put a failure on record.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port");
+    let port = listener.local_addr().expect("bound").port();
+    std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { break };
+            let mut head = [0u8; 512];
+            let n = stream.read(&mut head).unwrap_or(0);
+            if head[..n].starts_with(b"GET /ping") {
+                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+            }
+        }
+    });
+    let ep = CallEndpoint::bind(EndpointOptions {
+        relay_url: format!("http://127.0.0.1:{port}"),
+        ..hermetic(Some(vec![0x54; 32]))
+    })
+    .expect("binds");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let reason = loop {
+        if let Some(reason) = ep.last_relay_error() {
+            break reason;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "no relay error within 30 s"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    };
+    assert!(!reason.trim().is_empty(), "the reason is words");
+    ep.shutdown();
+}
+
+#[test]
 fn two_endpoints_call_over_loopback_with_the_ending_typed_and_the_path_named() {
     let _swarm = SwarmLock::acquire();
     let callee = Arc::new(CallEndpoint::bind(hermetic(Some(vec![0x52; 32]))).expect("binds"));

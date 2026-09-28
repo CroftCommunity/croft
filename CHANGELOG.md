@@ -30,6 +30,12 @@ to the environment and why*.
 
 ### Added
 
+- **The attach line names why the relay connection last dropped.** The relay journal
+  shows the Pixel closing its own relay connection every few minutes on Wi-Fi and LTE
+  alike (runbook §17, "The flap, measured"), and no run could say why. iroh keeps the
+  reason on the home-relay status; `CallEndpoint::last_relay_error` (port and FFI,
+  `lastRelayError`) reads it and the Android attach log prints it when NOT attached:
+  `home relay: NOT ATTACHED (last relay error: Ping timeout)`. Nothing on screen changes.
 - **`shell/apple`: the macOS calling window (R4 of the call-core-and-apple-shell plan).**
   `shell/`'s first occupant: a SwiftPM package (`make shell-apple` builds, generates
   uniffi's Swift bindings, runs its tests) whose window walks the arc from buttons —

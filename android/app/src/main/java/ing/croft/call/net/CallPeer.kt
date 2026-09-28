@@ -111,7 +111,7 @@ class CallPeer(
                         }
                         if (endpoint !== ep) break
                         if (_homeRelay.value != url) {
-                            Log.i(TAG, "home relay: ${url ?: "NOT ATTACHED"}")
+                            Log.i(TAG, CampPresence.attachLog(homeRelay = url, lastError = ep.lastRelayError()))
                             _homeRelay.value = url
                         }
                         delay(ONLINE_PROBE_INTERVAL_MS)
