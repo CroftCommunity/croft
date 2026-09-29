@@ -74,9 +74,72 @@ pub enum Rebound {
 }
 
 /// The endpoint: one iroh `Endpoint` on a runtime this struct owns.
+/// One change of the home relay's connection state, as iroh reported it.
+///
+/// RUN 2026-09-28 (runbook §17, "The flap, run"): the Pixel at rest on Wi-Fi
+/// re-made its relay connection seven times in 31 min with half-second gaps,
+/// and a 5 s attach probe saw none of them — the reason is gone once the
+/// connection is back. So the port watches the status itself and keeps
+/// every transition with its reason until the shell drains them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelayTransition {
+    /// Wall-clock time of the change, milliseconds since the Unix epoch.
+    pub at_unix_ms: i64,
+    /// Whether the relay was connected after the change.
+    pub connected: bool,
+    /// The relay the status is about.
+    pub relay_url: Option<String>,
+    /// iroh's reason when not connected ("Ping timeout", a stream error, a
+    /// refused dial), in its words.
+    pub error: Option<String>,
+}
+
+type RelayLog = Arc<std::sync::Mutex<Vec<RelayTransition>>>;
+
+/// Most transitions kept between drains; older ones fall off the front.
+const RELAY_LOG_CAP: usize = 256;
+
+fn unix_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+}
+
+/// Records every home-relay status change into `log` for as long as the
+/// runtime that spawned it lives — a swapped endpoint's runtime is dropped,
+/// which ends this task with it.
+fn spawn_relay_watch(runtime: &Runtime, endpoint: &Endpoint, log: RelayLog) {
+    let mut watcher = endpoint.home_relay_status();
+    runtime.spawn(async move {
+        loop {
+            let Ok(statuses) = watcher.updated().await else {
+                break;
+            };
+            let at_unix_ms = unix_ms();
+            let mut entries = statuses
+                .iter()
+                .map(|status| RelayTransition {
+                    at_unix_ms,
+                    connected: status.is_connected(),
+                    relay_url: Some(status.url().to_string()),
+                    error: status.last_error().map(|e| format!("{e:#}")),
+                })
+                .collect::<Vec<_>>();
+            if let Ok(mut guard) = log.lock() {
+                guard.append(&mut entries);
+                let overflow = guard.len().saturating_sub(RELAY_LOG_CAP);
+                if overflow > 0 {
+                    guard.drain(..overflow);
+                }
+            }
+        }
+    });
+}
+
 pub struct CallEndpoint {
     runtime: Arc<Runtime>,
     endpoint: Endpoint,
+    relay_log: RelayLog,
     secret: SecretKey,
     relay: RelayTarget,
     discovery: Discovery,
@@ -114,9 +177,12 @@ impl CallEndpoint {
             opts.token.as_deref(),
             opts.discovery,
         ))?;
+        let relay_log: RelayLog = Arc::default();
+        spawn_relay_watch(&runtime, &endpoint, Arc::clone(&relay_log));
         Ok(CallEndpoint {
             runtime: Arc::new(runtime),
             endpoint,
+            relay_log,
             secret,
             relay: opts.relay,
             discovery: opts.discovery,
@@ -207,6 +273,7 @@ impl CallEndpoint {
                     self.token.as_deref(),
                     self.discovery,
                 ))?;
+                spawn_relay_watch(&runtime, &self.endpoint, Arc::clone(&self.relay_log));
                 self.runtime = Arc::new(runtime);
                 self.generation += 1;
                 let after = self.endpoint_id();
@@ -261,6 +328,17 @@ impl CallEndpoint {
             .get()
             .into_iter()
             .find_map(|status| status.last_error().map(|e| format!("{e:#}")))
+    }
+
+    /// Every home-relay status change since the last drain, oldest first,
+    /// each with iroh's reason when it was a drop. Sub-second reconnects
+    /// that no probe can catch are all here.
+    #[must_use]
+    pub fn drain_relay_transitions(&self) -> Vec<RelayTransition> {
+        self.relay_log
+            .lock()
+            .map(|mut guard| std::mem::take(&mut *guard))
+            .unwrap_or_default()
     }
 
     /// This endpoint's direct `ip:port` addresses, as iroh currently knows

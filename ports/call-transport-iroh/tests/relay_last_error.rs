@@ -72,3 +72,47 @@ fn a_failed_relay_dial_is_named_in_the_last_relay_error() {
     );
     ep.shutdown();
 }
+
+#[test]
+fn every_relay_transition_is_recorded_with_its_reason_and_drained_once() {
+    // RUN 2026-09-28 (runbook §17, "The flap, run"): the Pixel at rest on
+    // Wi-Fi re-made its relay connection seven times in 31 min with 0.5 s
+    // gaps, and the app's 5 s attach probe saw NONE of them — `last_error`
+    // is gone once the connection is back. So the port watches the status
+    // itself and keeps every transition with its reason until the shell
+    // drains them.
+    let ep = CallEndpoint::bind(BindOptions {
+        secret_key: [0x72; 32],
+        relay: probe_only_relay(),
+        token: None,
+        discovery: Discovery::None,
+    })
+    .expect("binds");
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let transitions = loop {
+        let t = ep.drain_relay_transitions();
+        if !t.is_empty() {
+            break t;
+        }
+        assert!(Instant::now() < deadline, "no relay transition within 30 s");
+        std::thread::sleep(Duration::from_millis(200));
+    };
+    let failed = transitions
+        .iter()
+        .find(|t| !t.connected && t.error.as_deref().is_some_and(|e| !e.trim().is_empty()))
+        .expect("a failed dial is a transition with words");
+    assert!(failed.at_unix_ms > 0, "stamped with wall-clock time");
+    assert_eq!(
+        failed
+            .relay_url
+            .as_deref()
+            .map(|u| u.starts_with("http://127.0.0.1:")),
+        Some(true),
+        "the transition names its relay"
+    );
+    assert!(
+        ep.drain_relay_transitions().is_empty(),
+        "a drain hands each transition over once"
+    );
+    ep.shutdown();
+}

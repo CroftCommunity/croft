@@ -30,6 +30,12 @@ to the environment and why*.
 
 ### Added
 
+- **Every relay status transition is on record, with iroh's reason when it has one.**
+  The 2026-09-28 run (runbook §17, "The flap, RUN") showed the Pixel dropping its relay
+  connection in half-second gaps that the 5 s attach probe never saw. The port watches
+  `home_relay_status()` and keeps each transition (`CallEndpoint::drain_relay_transitions`,
+  FFI `drainRelayTransitions`: time, connected, relay, reason); the Android app logs each
+  as `relay transition: attached …` / `DETACHED … (reason)`. Nothing on screen changes.
 - **The attach line names why the relay connection last dropped.** The relay journal
   shows the Pixel closing its own relay connection every few minutes on Wi-Fi and LTE
   alike (runbook §17, "The flap, measured"), and no run could say why. iroh keeps the

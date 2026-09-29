@@ -46,7 +46,7 @@ pub mod relay;
 pub mod wire;
 
 pub use call::{Call, Direction, Ending};
-pub use endpoint::{BindOptions, CallEndpoint, Discovery, PeerAddr, Rebound};
+pub use endpoint::{BindOptions, CallEndpoint, Discovery, PeerAddr, Rebound, RelayTransition};
 pub use relay::RelayTarget;
 
 /// Everything the transport can refuse, in its own words.

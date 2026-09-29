@@ -34,6 +34,21 @@ object CampPresence {
             else -> "home relay: NOT ATTACHED (last relay error: $lastError)"
         }
 
+    /**
+     * One relay status transition as a log line. RUN 2026-09-28: the Pixel at
+     * rest re-made its relay connection seven times in 31 min with 0.5 s
+     * gaps that the 5 s attach probe never saw; the port records each with
+     * iroh's reason, and this is how it reaches logcat.
+     */
+    fun transitionLog(connected: Boolean, relayUrl: String?, error: String?): String {
+        val where = relayUrl?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""
+        return if (connected) {
+            "relay transition: attached$where"
+        } else {
+            "relay transition: DETACHED$where (${error?.takeIf { it.isNotBlank() } ?: "no reason given"})"
+        }
+    }
+
     fun line(homeRelay: String?): String =
         if (homeRelay.isNullOrEmpty()) {
             "ready — NOT camped on relay; calls cannot reach this device"

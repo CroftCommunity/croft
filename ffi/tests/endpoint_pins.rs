@@ -179,3 +179,45 @@ fn a_closed_endpoint_refuses_with_words() {
     let err = ep.accept_next(1).expect_err("closed");
     assert!(!err.reason().trim().is_empty());
 }
+
+#[test]
+fn relay_transitions_cross_the_ffi_with_their_reason() {
+    let _swarm = SwarmLock::acquire();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port");
+    let port = listener.local_addr().expect("bound").port();
+    std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { break };
+            let mut head = [0u8; 512];
+            let n = stream.read(&mut head).unwrap_or(0);
+            if head[..n].starts_with(b"GET /ping") {
+                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+            }
+        }
+    });
+    let ep = CallEndpoint::bind(EndpointOptions {
+        relay_url: format!("http://127.0.0.1:{port}"),
+        ..hermetic(Some(vec![0x55; 32]))
+    })
+    .expect("binds");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let transitions = loop {
+        let t = ep.drain_relay_transitions();
+        if !t.is_empty() {
+            break t;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "no relay transition within 30 s"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    };
+    assert!(
+        transitions
+            .iter()
+            .any(|t| !t.connected && t.error.as_deref().is_some_and(|e| !e.trim().is_empty())),
+        "a failed dial crosses as a detached transition with words"
+    );
+    ep.shutdown();
+}

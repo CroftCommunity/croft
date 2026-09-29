@@ -43,6 +43,25 @@ class CampPresenceTest {
         )
     }
 
+    // RUN 2026-09-28: seven half-second relay reconnects on the Pixel at rest
+    // that the 5 s attach probe never saw. The port now records every
+    // status transition with its reason; each one is a log line.
+    @Test
+    fun `a relay transition logs attached or DETACHED with the reason`() {
+        assertEquals(
+            "relay transition: attached https://relay.croft.ing:8443/",
+            CampPresence.transitionLog(connected = true, relayUrl = "https://relay.croft.ing:8443/", error = null),
+        )
+        assertEquals(
+            "relay transition: DETACHED https://relay.croft.ing:8443/ (Ping timeout)",
+            CampPresence.transitionLog(connected = false, relayUrl = "https://relay.croft.ing:8443/", error = "Ping timeout"),
+        )
+        assertEquals(
+            "relay transition: DETACHED (no reason given)",
+            CampPresence.transitionLog(connected = false, relayUrl = null, error = null),
+        )
+    }
+
     @Test
     fun `no home relay says NOT camped and what it costs — never silence`() {
         assertEquals(

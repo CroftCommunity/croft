@@ -1123,6 +1123,95 @@ this measurement no longer waits on it). The run that decides it: the Pixel at r
 the house Wi-Fi, foregrounded, thirty minutes, logcat filtered to `home relay:` — the
 reasons and their times against the journal's closes.
 
+### The flap, RUN (2026-09-28/29, both phones at rest on the house Wi-Fi)
+
+The reading the measurement above asked for. Both phones on USB, both on the house
+Wi-Fi, the build from main at fbbd791 (the attach line printing iroh's last relay
+error) installed over the D3.4 build with `install -r` (same debug key, data kept),
+both apps foregrounded with the screen held on (`svc power stayon true`), nobody
+touching either phone. Logcat filtered to `CroftCall` on both; the relay journal read
+for both endpoint ids over the same window.
+
+**Step 0 bit first, and it is E135(b) verbatim.** The Samsung refreshed its session on
+launch (last refresh 2026-09-25, three days idle). The Pixel's refresh was refused —
+`invalid_grant "Session expired"`, then on the retry `"Invalid refresh token"` — and the
+screen read **"Signed in"** with the right DID two lines above **"ready — NOT camped on
+relay; calls cannot reach this device"**. Its last refresh was 2026-09-23: **dead after
+five days idle**, the fourth data point for the E113 row (dead at ~10, 6 and 5 days;
+alive at 7 and 3). Re-signed in over adb (the owner authorized the password from
+`CroftC/.env`, never echoed; one trap: a tap on "Sign in" while the keyboard is up lands
+on the space bar — clear the field, retype, submit with `KEYCODE_ENTER`). Camped 23:47:32Z.
+
+**The result, 31 minutes each:**
+
+| Phone | Connections | Spontaneous reconnects | Gaps | Connection lifetimes |
+|---|---|---|---|---|
+| Pixel (23:47–00:18Z) | 8 | **7** | 0.5–0.6 s each | 16 s, 76 s, 93 s, 97 s, 167 s, 169 s, 410 s, 470 s |
+| Samsung (23:41–00:15Z) | 1 | 0 | — | 34.6 min, closed only when its screen was let go |
+
+Every Pixel close was `Stream terminated` (the client closing) or `Broken pipe` (the
+server writing into a socket the client had dropped); every re-admit came with the
+remembered pass. The one longer gap (38 s at 00:06:41Z) was not the flap: a real phone
+call rang on the Pixel, the dialer's in-call screen took the foreground, the app
+backgrounded and shut its endpoint down by design, and re-bound when the call screen
+went away — the backgrounded-phone row, seen from the other side.
+
+**The attach line saw none of the seven.** The app probes `online()` every 5 s with 6 s
+patience; a 0.6 s gap falls between probes, and `RelayStatus::last_error()` is empty
+again once the connection is back. The instrument that landed with the measurement
+(#28) names a drop only when the drop outlasts the probe. So, with the phones still on
+the desk, the port grew a watcher on `home_relay_status()` that records EVERY transition
+with its reason (`CallEndpoint::drain_relay_transitions`, FFI `drainRelayTransitions`),
+and the app logs each as `relay transition: attached …` / `DETACHED … (reason)`; built,
+installed on the Pixel, and run again:
+
+```
+00:23:45Z  admitted (the tokenless bind's denials logged as DETACHED "The relay denied our
+           authentication (no admission token)", then attached — the instrument works)
+00:36:38   DETACHED (no reason given) → DETACHED (Failed to connect to relay server: unable
+           to connect: Software caused connection abort (os error 103)) → attached
+           journal: admitted 00:36:39; the OLD connection's close logged 00:36:45
+           (Stream terminated, 780 s old) — six seconds AFTER the new admit
+00:37:14   DETACHED (no reason given) → attached          journal: close 00:37:14.7
+           (35 s old), admitted 00:37:14.9
+```
+
+Twenty minutes, two drops, and the shape is the finding:
+
+- **The first transition off a live connection carries no error**, both times. The
+  watcher this instrument reads (`n0-watcher`) hands over the LATEST value only — its
+  own docs say it "skips some" — and iroh writes `Disconnected { last_error }` and then
+  `Connecting` back to back in the actor's reconnect loop, so the reason is overwritten
+  before any reader wakes. The transition log can time a drop; it cannot name it. The
+  one reason it did catch, `ECONNABORTED` on the reconnect dial, is the OS aborting a TCP
+  connect — the shape of the link itself dipping under the socket, not of a relay or a
+  ping.
+- **The relay admitted the new connection before it saw the old one end** (00:36:39 vs
+  00:36:45): the phone's old socket died without the server noticing for six seconds —
+  again a link-level shape, not a clean client close.
+- **What can name the reason:** iroh logs it itself, at WARN, in the actor's reconnect
+  loop (`warn!("{err:#}")` — "Ping timeout", the stream error, …). On Android that line
+  goes nowhere, because `croft-ffi` installs no `tracing` subscriber there — **E128,
+  exactly**, and now with a dated need. A `tracing-subscriber` writer into
+  `__android_log_write` (liblog, no new crate; `tracing-subscriber` is already a
+  dev-dependency) is the next instrument, and the run to make with it is this one again.
+- **A hypothesis the record supports and the run did not test:** the house Wi-Fi is one
+  SSID on several access points (the two phones sat on different BSSIDs, `…7a:9c` and
+  `…7a:98`); a phone that roams between them takes a brief link drop each time, which
+  is what `ECONNABORTED` and a silently dead socket look like, and would be Pixel-only
+  if the Pixel roams and the Samsung does not. Not checked: the Pixel left the USB
+  before its Wi-Fi log was read. The next run reads `dumpsys wifi` / the WifiService
+  roam lines beside the transition log.
+
+**Net over the three readings** (journal 09-21/23, the 31 min run, the 20 min run): the
+Pixel drops and re-makes its relay connection on its own every one to eight minutes at
+rest, in half-second gaps, on Wi-Fi and LTE; the Samsung never does; the cost is ~1–2 %
+of time detached and a few seconds' delay on a call that lands in a gap; the cause is
+not named yet, and naming it needs iroh's own warn line on the phone (E128) or a Wi-Fi
+roam log beside the transition log. Rig left: both phones on the transition-log build
+(the Pixel on `fbbd791`+this branch, the Samsung on `fbbd791`), both signed in, screens
+released, the Pixel unplugged by the owner at ~00:50Z.
+
 ### Rig state as left
 
 - **Pixel** — the D3.4 debug build (no upstream iroh in the APK), signed in, camped; same
