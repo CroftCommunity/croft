@@ -110,6 +110,9 @@ class CallPeer(
                             null
                         }
                         if (endpoint !== ep) break
+                        for (t in ep.drainRelayTransitions()) {
+                            Log.i(TAG, CampPresence.transitionLog(t.connected, t.relayUrl, t.error))
+                        }
                         if (_homeRelay.value != url) {
                             Log.i(TAG, CampPresence.attachLog(homeRelay = url, lastError = ep.lastRelayError()))
                             _homeRelay.value = url

@@ -19,6 +19,31 @@ use call_transport_iroh::{BindOptions, CallEndpoint as Port, Discovery, Rebound}
 use crate::call::{ActiveCall, CallError, PeerAddress};
 
 /// Everything a bind needs.
+/// One change of the home relay's connection state, as iroh reported it —
+/// see the port's `RelayTransition`. The shell drains and logs them.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RelayTransition {
+    /// Wall-clock time, milliseconds since the Unix epoch.
+    pub at_unix_ms: i64,
+    /// Connected after the change.
+    pub connected: bool,
+    /// The relay the status is about.
+    pub relay_url: Option<String>,
+    /// iroh's reason when not connected.
+    pub error: Option<String>,
+}
+
+impl From<call_transport_iroh::RelayTransition> for RelayTransition {
+    fn from(t: call_transport_iroh::RelayTransition) -> Self {
+        Self {
+            at_unix_ms: t.at_unix_ms,
+            connected: t.connected,
+            relay_url: t.relay_url,
+            error: t.error,
+        }
+    }
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct EndpointOptions {
     /// The persisted 32-byte secret key, or none to generate one — read it
@@ -105,6 +130,14 @@ impl CallEndpoint {
     /// it never has. The attach line prints it when NOT attached.
     pub fn last_relay_error(&self) -> Option<String> {
         self.read(|p| p.last_relay_error()).ok().flatten()
+    }
+
+    /// Every home-relay status change since the last drain, oldest first,
+    /// with iroh's reason for each drop.
+    pub fn drain_relay_transitions(&self) -> Vec<RelayTransition> {
+        self.read(|p| p.drain_relay_transitions())
+            .map(|v| v.into_iter().map(RelayTransition::from).collect())
+            .unwrap_or_default()
     }
 
     /// Direct `ip:port` addresses, as iroh currently knows them.

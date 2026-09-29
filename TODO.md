@@ -32,17 +32,20 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
   the relayed path is exercised and reported. [device done 2026-09-23: android x2]
 - [ ] **The Pixel re-makes its relay connection every few minutes; the Samsung never does.**
   Recorded 2026-09-23 as "the camp flaps on LTE"; READ from the relay journal 2026-09-28
-  (§17, "The flap, measured"): it happens on Wi-Fi too (09-21: 6 spontaneous reconnects,
-  lifetimes 22 s–11 min), the phone closes each time and is re-admitted within ~0.5 s,
-  the Samsung held one connection per session both days. Detached ~1–2% of the time; a
-  call in a gap is delayed, not lost. On Android iroh 1.1.0 drops an established relay
-  connection by itself only on a missed pong (5 s after a 15 s ping) or a stream error —
-  the network-change path is a no-op there — so late pongs under the Pixel's radio power
-  management is the hypothesis, not the finding. The instrument is in: the attach line
-  now prints iroh's last relay error (`lastRelayError`). The run that decides it needs
-  the Pixel at rest on the house Wi-Fi for thirty minutes with logcat, no hotspot.
-  Whether it is worth fixing is decided after that reading. (since 2026-09-23)
-  [device: android=pixel]
+  and RUN twice the same night (§17, "The flap, measured" / "The flap, RUN"): at rest on
+  the house Wi-Fi, foregrounded, the Pixel dropped and re-made its relay connection seven
+  times in 31 min and twice in the next 20, half-second gaps, lifetimes 16 s–13 min; the
+  Samsung held one connection per session. Detached ~1–2% of the time; a call in a gap is
+  delayed, not lost. **The reason is still unnamed**, and the instruments have been
+  measured against it: the 5 s attach probe sees none of the gaps; the port's transition
+  log (`drainRelayTransitions`, landed with the run) times every drop but the watcher it
+  reads skips intermediate values, so the drop's reason is overwritten by `Connecting`
+  before it can be read — the only reason caught was `ECONNABORTED` on a reconnect dial,
+  a link-level shape. Next: iroh's own WARN line names it, which needs a tracing sink to
+  logcat on Android (E128, now with a dated need; `tracing-subscriber` writer into
+  liblog, no new crate); run this again with it, reading the Pixel's Wi-Fi roam log
+  beside it — the two phones sat on different BSSIDs of one SSID. Whether it is worth
+  fixing is decided after the reason is read. (since 2026-09-23) [device: android=pixel]
 
 - [x] **A dial drops the caller's camp — reachability lost on every Connect.** FIXED 2026-09-08; **DEVICE-VERIFIED 2026-09-14** (runbook §16). [device done 2026-09-14: android x2]
 
@@ -106,7 +109,9 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
   not opened for days never refreshes, and a refresh token has a lifetime: dead after
   ~10 days idle (§15.2, `invalid_grant`), dead after 6 days (§16, re-sign-in became step 0
   of every device run), alive after 7 (§17, 2026-09-21: "access token stale; refreshing"
-  → "session refreshed"). The lifetime is therefore NOT established by idle days alone —
+  → "session refreshed"), dead after 5 and alive after 3 (§17, 2026-09-28: the Pixel
+  `"Session expired"` then `"Invalid refresh token"`, the Samsung refreshed). The
+  lifetime is therefore NOT established by idle days alone —
   measure it before choosing a period: the PDS's refresh-token lifetime and inactivity
   rule for a public client, from its OAuth metadata and one deliberate idle soak. Then a
   periodic refresh (WorkManager) inside that window, decision rules in the core first.

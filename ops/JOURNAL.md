@@ -928,3 +928,36 @@ per-connection `usage` lines are a measurement that costs one ssh; and **the cli
 last error is an instrument that needs no native logging** — E128 is not a prerequisite
 for reading why a relay connection dropped.
 
+## 2026-09-28/29 — the relay flap RUN on both phones at rest; the reason still unnamed
+
+**Why.** The morning's journal reading said the Pixel closes its own relay connection on
+Wi-Fi too. Both phones were on the desk; the build printing iroh's last relay error had
+just landed. Run it at rest, read the reason.
+
+**Ran.** `adb install -r` of the main build on both phones (same debug key, data kept);
+`svc power stayon true` and portrait lock; the app foregrounded; `logcat -v time -s
+'CroftCall:*'` for 31 min on each (the filter QUOTED — unquoted, zsh expands `CroftCall:*`
+as a glob and the capture never starts); the relay journal `--since @<unix>` for both
+endpoint ids. Then, with the phones still here, a watcher on `home_relay_status()` added
+to the port test-first, built, installed on the Pixel, and 20 more minutes.
+
+**Outcome.** Step 0 first: the Pixel's OAuth refresh was dead after five days idle
+(`"Session expired"` → `"Invalid refresh token"`), the screen reading "Signed in" over
+"NOT camped" — E135(b) on the new build, a data point for E113; re-signed in over adb
+(owner-authorized; the first submit tap landed on the space bar with the keyboard up —
+clear, retype, `KEYCODE_ENTER`). Then: Pixel 7 spontaneous reconnects in 31 min, 0.5–0.6 s
+gaps; Samsung none; one 38 s gap was a real phone call backgrounding the app. The 5 s
+attach probe saw none of the seven. The transition log saw the two drops of the second
+run but their first transition carried no error: `n0-watcher` skips intermediate values,
+and iroh writes the reason and then `Connecting` back to back. The one reason caught was
+`ECONNABORTED` on a reconnect dial. The Pixel left the USB before its Wi-Fi roam log
+could be read (the two phones sat on different BSSIDs of one SSID).
+
+**Consequence.** Runbook §17 "The flap, RUN"; the TODO row carries the two readings and
+the next instrument: iroh's own WARN line, which needs a `tracing` sink to logcat on
+Android (E128, now with a dated need). Rules for the next reader: **a watcher hands over
+the latest value, not every value** — a reason written and overwritten in one loop turn
+is not observable through it, read the log line iroh writes instead; **quote the logcat
+filter**; and **the Pixel is a phone** — a call on it backgrounds the app, which is the
+backgrounded-phone row seen from the callee's side.
+
