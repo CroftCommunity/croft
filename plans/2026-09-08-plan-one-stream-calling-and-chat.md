@@ -1,6 +1,12 @@
 # Plan — one stream: calling and chat are the same client, and the roadmap should say so
 
-**Status:** PROPOSED 2026-09-08. This is a **program document**: it sequences work that
+**Status:** R0–R4 DONE; R5–R8 NOT STARTED (status updated 2026-09-29 from the landings;
+this plan has not been reviewed — see Review Log). R0 landed 2026-09-08 (croft #9,
+device-verified runbook §16), R0b 2026-09-08 (croft #10), R1 2026-09-14 (#18), R2 (#19),
+R3 (#20), R4 2026-09-15 (#21); the child plan's D3 (Android onto the core) followed
+2026-09-21/23 (#22–#24, runbook §17). Proposed 2026-09-08.
+
+This is a **program document**: it sequences work that
 lives in child plans, and it holds the decisions that no single child can settle because
 they span both workstreams. It builds nothing itself.
 
