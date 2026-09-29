@@ -1,9 +1,10 @@
 # Plan — the enforcement scenario matrix: every MUST-ADMIT and MUST-REFUSE, named and pinned
 
-**Status: SERVER HALF LANDED (croft-stack `444aec4`, 2026-08-26). The canonical
-server matrix is `croft-stack/docs/ENFORCEMENT-SCENARIOS.md`, gated by
-`tests/enforcement_matrix.bats` in `make check`. Remaining here: the croft
-client-posture rows + their harness meta-gate (next phase).**
+**Status: BOTH HALVES LANDED.** Server half: croft-stack `444aec4`, 2026-08-26 —
+`croft-stack/docs/ENFORCEMENT-SCENARIOS.md`, gated by `tests/enforcement_matrix.bats` in
+`make check`. Client half: croft `077d811`, 2026-08-25 — `docs/ENFORCEMENT-SCENARIOS.md`
++ `EnforcementMatrixTest` riding `testDebugUnitTest`, shipped in v0.5.0 (CHANGELOG
+`[0.5.0]`, "The enforcement scenario matrix, client half").
 
 ## Problem Statement
 
