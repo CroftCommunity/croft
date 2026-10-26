@@ -59,8 +59,9 @@ reading what the core worded. The call-core-and-apple-shell plan is complete. **
 generated Kotlin; `computer.iroh` and `libiroh_ffi.so` are gone from the APK (one iroh per
 phone). Device-verified on the Pixel against production in both directions (runbook §17:
 camped under enforce, one-tap call, incoming call, both E129 endings verbatim, no relay
-line after the admit); phone-to-phone over our port on both sides is owed (the Samsung was
-locked). The shipped v0.5.0 still carries upstream iroh-ffi and the §15 dial defect; the
+line after the admit); phone-to-phone over our port on both sides RAN the same evening
+(runbook §17, both directions, `118102b`), and the relayed call — Pixel on LTE, Samsung on
+Wi-Fi — on 2026-09-23 (runbook §17, `ce9d0bc`). The shipped v0.5.0 still carries upstream iroh-ffi and the §15 dial defect; the
 release that carries D3 is v0.6.0, the owner's cut. **The backbone moved under it
 2026-09-24 with no client change: relay + admit v0.2.1** (croft-stack — jsonwebtoken 11 for
 the camping pass, k256/p256 0.14 for the service-auth proof), staging first, then
@@ -119,8 +120,9 @@ M1, contract §6), and proves caller identity via **atproto OAuth**
 a derived callability line on the callee card). Rungs 0–3 of the
 two-device ladder and Phase 11 M1–M3 are all validated on real devices,
 2026-08-17 (`ops/RUNBOOK-two-device-call-test.md` §8/§5-rung-3;
-`plans/2026-08-17-2-plan-m3-identity-proof.md` close-out). **M4 is in
-progress** (plan `plans/2026-08-20-1-plan-m4-call-time-admission.md`): D3
+`plans/2026-08-17-2-plan-m3-identity-proof.md` close-out). **M4 is
+complete and released in v0.5.0** (plan `plans/2026-08-20-1-plan-m4-call-time-admission.md`;
+CHANGELOG `[0.5.0]`). How it got there: D3
 is decided, the relay side is built (croft-stack Phase 8 — `/grantCall`
 mints sponsorship+scope tokens), and client chunks M4a+M4b are landed
 with the **workflow harness** (`android/.../workflow/` — journey tests
@@ -165,7 +167,8 @@ E135(a) (screen honesty) is FIXED and device-verified both ways 2026-08-28: `End
 **enforcement scenario matrix** is landed and gated in BOTH repos
 (`docs/ENFORCEMENT-SCENARIOS.md` here + croft-stack's, each walked by a
 test). Remaining: §13 step 3 (staging honesty check); E135(b)
-caller-side camp posture; E125–E128. Do not
+caller-side camp posture; E125 and E128 (E126 and E127 are done — discovery
+`alpha/ROADMAP_TODO.md`). Do not
 describe anything else here as working until it has been run.
 
 ## Read before writing code
@@ -236,8 +239,9 @@ gate you cannot yet run is theatre; skipping the ratchet is how a repo arrives a
   reasoning and anything that turned out false. Not Conventional Commits; the
   estate's history reads as prose and consistency beats convention here.
 - **G2 — no claim that something runs until it has been run.** The README, the
-  changelog and this file track what runs and what does not — the shared core does
-  not yet; the android app does (published as `v0.4.0`). When that changes,
+  changelog and this file track what runs and what does not — the android app runs
+  and is published as `v0.5.0`; on `main` it runs on the shared core (D3, 2026-09-21,
+  runbook §17), which no release carries until `v0.6.0`. When that changes,
   the change ships in the same commit as the thing that made it true.
 - **G3 — checksums never regress.** Once a value replaces `UNSET`, a commit that
   reintroduces `UNSET` is a defect, not a rollback.
@@ -310,11 +314,11 @@ Contract **v2** (per-device `listRecords` + the capability model) is landed and
 canonical on connect `main`; `DeepLink` here captures its `device`/`grant` params.
 The client's Phase 11 work is specified in `CroftCommunity/connect`
 `docs/PHASE11-HANDOFF.md`; of its items, ticket redemption (M1, v0.3.0),
-the callability resolver (M2), and OAuth identity proof (M3, v0.4.0) are
-**shipped and device-validated** — the engine lives in
+the callability resolver (M2), OAuth identity proof (M3, v0.4.0) and
+call-time admission (M4, v0.5.0, with croft-stack's relay enforcing since
+2026-08-30) are **shipped and device-validated** — the engine lives in
 `android/.../caps/` behind injected `Http`/`HttpForm` ports, effects at
-the edges. What remains is call-time `evaluateGrant` as an effect + relay
-enforcement (M4, with croft-stack). Build against v2, never the
+the edges. Build against v2, never the
 single-record shape.
 
 ## Concurrent sessions (workspace norm)
