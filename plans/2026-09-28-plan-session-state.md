@@ -1,7 +1,9 @@
 # Plan — the session state: proven, stored, unconfirmed, dead (E135(b) + E113)
 
-**Status:** PROPOSED 2026-09-28 — awaiting owner review. No code before the decisions in
-§ *Decisions for the owner* are answered; two of them change what Phase 1 builds.
+**Status:** ACCEPTED 2026-10-26 — the owner answered D1–D4 (see each decision's
+**DECIDED** line and the Review Log). D1(b) a new `core/account-core`; D2 as proposed;
+D3(c) the floor for v0.6.0 with **no horizon line**, the broker path a child plan; D4 as
+proposed less the horizon row. Phase 1 may start.
 
 **Source rows:** triage queue row 5 (`discovery/alpha/plans/2026-09-14-plan-workspace-triage-queue.md`,
 E135(b) as reframed 2026-09-28); croft `TODO.md` "A dead OAuth refresh token still reads
@@ -78,8 +80,8 @@ expired`. So the record was already gone when we asked. Candidates, none establi
 - **The provider purged an expired record** before we asked, or `bsky.social` runs a
   different provider version than main.
 
-Phase 1 records `signed_in_at` for other reasons (the horizon, D3). That gives the next
-death its age for free, and Phase 4 switches the rotation write to `commit()`. The soak
+Phase 1 records `signed_in_at` (a diagnostic now that D3(c) dropped the horizon line).
+That gives the next death its age for free, and Phase 4 switches the rotation write to `commit()`. The soak
 the TODO row asked for becomes unnecessary: F1 bounds the lifetime from source, and the
 next observed death, with its age and description, tests F2.
 
@@ -172,7 +174,6 @@ render it.
 | any live | `RefreshAnswered(Unavailable)`, attempt = N | Unconfirmed | — |
 | any live | `RefreshAnswered(ClientDefect)` | Unconfirmed, words say it is ours | — (no retry loop against our own bug) |
 | Unconfirmed | `Foreground` / `UseRequested` | unchanged | `Refresh` (a fresh episode, attempts reset) |
-| Stored/Proven | `HorizonTick` (D3, public floor only) | unchanged | — (the view grows "sign-in ends in N days") |
 | any | `SignOut` | SignedOut | drop credentials, drop camp pass |
 | Dead | `UseRequested` | Dead | — (never refreshes a dead token again, so no replay storm) |
 
@@ -216,9 +217,9 @@ the session a single day. Against the broker (F3) refresh is the broker's job, s
 and the phone holds a ticket. A phone-side periodic job would add a battery cost and a
 background-execution surface for no survival. What E113 was reaching for, *an idle phone
 stays reachable*, is delivered by the broker path (D3). What the floor can honestly do is
-**say when it will end** (the horizon) and **say when it has ended** (Dead). E113 is
-therefore answered by D3 and closed as "refuted by source for the public client". It is not
-built as specified. Owner call.
+**say when it has ended** (Dead); forecasting the end (a horizon line) was offered and
+declined, D3(c). E113 is therefore answered by D3 and closed as "refuted by source for the
+public client". It is not built as specified.
 
 **Why Unconfirmed may still present identity.** An outage is not an authorization answer
 (`refusal_words`' own rule). Refusing to mint during a provider outage would turn a network
@@ -249,12 +250,16 @@ replaces it. The handle stays prefilled, since it is not a credential.
 act as an account at all, and the next pond to speak atproto should not import calling to
 find out. ADR-0005 records it.
 
+**DECIDED 2026-10-26 (owner): (b)** — `core/account-core`, ADR-0005.
+
 ### D2 — the retry policy before Unconfirmed
 
 Proposed: 3 retries at **5 s, 30 s, 2 min** within one episode, then Unconfirmed. A new
 episode starts on foreground or on the next mint. 429 is Unavailable, and `Retry-After`,
 when present, replaces the next delay (the shell parses it; the core takes it as data).
 Nothing retries a Refused or a ClientDefect.
+
+**DECIDED 2026-10-26 (owner): as proposed.**
 
 ### D3 — E113: route through the broker, and in what order relative to v0.6.0?
 
@@ -276,6 +281,12 @@ and **unknown ticket**; (3) a native return path; (4) the H-items the owner requ
 The core in Phase 1 already classifies broker answers the same way, so the child plan adds
 an adapter, not a state.
 
+**DECIDED 2026-10-26 (owner): (c)** — the state machine on the public-client floor for
+v0.6.0, **no horizon line**: a 14-day death is reported when it happens (Dead, with the
+reason), not forecast. The broker path is still a child plan and the croft-stack asks
+above stand. E113 closes as "refuted by source for the public client; answered by the
+broker child plan". `signed_in_at` is still recorded, as F2's diagnostic.
+
 ### D4 — the words for each state
 
 Proposed, in plain product nouns (DESIGN.md: the noun is **atmo provider**):
@@ -287,7 +298,8 @@ Proposed, in plain product nouns (DESIGN.md: the noun is **atmo provider**):
 | Unconfirmed (outage) | "Could not reach your atmo provider — your sign-in is not confirmed yet. Trying again." |
 | Unconfirmed (ours) | "Could not check your sign-in — a problem in this app, not your account." |
 | Dead | sign-in field, above it: "Your atmo provider ended this sign-in. Sign in again to be reachable." |
-| Horizon (D3a) | "Sign-in ends in about N days — sign in again before then to stay reachable." |
+
+**DECIDED 2026-10-26 (owner): as proposed.** No horizon row — D3(c).
 
 ## Phases
 
@@ -299,9 +311,9 @@ at `make gate` green.
 - The state enum, the intent and effect enums, `update`, `classify`, `view`, and the retry
   policy constants. Every row of both tables above is a named test in
   `tests/session_rows.rs`, with boundaries pinned at three points (retry count N−1/N/N+1;
-  access-token margin inside/at/past; horizon day 13/14/15).
+  access-token margin inside/at/past).
 - `classify` table test: each error discriminant × generation same/moved; every status class.
-- ADR-0005 if D1(b). Joins `core-purity` (wasm32 build, clippy disallowed-methods).
+- ADR-0005 (D1(b)). Joins `core-purity` (wasm32 build, clippy disallowed-methods).
 - **Mutation audit** after green: `cargo mutants` on the module in a detached scratch
   worktree, with no `CARGO_TARGET_DIR` override. Each survivor is triaged as equivalent or a
   real gap in the Review Log.
@@ -372,7 +384,7 @@ is re-sign-in. Do not `adb install -r` over the released APK, because it clears 
 ## Documentation Impact
 
 croft `CHANGELOG.md` `[Unreleased]` entry on the code branch (`session: …`).
-`docs/ENFORCEMENT-SCENARIOS.md` (rows above). Runbook §18. ADR-0005 (if D1b). `TODO.md`
+`docs/ENFORCEMENT-SCENARIOS.md` (rows above). Runbook §18. ADR-0005. `TODO.md`
 (both rows ticked with date + PR; E113's disposition per D3). Triage row 5 ticked, and row 2
 (v0.6.0) announced unblocked. The broker edge goes in `CroftC/.claude/ARCHITECTURE.md` only
 once croft-stack accepts it.
@@ -395,3 +407,7 @@ edit, including the broker asks in D3, which are surfaced rather than built.
 - **2026-09-28 — drafted** (session croftc-be). F1 read from provider source; F2 recorded as
   unexplained rather than assigned a cause; F3 added on the owner's pointer to the broker
   mid-draft, with its gaps read from `croft-stack/broker/src` and a live probe.
+- **2026-10-26 — owner review, ACCEPTED** (session croftc-1b). D1(b), D2 as proposed, D3(c),
+  D4 as proposed. D3(c) over the recommended (a): the horizon line, its `HorizonTick`
+  transition, its word row and its day-13/14/15 boundary tests are removed; nothing else
+  in the phases changes.
