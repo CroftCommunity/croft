@@ -8,14 +8,14 @@
 > here implements a backlog row.
 
 Client-side work local to this repo. Dated plans live in `plans/`; device-run evidence
-in `ops/RUNBOOK-*.md` and `sessions/`.
+in `ops/RUNBOOK-*.md`; environment history in `ops/JOURNAL.md`.
 
 ## Open
 
-- [ ] **`security / deps` is red on main: 10 blocking advisories in the root `Cargo.lock`**
+- [ ] **`security / deps` is red on main: 11 blocking advisories in the root `Cargo.lock`**
   (rustls, tokio, hickory-resolver, crypto-bigint, ctutils, libcrux-kem, basic-toml, …).
-  Triaged together with croft-stack's, croft-stack first: the handoff prompt is croft-stack
-  `TODO.md` § Open, "Advisory triage, croft-stack + croft" (filed 2026-10-27).
+  Triaged in the workspace-wide advisory pass, croft-stack first: the handoff prompt is
+  croft-stack `TODO.md` § Open, "Advisory triage, workspace-wide" (filed 2026-10-27).
 - [x] **Phone-to-phone over our port on BOTH sides.** D3.3 (2026-09-21) was device-verified
   on the Pixel in both directions against `croft-arc` on the laptop (runbook §17); the
   Samsung was pattern-locked and carried the CI-signed v0.5.0, so putting the D3 build on
@@ -102,13 +102,15 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
   (`invalid_grant` from `bsky.social/oauth/token`), camp setup never ran, and the phone
   was unreachable under enforce — while the account card said `Signed in` with the right
   DID. The camp line was honest ("NOT camped … calls cannot reach this device"); the two
-  lines contradict each other and only one is actionable. This is the concrete case the
-  **E135(b)** wording decision should be made against, and it also refutes the prepared
+  lines contradict each other and only one is actionable. It also refutes the prepared
   step-0 check ("shows the handle field instead of Signed in") — that cannot see this
-  state.
+  state. Planned: `plans/2026-09-28-plan-session-state.md` (ACCEPTED 2026-10-26; E135(b)
+  reframed 2026-09-28 as client session state, not wording).
 
 - [ ] **Schedule the OAuth refresh so an idle phone keeps its session (E113).** (since 2026-09-25)
   [device: android]
+  Planned with the session state: `plans/2026-09-28-plan-session-state.md` (ACCEPTED
+  2026-10-26) — the scheduled refresh is a transition on the same state.
   `AuthManager.freshAccessToken()` refreshes on-foreground only (M4b), so an app that is
   not opened for days never refreshes, and a refresh token has a lifetime: dead after
   ~10 days idle (§15.2, `invalid_grant`), dead after 6 days (§16, re-sign-in became step 0
