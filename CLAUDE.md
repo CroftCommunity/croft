@@ -170,7 +170,8 @@ E135(a) (screen honesty) is FIXED and device-verified both ways 2026-08-28: `End
 (`docs/ENFORCEMENT-SCENARIOS.md` here + croft-stack's, each walked by a
 test). Remaining, in order: the session-state work (E135(b) reframed as client
 session state, with E113 — `plans/2026-09-28-plan-session-state.md`, ACCEPTED
-2026-10-26); the v0.6.0 cut; the Pixel relay flap (E128); then E125 (E126 and E127 are
+2026-10-26); the v0.6.0 cut; E128 (the logcat tracing sink the Pixel relay flap needs to
+name its reason), then the flap run again; then E125 (E126 and E127 are
 done — discovery `alpha/ROADMAP_TODO.md`). §13 step 3 is retired as written: a staging
 run is scoped to the wrong-key refusal only. Do not
 describe anything else here as working until it has been run.
