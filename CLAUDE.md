@@ -31,8 +31,10 @@ as typed Kotlin exceptions carrying their detail — **corrected by S1**: uniffi
 builds a generated exception's `message` from the variant's FIELDS, so the
 fieldless variants (`NoGroupSelected`, `EmptyDraft`) crossed with an EMPTY
 message until every variant gained a `reason` field. The typed exception was
-always there; the sentence was not. **The calling app still calls none of it** — the P7
-standing constraint holds every phase additive while croftcall bakes. **R1 landed
+always there; the sentence was not. **Until D3 (2026-09-21) the calling app called none
+of it** — the P7 standing constraint held every phase additive while croftcall baked; since
+D3 the calling app runs on `call-core` through `croft-ffi`, and the chat surface stays out
+of its APK. **R1 landed
 2026-09-14 (`core/call-core`):** the camp and dial admission rules now exist in Rust as
 a pure pond, a port of `CampAdmission.kt` / `DialAdmission.kt`, graded by the same
 `docs/ENFORCEMENT-SCENARIOS.md` rows (`RUST:` pins beside `PIN:`, walked by
@@ -166,9 +168,11 @@ croft-stack `sessions/2026-08-30-enforce-flip.md`.
 E135(a) (screen honesty) is FIXED and device-verified both ways 2026-08-28: `Endpoint.online()` is the reachability truth (`addr().relayUrl()` and `watchHomeRelay` were refuted on hardware — JOURNAL 2026-08-28); the
 **enforcement scenario matrix** is landed and gated in BOTH repos
 (`docs/ENFORCEMENT-SCENARIOS.md` here + croft-stack's, each walked by a
-test). Remaining: §13 step 3 (staging honesty check); E135(b)
-caller-side camp posture; E125 and E128 (E126 and E127 are done — discovery
-`alpha/ROADMAP_TODO.md`). Do not
+test). Remaining, in order: the session-state work (E135(b) reframed as client
+session state, with E113 — `plans/2026-09-28-plan-session-state.md`, ACCEPTED
+2026-10-26); the v0.6.0 cut; the Pixel relay flap (E128); then E125 (E126 and E127 are
+done — discovery `alpha/ROADMAP_TODO.md`). §13 step 3 is retired as written: a staging
+run is scoped to the wrong-key refusal only. Do not
 describe anything else here as working until it has been run.
 
 ## Read before writing code
@@ -324,7 +328,7 @@ single-record shape.
 ## Concurrent sessions (workspace norm)
 
 Multiple agent sessions share the `CroftC/` workspace. Do multi-turn work in a dedicated
-worktree — `git -C croft worktree add ../worktrees/croft/<slug> -b claude/<slug>` — never in
-this checkout (peer sessions stage with `git add -A`; loose files get swept into unrelated
-commits). Contested surfaces here — claim in `CroftC/.coordination/claims/` before
+worktree — `git -C croft worktree add ../worktrees/<feature>/croft -b claude/<feature>` —
+never in this checkout (loose files get swept into unrelated commits; stage by path, never
+`git add -A`). Contested surfaces here — claim in `CroftC/.coordination/claims/` before
 touching: **landing on `main`**, the contract consumption surface (`docs/CONTRACT.md` — connect owns the canonical contract). Full protocol and the reasons behind it: `CroftC/.claude/COORDINATION.md`.

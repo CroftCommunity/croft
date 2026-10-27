@@ -1,7 +1,8 @@
 # Product-shell adoption: the shells consume the core (E117 P7's successor plan)
 
-`Status: READY FOR EXECUTION (Passes 1-3 complete; all seven questions closed by the`
-`owner 2026-08-26). Start at Phase 0; its findings return to the owner before S0.`
+`Status: S0–S2 EXECUTED (Phase 0 ran 2026-08-26; S2 closed 2026-09-08/09, rungs 1-6`
+`green on two real phones, rung 7 not run). S3–S5 NOT STARTED. Passes 1-3 complete;`
+`all seven questions closed by the owner 2026-08-26.`
 `Execution target: a fresh executor context under the phase-plan skill`
 `(~/.claude/coding-agents/skills/phase-plan/execute.md). This document is the sole`
 `handoff artifact — everything the executor needs is in this file or reachable from it.`

@@ -49,7 +49,7 @@ Credentials are needed only on the first run (the session, key and pass persist 
 signed in. RUN, not inferred: two `croft-arc` processes on one laptop earned
 `admitted … sponsorship=BudgetBytes(262144)` on the production journal, connected through
 the relay, and hung up with the E129 endings verbatim (`bin/croft-arc/tests/live_arc.rs`,
-`:live`). The Android app still calls none of the Rust; D3's switch is after this.
+`:live`). D3 (2026-09-21) then moved the Android app onto this core.
 
 **The same arc from a macOS window (R4, 2026-09-15).** `shell/apple` is `shell/`'s first
 occupant: a SwiftPM package — `CroftCall` the SwiftUI window, `CroftCallKit` the controller
@@ -80,8 +80,8 @@ through the generated uniffi bindings, over `chat-core`'s update/project loop
 and the promoted `ports/store-redb`, and the arm64 emulator loads the
 cross-compiled `libcroft_ffi.so` and resolves its symbols. `make bindings` runs
 the first; `make ffi-android` runs the second and refuses to pass on a
-non-arm64 device or with no device attached. Nothing in the android app calls
-any of it — that is the guarantee, not an accident of ordering.
+non-arm64 device or with no device attached. Before D3 nothing in the android app called
+any of it; since D3 the calling app loads `libcroft_ffi.so` for its call path only.
 
 **The surface exists and runs (P7 S1, 2026-08-27).** `android/social/` is a
 separate dev-only app module, driven end to end on the arm64 emulator: found a
