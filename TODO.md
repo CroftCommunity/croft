@@ -12,6 +12,10 @@ in `ops/RUNBOOK-*.md` and `sessions/`.
 
 ## Open
 
+- [ ] **`security / deps` is red on main: 10 blocking advisories in the root `Cargo.lock`**
+  (rustls, tokio, hickory-resolver, crypto-bigint, ctutils, libcrux-kem, basic-toml, …).
+  Triaged together with croft-stack's, croft-stack first: the handoff prompt is croft-stack
+  `TODO.md` § Open, "Advisory triage, croft-stack + croft" (filed 2026-10-27).
 - [x] **Phone-to-phone over our port on BOTH sides.** D3.3 (2026-09-21) was device-verified
   on the Pixel in both directions against `croft-arc` on the laptop (runbook §17); the
   Samsung was pattern-locked and carried the CI-signed v0.5.0, so putting the D3 build on
