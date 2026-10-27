@@ -1,8 +1,10 @@
 # Plan — the connections module: one "are we mutuals" rule, then mute (E134 slice 1)
 
-**Status:** DRAFT 2026-10-07 — Pass 1 (croftc-06). The three framing decisions are the
-owner's, made 2026-10-07 (see *Decisions*); nothing below them is reviewed. **No code before
-review.** Phase 0 is discovery only and may run on the owner's go.
+**Status:** DRAFT, PARKED 2026-10-27 (owner) — landed as the plan of record so it is not an
+open PR; the owner's attention is on the Drystone protocol docs first. Pass 1 (croftc-06).
+The three framing decisions are the owner's, made 2026-10-07 (see *Decisions*); nothing
+below them is reviewed. **Before Phase 0:** an owner review pass and answers to the five
+*Open Questions*. **No code before review.**
 
 **Naming note:** no `-N` ordinal, per `CroftC/.claude/TRACKING.md` § Plan files.
 
@@ -127,11 +129,11 @@ two refused drifts: no contacts-as-a-group-of-two, no annotation in group govern
 
 ## Concurrency Map
 
-- **session-state (croftc-be, `worktrees/session-state`, branch `claude/session-state`)**
-  — its plan (`2026-09-28-plan-session-state.md`, unlanded at `94dd8b9`) leans to a
-  `call-core::session` module. **C2 writes `call-core::grant` in the same crate.** C2 does
-  not start until session-state has landed or the two sessions agree the module and
-  `lib.rs` boundary in a message. C1 (`social-tree-core`) does not collide.
+- **session-state** — ~~leans to a `call-core::session` module, colliding with C2's
+  `call-core::grant`~~ **Resolved 2026-10-26:** that plan was ACCEPTED with D1(b), a new
+  `core/account-core`, so it does not write into `call-core`. C2 and the session-state build
+  share no module; only `croft-ffi` is touched by both (C4 and its Phase 3) — coordinate
+  there if both are in flight.
 - croft-stack: C3 touches `croft-relay-admit` and the deploy pins — a **claim**
   (`croft-stack--admit-pin`) and the staging-first rule (`DEPLOYMENT.md`).
 - connect: C4 touches nothing in connect beyond a SHARED-CODE register row.
@@ -232,3 +234,6 @@ roadmap row (retire-by partially met after C1/C6), croft `CHANGELOG.md` per phas
 
 - 2026-10-07 — Pass 1 drafted (croftc-06) from the owner's three decisions. Awaiting
   owner review; Phase 0 may run on the owner's go.
+- 2026-10-27 — PARKED and landed as a draft (croftc-1b, owner). The session-state
+  collision in the Concurrency Map is resolved (account-core). Nothing else re-read; the
+  *Verified Assumptions* are from 2026-10-07 and say to re-check before relying.
